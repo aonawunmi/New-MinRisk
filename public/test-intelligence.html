@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Intelligence Module</title>
+    <style>
+        body { font-family: system-ui; max-width: 800px; margin: 50px auto; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px 5px; font-size: 16px; cursor: pointer; }
+        #clearAllBtn { background: #dc2626; color: white; border: none; border-radius: 5px; }
+        #scanNewsBtn { background: #2563eb; color: white; border: none; border-radius: 5px; }
+        pre { background: #f3f4f6; padding: 15px; border-radius: 5px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>🔬 Intelligence Module Test</h1>
+    <p>This page tests the intelligence module functionality directly.</p>
+
+    <button id="clearAllBtn">🗑️ Clear All Events</button>
+    <button id="scanNewsBtn">📰 Scan News</button>
+
+    <h3>Output:</h3>
+    <pre id="output">Ready to test...</pre>
+
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+        const output = document.getElementById('output');
+
+        function log(message) {
+            output.textContent += '\n' + message;
+            console.log(message);
+        }
+
+        // Create Supabase client
+        const supabase = createClient(
+            'https://cnywkjfkhnwptceluvzs.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNueXdramZraG53cHRjZWx1dnpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzEzNDIyODEsImV4cCI6MjA0NjkxODI4MX0.KFkJ8iduQGCmLHzEqI6pLrDl_wgmBOVX2H5qcZg0Xcs',
+            {
+                auth: {
+                    persistSession: true,
+                    autoRefreshToken: true,
+                }
+            }
+        );
+
+        // Check auth status on load
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            output.textContent = '❌ ERROR: You must be logged in to use this test page.\n\n';
+            output.textContent += '1. Open the main MinRisk app: https://minrisk-starter.onrender.com\n';
+            output.textContent += '2. Log in with your account\n';
+            output.textContent += '3. Then come back to this page and refresh\n';
+            document.getElementById('clearAllBtn').disabled = true;
+            document.getElementById('scanNewsBtn').disabled = true;
+            throw new Error('Not authenticated');
+        }
+
+        log('✅ Authenticated as: ' + session.user.email);
+        log('Ready to test...\n');
+
+        document.getElementById('clearAllBtn').addEventListener('click', async () => {
+            output.textContent = '🗑️ Testing Clear All...\n';
+
+            try {
+                const { data, error } = await supabase.functions.invoke('scan-news', {
+                    body: { action: 'clearAll' }
+                });
+
+                if (error) {
+                    log('❌ Error: ' + JSON.stringify(error, null, 2));
+                } else {
+                    log('✅ Success!');
+                    log(JSON.stringify(data, null, 2));
+                }
+            } catch (error) {
+                log('❌ Exception: ' + error.message);
+            }
+        });
+
+        document.getElementById('scanNewsBtn').addEventListener('click', async () => {
+            output.textContent = '📰 Testing News Scan...\n';
+            log('This may take 30-60 seconds...');
+
+            try {
+                const { data, error } = await supabase.functions.invoke('scan-news', {
+                    body: { action: 'scan' }
+                });
+
+                if (error) {
+                    log('❌ Error: ' + JSON.stringify(error, null, 2));
+                } else {
+                    log('✅ Scan Complete!');
+                    log(JSON.stringify(data, null, 2));
+                }
+            } catch (error) {
+                log('❌ Exception: ' + error.message);
+            }
+        });
+    </script>
+</body>
+</html>

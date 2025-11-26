@@ -1,0 +1,248 @@
+# MinRisk NEW - Development Documentation
+
+**Project:** MinRisk Risk Management Platform (Clean Rebuild)
+**Location:** NEW-MINRISK/
+**Status:** Active Development
+**Last Updated:** 2025-11-25
+
+---
+
+## Environment Configuration
+
+### Supabase Project Details
+- **Project URL:** https://qrxwgjjgaekalvaqzpuf.supabase.co
+- **Project Ref:** qrxwgjjgaekalvaqzpuf
+- **Environment File:** `.env.development`
+
+### API Keys (from .env.development)
+
+```bash
+VITE_SUPABASE_URL=https://qrxwgjjgaekalvaqzpuf.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyeHdnampnYWVrYWx2YXF6cHVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM0NTQ4OTUsImV4cCI6MjA3OTAzMDg5NX0.VHfgfzbzyGEHnpaDrmOEitJyMD882LCCZhzNGZYGG7I
+VITE_SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyeHdnampnYWVrYWx2YXF6cHVmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzQ1NDg5NSwiZXhwIjoyMDc5MDMwODk1fQ.Sh8f9nmI1g1QzdyrwOoVsQ0jfxhT5I0Cfb-3xV0Q2fE
+VITE_ANTHROPIC_API_KEY=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
+```
+
+---
+
+## Supabase Edge Functions Configuration
+
+### CRITICAL: Edge Function Secrets
+
+Edge Functions run on Supabase's cloud servers and **DO NOT** have access to your local `.env.development` file. You must set secrets separately.
+
+### How to Set ANTHROPIC_API_KEY Secret
+
+#### Option 1: Via Supabase Dashboard (Recommended)
+1. Go to: https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/settings/functions
+2. Click **"Secrets"** tab
+3. Click **"Add Secret"**
+4. Enter:
+   - Name: `ANTHROPIC_API_KEY`
+   - Value: `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`
+5. Click **"Save"**
+
+#### Option 2: Via Supabase CLI
+```bash
+npx supabase secrets set ANTHROPIC_API_KEY="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" --project-ref qrxwgjjgaekalvaqzpuf
+```
+
+#### Option 3: Use Helper Script
+```bash
+bash set-edge-function-secret.sh
+```
+
+---
+
+## Risk Intelligence System
+
+### Phase 1: Manual Event Entry with Auto-Scan ✅ COMPLETED
+
+**Deployment Date:** 2025-11-25
+
+#### Features Implemented:
+1. **Auto-Scan on Event Creation**
+   - File: `src/lib/riskIntelligence.ts:222-305`
+   - Automatically triggers AI analysis when users add events
+   - Returns immediate feedback with color-coded alerts
+
+2. **Single-Event Analysis Mode**
+   - File: `supabase/functions/analyze-intelligence/index.ts`
+   - Edge Function supports analyzing single events or batch mode
+   - Successfully deployed to Supabase
+
+3. **Treatment Log Viewer Integration**
+   - File: `src/components/risks/RiskForm.tsx:39, 2371-2376`
+   - Shows intelligence-driven risk update history
+   - Includes undo/archive functionality
+
+4. **Suggested Controls & Impact Assessment**
+   - AI provides 2-4 specific mitigation actions
+   - Detailed impact description for each alert
+   - Database columns: `suggested_controls`, `impact_assessment`
+
+### Testing Scripts Available
+
+#### 1. Quick Configuration Check
+```bash
+bash quick-check.sh
+```
+- Verifies environment variables
+- Checks Edge Function configuration
+
+#### 2. Set Edge Function Secret
+```bash
+bash set-edge-function-secret.sh
+```
+- Automatically sets ANTHROPIC_API_KEY in Supabase
+- Reads from `.env.development`
+
+#### 3. Full Diagnostic Test
+```bash
+bash test-risk-intelligence.sh
+```
+- Complete end-to-end test
+- Creates test ransomware event
+- Triggers AI analysis
+- Shows detailed results
+
+#### 4. Check Secrets Configuration
+```bash
+bash check-edge-function-secrets.sh
+```
+- Shows how to configure secrets
+- Provides step-by-step instructions
+
+### Phase 2: RSS Automation (Planned)
+
+**Status:** Implementation plan complete, awaiting user validation
+
+**Timeline:** 6 weeks (see Phase 2 Implementation Plan document)
+
+**Key Features:**
+- RSS feed ingestion with intelligent pre-filtering
+- Keyword matching engine (97% cost reduction)
+- Category-based filtering
+- ML-powered alert prioritization
+- Daily digest emails
+- Automated overnight processing
+
+**Cost Optimization:**
+- Phase 1: ~$22.50/month (5 events/day)
+- Phase 2: ~$450/month (100 AI calls/day after 97% pre-filtering)
+- Without pre-filtering: $22,500/month ❌
+
+---
+
+## Local Development
+
+### Start Dev Server
+```bash
+npm run dev
+```
+Server runs on: http://localhost:3000/
+
+### Deploy Edge Functions
+```bash
+npx supabase functions deploy analyze-intelligence --project-ref qrxwgjjgaekalvaqzpuf
+```
+
+### View Edge Function Logs
+Dashboard > Edge Functions > analyze-intelligence > Logs
+
+---
+
+## Common Issues & Troubleshooting
+
+### Issue: "No alerts created" when adding events
+
+**Cause:** Edge Function can't call Claude AI because ANTHROPIC_API_KEY secret is not set
+
+**Solution:**
+1. Set the secret using one of the methods above
+2. Redeploy Edge Function (or wait for auto-redeploy)
+3. Run: `bash test-risk-intelligence.sh`
+
+### Issue: "1 event scanned" but confidence too low
+
+**Cause:** AI didn't find the event relevant enough (confidence < 70%)
+
+**Solution:**
+1. Check Supabase logs for AI reasoning
+2. Try a more specific threat event (e.g., ransomware, data breach)
+3. Ensure you have active risks (status: OPEN or MONITORING)
+
+### Issue: Edge Function errors in logs
+
+**Cause:** API key issues or AI prompt errors
+
+**Solution:**
+1. Verify ANTHROPIC_API_KEY secret is set correctly
+2. Check logs for specific error messages
+3. Ensure Claude API key is valid and has credits
+
+---
+
+## Database Schema
+
+### Key Tables:
+- `external_events` - Manually added or RSS-sourced threat events
+- `risk_intelligence_alerts` - AI-generated alerts linking events to risks
+- `risk_intelligence_treatments` - Log of risk updates from intelligence
+- `risks` - Organizational risk register
+- `user_profiles` - User accounts with organization_id
+
+### Important Columns:
+- `external_events.relevance_checked` - Whether event was analyzed by AI
+- `risk_intelligence_alerts.status` - pending | accepted | rejected | archived
+- `risk_intelligence_alerts.applied_to_risk` - Whether alert updated risk
+- `risk_intelligence_treatments.is_undone` - Whether treatment was reversed
+
+---
+
+## Project Context
+
+This is a **clean rebuild** of the MinRisk platform. Key decisions:
+
+1. **New Auth System:** Using modern Supabase auth with `role` column
+2. **No Legacy Code:** All code written fresh, only referencing old for business logic
+3. **TypeScript Throughout:** Proper types and type safety
+4. **Clean Architecture:** Separation of concerns, maintainable codebase
+
+---
+
+## Next Steps
+
+### Immediate:
+1. ✅ Set ANTHROPIC_API_KEY secret in Supabase Edge Functions
+2. ✅ Run `bash test-risk-intelligence.sh` to verify system works
+3. ✅ Test via UI: Add a cybersecurity threat event manually
+
+### Short-term:
+1. Monitor Phase 1 usage for 2 weeks
+2. Track metrics:
+   - Events added per day
+   - Alert acceptance rate
+   - User engagement
+3. Validate Phase 2 need with users
+
+### Long-term:
+1. Build Phase 2 if validation metrics are met:
+   - >5 events/day manually added
+   - >20% alert acceptance rate
+   - Positive user feedback on automation need
+2. Implement RSS automation with intelligent pre-filtering
+3. Deploy ML-based alert prioritization
+
+---
+
+## Important Links
+
+- **Supabase Dashboard:** https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf
+- **Edge Functions:** https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/functions
+- **Edge Function Secrets:** https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/settings/functions
+- **Local Dev Server:** http://localhost:3000/
+
+---
+
+**Last Session:** 2025-11-25 - Completed Phase 1 implementation, created diagnostic scripts, documented Edge Function secret configuration
