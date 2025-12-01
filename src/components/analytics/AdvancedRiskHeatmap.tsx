@@ -33,6 +33,8 @@ import {
 } from '@/components/ui/popover';
 import { supabase } from '@/lib/supabase';
 import { getRiskLevel, getRiskLevelColor } from '@/lib/analytics';
+import { calculateResidualRisk } from '@/lib/controls';
+import { getOrganizationConfig, getLikelihoodLabel, getImpactLabel, type OrganizationConfig } from '@/lib/config';
 import type { Risk } from '@/types/risk';
 
 interface AdvancedRiskHeatmapProps {
@@ -53,12 +55,16 @@ const LIKELIHOOD_LABELS_6X6 = ['Very Rare', 'Rare', 'Unlikely', 'Possible', 'Lik
 const IMPACT_LABELS_6X6 = ['Insignificant', 'Minimal', 'Low', 'Moderate', 'High', 'Severe'];
 
 export default function AdvancedRiskHeatmap({
-  matrixSize = 5,
+  matrixSize: propMatrixSize,
 }: AdvancedRiskHeatmapProps) {
   // State management
   const [risks, setRisks] = useState<ProcessedRisk[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [orgConfig, setOrgConfig] = useState<OrganizationConfig | null>(null);
+
+  // Use matrix size from config if available, otherwise use prop
+  const matrixSize = orgConfig?.matrix_size || propMatrixSize || 5;
 
   // View toggles
   const [showInherent, setShowInherent] = useState(true);
@@ -85,14 +91,50 @@ export default function AdvancedRiskHeatmap({
   const [comparisonPeriod1, setComparisonPeriod1] = useState<string>('');
   const [comparisonPeriod2, setComparisonPeriod2] = useState<string>('');
 
-  // Axis labels based on matrix size
-  const likelihoodLabels = matrixSize === 5 ? LIKELIHOOD_LABELS_5X5 : LIKELIHOOD_LABELS_6X6;
-  const impactLabels = matrixSize === 5 ? IMPACT_LABELS_5X5 : IMPACT_LABELS_6X6;
+  // Get axis labels from config or use defaults
+  const getLikelihoodLabels = (): string[] => {
+    if (!orgConfig) {
+      return matrixSize === 5 ? LIKELIHOOD_LABELS_5X5 : LIKELIHOOD_LABELS_6X6;
+    }
+    const labels: string[] = [];
+    for (let i = 1; i <= matrixSize; i++) {
+      labels.push(getLikelihoodLabel(orgConfig, i));
+    }
+    return labels;
+  };
 
-  // Load risks data
+  const getImpactLabels = (): string[] => {
+    if (!orgConfig) {
+      return matrixSize === 5 ? IMPACT_LABELS_5X5 : IMPACT_LABELS_6X6;
+    }
+    const labels: string[] = [];
+    for (let i = 1; i <= matrixSize; i++) {
+      labels.push(getImpactLabel(orgConfig, i));
+    }
+    return labels;
+  };
+
+  const likelihoodLabels = getLikelihoodLabels();
+  const impactLabels = getImpactLabels();
+
+  // Load risks data and config
   useEffect(() => {
+    loadConfig();
     loadRisks();
   }, []);
+
+  async function loadConfig() {
+    try {
+      const { data, error } = await getOrganizationConfig();
+      if (error) {
+        console.error('Failed to load organization config:', error);
+      } else {
+        setOrgConfig(data);
+      }
+    } catch (err) {
+      console.error('Unexpected config load error:', err);
+    }
+  }
 
   async function loadRisks() {
     setLoading(true);
@@ -108,13 +150,24 @@ export default function AdvancedRiskHeatmap({
         throw new Error(fetchError.message);
       }
 
-      // Process risks - use residual values if available, otherwise fallback to inherent
-      const processed: ProcessedRisk[] = (data || []).map((risk) => ({
-        ...risk,
-        likelihood_residual_calc: risk.residual_likelihood ?? risk.likelihood_inherent,
-        impact_residual_calc: risk.residual_impact ?? risk.impact_inherent,
-        residual_score_calc: risk.residual_score ?? (risk.likelihood_inherent * risk.impact_inherent),
-      }));
+      // Calculate residual risk from controls for each risk
+      const processed: ProcessedRisk[] = await Promise.all(
+        (data || []).map(async (risk) => {
+          // Calculate residual risk using controls
+          const { data: residualData } = await calculateResidualRisk(
+            risk.id,
+            risk.likelihood_inherent,
+            risk.impact_inherent
+          );
+
+          return {
+            ...risk,
+            likelihood_residual_calc: residualData?.residual_likelihood ?? risk.likelihood_inherent,
+            impact_residual_calc: residualData?.residual_impact ?? risk.impact_inherent,
+            residual_score_calc: residualData?.residual_score ?? (risk.likelihood_inherent * risk.impact_inherent),
+          };
+        })
+      );
 
       setRisks(processed);
     } catch (err) {

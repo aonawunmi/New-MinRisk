@@ -23,6 +23,11 @@ export interface Risk {
   status: string;
   period: string | null;
   is_priority: boolean;
+  // New model fields - linking to global libraries
+  root_cause_id?: string | null;
+  impact_id?: string | null;
+  event_text?: string | null;
+  refined_risk_statement?: string | null;
   created_at: string;
   updated_at: string;
 }

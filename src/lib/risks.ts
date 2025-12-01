@@ -108,7 +108,7 @@ export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | 
 }
 
 /**
- * Get a single risk by ID with its controls
+ * Get a single risk by ID with its controls (via junction table)
  */
 export async function getRiskById(
   riskId: string
@@ -126,12 +126,14 @@ export async function getRiskById(
       return { data: null, error: new Error(riskError.message) };
     }
 
-    // Get controls for this risk
-    const { data: controls, error: controlsError } = await supabase
-      .from('controls')
-      .select('*')
-      .eq('risk_id', riskId)
-      .order('created_at', { ascending: true });
+    // Get controls for this risk via junction table
+    const { data: controlLinks, error: controlsError } = await supabase
+      .from('risk_control_links')
+      .select(`
+        control_id,
+        controls:control_id (*)
+      `)
+      .eq('risk_id', riskId);
 
     if (controlsError) {
       console.error('Get controls error:', controlsError.message);
@@ -139,7 +141,10 @@ export async function getRiskById(
       return { data: { ...risk, controls: [] }, error: null };
     }
 
-    return { data: { ...risk, controls: controls || [] }, error: null };
+    // Extract controls from the junction table result
+    const controls = controlLinks?.map((link: any) => link.controls).filter(Boolean) || [];
+
+    return { data: { ...risk, controls }, error: null };
   } catch (err) {
     console.error('Unexpected get risk error:', err);
     return {
@@ -248,11 +253,22 @@ export async function updateRisk(
 
 /**
  * Delete a risk
+ *
+ * IMPORTANT: This unlinks Controls and KRIs rather than deleting them.
+ * - Controls exist independently and can be reused across multiple risks
+ * - KRIs can monitor multiple risks simultaneously
+ * - Only the junction table records (links) are deleted via CASCADE
+ * - The actual Control and KRI records remain intact
  */
 export async function deleteRisk(
   riskId: string
 ): Promise<{ error: Error | null }> {
   try {
+    // Delete the risk
+    // This will automatically cascade delete:
+    // - risk_control_links (unlinks controls)
+    // - kri_risk_links (unlinks KRIs)
+    // - But NOT the actual controls or KRI definitions
     const { error } = await supabase
       .from('risks')
       .delete()
@@ -263,7 +279,7 @@ export async function deleteRisk(
       return { error: new Error(error.message) };
     }
 
-    console.log('Risk deleted successfully:', riskId);
+    console.log('Risk deleted successfully:', riskId, '(controls and KRIs unlinked, not deleted)');
     return { error: null };
   } catch (err) {
     console.error('Unexpected delete risk error:', err);
@@ -274,7 +290,7 @@ export async function deleteRisk(
 }
 
 /**
- * Add a control to a risk
+ * Add a control to a risk (creates control and links it via junction table)
  */
 export async function addControl(
   riskId: string,
@@ -299,27 +315,46 @@ export async function addControl(
       return { data: null, error: new Error('User profile not found') };
     }
 
-    const { data, error } = await supabase
+    // Create the control (without risk_id - controls are independent)
+    const { data: control, error: controlError } = await supabase
       .from('controls')
       .insert([
         {
           ...controlData,
-          risk_id: riskId,
           organization_id: profile.organization_id,
           owner_profile_id: user.id,
           created_by_profile_id: user.id,
+          // Note: risk_id is now nullable and not set here
         },
       ])
       .select()
       .single();
 
-    if (error) {
-      console.error('Add control error:', error.message);
-      return { data: null, error: new Error(error.message) };
+    if (controlError) {
+      console.error('Add control error:', controlError.message);
+      return { data: null, error: new Error(controlError.message) };
     }
 
-    console.log('Control added successfully:', data.id);
-    return { data, error: null };
+    // Link the control to the risk via junction table
+    const { error: linkError } = await supabase
+      .from('risk_control_links')
+      .insert([
+        {
+          risk_id: riskId,
+          control_id: control.id,
+          created_by: user.id,
+        },
+      ]);
+
+    if (linkError) {
+      console.error('Link control to risk error:', linkError.message);
+      // Rollback: delete the control we just created
+      await supabase.from('controls').delete().eq('id', control.id);
+      return { data: null, error: new Error(linkError.message) };
+    }
+
+    console.log('Control added and linked to risk successfully:', control.id);
+    return { data: control, error: null };
   } catch (err) {
     console.error('Unexpected add control error:', err);
     return {
@@ -361,7 +396,8 @@ export async function updateControl(
 }
 
 /**
- * Delete a control
+ * Delete a control (permanently removes the control and all its links)
+ * Note: This will cascade delete all risk_control_links
  */
 export async function deleteControl(
   controlId: string
@@ -383,6 +419,204 @@ export async function deleteControl(
     console.error('Unexpected delete control error:', err);
     return {
       error: err instanceof Error ? err : new Error('Unknown delete control error'),
+    };
+  }
+}
+
+/**
+ * Link an existing control to a risk
+ */
+export async function linkControlToRisk(
+  controlId: string,
+  riskId: string
+): Promise<{ error: Error | null }> {
+  try {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return { error: new Error('User not authenticated') };
+    }
+
+    const { error } = await supabase
+      .from('risk_control_links')
+      .insert([
+        {
+          risk_id: riskId,
+          control_id: controlId,
+          created_by: user.id,
+        },
+      ]);
+
+    if (error) {
+      console.error('Link control to risk error:', error.message);
+      return { error: new Error(error.message) };
+    }
+
+    console.log('Control linked to risk successfully:', controlId, '->', riskId);
+    return { error: null };
+  } catch (err) {
+    console.error('Unexpected link control error:', err);
+    return {
+      error: err instanceof Error ? err : new Error('Unknown link control error'),
+    };
+  }
+}
+
+/**
+ * Unlink a control from a risk (keeps the control, just removes the link)
+ */
+export async function unlinkControlFromRisk(
+  controlId: string,
+  riskId: string
+): Promise<{ error: Error | null }> {
+  try {
+    const { error } = await supabase
+      .from('risk_control_links')
+      .delete()
+      .eq('risk_id', riskId)
+      .eq('control_id', controlId);
+
+    if (error) {
+      console.error('Unlink control from risk error:', error.message);
+      return { error: new Error(error.message) };
+    }
+
+    console.log('Control unlinked from risk successfully:', controlId, '<-X->', riskId);
+    return { error: null };
+  } catch (err) {
+    console.error('Unexpected unlink control error:', err);
+    return {
+      error: err instanceof Error ? err : new Error('Unknown unlink control error'),
+    };
+  }
+}
+
+/**
+ * Link an existing KRI to a risk
+ */
+export async function linkKRIToRisk(
+  kriId: string,
+  riskId: string,
+  aiConfidence?: number
+): Promise<{ error: Error | null }> {
+  try {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return { error: new Error('User not authenticated') };
+    }
+
+    const { error } = await supabase
+      .from('kri_risk_links')
+      .insert([
+        {
+          kri_id: kriId,
+          risk_id: riskId,
+          ai_link_confidence: aiConfidence,
+          linked_by: user.id,
+        },
+      ]);
+
+    if (error) {
+      console.error('Link KRI to risk error:', error.message);
+      return { error: new Error(error.message) };
+    }
+
+    console.log('KRI linked to risk successfully:', kriId, '->', riskId);
+    return { error: null };
+  } catch (err) {
+    console.error('Unexpected link KRI error:', err);
+    return {
+      error: err instanceof Error ? err : new Error('Unknown link KRI error'),
+    };
+  }
+}
+
+/**
+ * Unlink a KRI from a risk (keeps the KRI, just removes the link)
+ */
+export async function unlinkKRIFromRisk(
+  kriId: string,
+  riskId: string
+): Promise<{ error: Error | null }> {
+  try {
+    const { error } = await supabase
+      .from('kri_risk_links')
+      .delete()
+      .eq('kri_id', kriId)
+      .eq('risk_id', riskId);
+
+    if (error) {
+      console.error('Unlink KRI from risk error:', error.message);
+      return { error: new Error(error.message) };
+    }
+
+    console.log('KRI unlinked from risk successfully:', kriId, '<-X->', riskId);
+    return { error: null };
+  } catch (err) {
+    console.error('Unexpected unlink KRI error:', err);
+    return {
+      error: err instanceof Error ? err : new Error('Unknown unlink KRI error'),
+    };
+  }
+}
+
+/**
+ * Get all controls linked to a specific risk
+ */
+export async function getControlsForRisk(
+  riskId: string
+): Promise<{ data: Control[] | null; error: Error | null }> {
+  try {
+    const { data: controlLinks, error } = await supabase
+      .from('risk_control_links')
+      .select(`
+        control_id,
+        controls:control_id (*)
+      `)
+      .eq('risk_id', riskId);
+
+    if (error) {
+      console.error('Get controls for risk error:', error.message);
+      return { data: null, error: new Error(error.message) };
+    }
+
+    const controls = controlLinks?.map((link: any) => link.controls).filter(Boolean) || [];
+    return { data: controls, error: null };
+  } catch (err) {
+    console.error('Unexpected get controls error:', err);
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error('Unknown get controls error'),
+    };
+  }
+}
+
+/**
+ * Get all risks linked to a specific control
+ */
+export async function getRisksForControl(
+  controlId: string
+): Promise<{ data: Risk[] | null; error: Error | null }> {
+  try {
+    const { data: riskLinks, error } = await supabase
+      .from('risk_control_links')
+      .select(`
+        risk_id,
+        risks:risk_id (*)
+      `)
+      .eq('control_id', controlId);
+
+    if (error) {
+      console.error('Get risks for control error:', error.message);
+      return { data: null, error: new Error(error.message) };
+    }
+
+    const risks = riskLinks?.map((link: any) => link.risks).filter(Boolean) || [];
+    return { data: risks, error: null };
+  } catch (err) {
+    console.error('Unexpected get risks error:', err);
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error('Unknown get risks error'),
     };
   }
 }

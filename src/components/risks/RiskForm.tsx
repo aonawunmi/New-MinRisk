@@ -9,9 +9,11 @@
 import { useState, useEffect } from 'react';
 import { createRisk, updateRisk } from '@/lib/risks';
 import { getCategoriesWithSubcategories, type CategoryWithSubcategories, exportTaxonomy } from '@/lib/taxonomy';
+import { getRootCauses, getImpacts, createCustomRootCause, createCustomImpact, type RootCause, type Impact } from '@/lib/libraries';
 import { refineRiskStatement, type RiskStatementRefinement, revalidateEditedStatement, type RevalidationResult, getAIControlRecommendations, type AISuggestedControl } from '@/lib/ai';
 import { createControl, getControlsForRisk, updateControl, deleteControl } from '@/lib/controls';
 import { getAlertsWithEventsForRisk, type RiskIntelligenceAlert, type ExternalEvent } from '@/lib/riskIntelligence';
+import { getOrganizationConfig, getLikelihoodOptions, getImpactOptions, type OrganizationConfig } from '@/lib/config';
 import type { Control, UpdateControlData } from '@/types/control';
 import type { Risk, CreateRiskData } from '@/types/risk';
 import { Button } from '@/components/ui/button';
@@ -74,6 +76,32 @@ export default function RiskForm({
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>('');
   const [loadingTaxonomy, setLoadingTaxonomy] = useState(false);
 
+  // Library state (root causes, impacts, etc.)
+  const [rootCauses, setRootCauses] = useState<RootCause[]>([]);
+  const [impacts, setImpacts] = useState<Impact[]>([]);
+  const [selectedRootCauseId, setSelectedRootCauseId] = useState<string>('');
+  const [selectedImpactId, setSelectedImpactId] = useState<string>('');
+  const [loadingLibraries, setLoadingLibraries] = useState(false);
+  const [rootCauseSearch, setRootCauseSearch] = useState<string>('');
+  const [impactSearch, setImpactSearch] = useState<string>('');
+
+  // Custom library entry state
+  const [showCustomRootCause, setShowCustomRootCause] = useState(false);
+  const [showCustomImpact, setShowCustomImpact] = useState(false);
+  const [customRootCause, setCustomRootCause] = useState({
+    cause_code: '',
+    cause_name: '',
+    cause_description: '',
+    category: '',
+  });
+  const [customImpact, setCustomImpact] = useState({
+    impact_code: '',
+    impact_name: '',
+    impact_description: '',
+    category: '',
+  });
+  const [savingCustom, setSavingCustom] = useState(false);
+
   // AI Refinement state
   const [isRefining, setIsRefining] = useState(false);
   const [refinement, setRefinement] = useState<RiskStatementRefinement | null>(null);
@@ -119,6 +147,10 @@ export default function RiskForm({
   type AlertWithEvent = RiskIntelligenceAlert & { external_events: ExternalEvent };
   const [intelligenceAlerts, setIntelligenceAlerts] = useState<AlertWithEvent[]>([]);
   const [loadingAlerts, setLoadingAlerts] = useState(false);
+
+  // Organization configuration state
+  const [orgConfig, setOrgConfig] = useState<OrganizationConfig | null>(null);
+  const [loadingConfig, setLoadingConfig] = useState(false);
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
 
   // Load existing controls for a risk
@@ -248,12 +280,77 @@ export default function RiskForm({
     }
   }
 
-  // Load taxonomy on component mount
+  // Load taxonomy, libraries, and config on component mount
   useEffect(() => {
     if (open) {
       loadTaxonomy();
+      loadLibraries();
+      loadConfig();
     }
   }, [open]);
+
+  async function loadConfig() {
+    setLoadingConfig(true);
+    try {
+      const { data, error } = await getOrganizationConfig();
+      if (error) {
+        console.error('Failed to load organization config:', error);
+      } else {
+        setOrgConfig(data);
+      }
+    } catch (err) {
+      console.error('Unexpected config load error:', err);
+    } finally {
+      setLoadingConfig(false);
+    }
+  }
+
+  async function loadLibraries() {
+    setLoadingLibraries(true);
+    try {
+      // Load root causes
+      const { data: rootCausesData, error: rcError } = await getRootCauses();
+      if (rcError) {
+        console.error('Failed to load root causes:', rcError);
+      } else {
+        setRootCauses(rootCausesData || []);
+      }
+
+      // Load impacts
+      const { data: impactsData, error: impError } = await getImpacts();
+      if (impError) {
+        console.error('Failed to load impacts:', impError);
+      } else {
+        setImpacts(impactsData || []);
+      }
+    } catch (err) {
+      console.error('Unexpected library load error:', err);
+    } finally {
+      setLoadingLibraries(false);
+    }
+  }
+
+  // Auto-generate risk statement when event, root cause, and impact are selected
+  useEffect(() => {
+    // Only auto-generate if we have all three components AND user hasn't already typed a custom statement
+    if (formData.event_text && selectedRootCauseId && selectedImpactId) {
+      const rootCause = rootCauses.find(rc => rc.id === selectedRootCauseId);
+      const impact = impacts.find(imp => imp.id === selectedImpactId);
+
+      if (rootCause && impact) {
+        const generatedStatement = `Due to ${rootCause.cause_name}, ${formData.event_text}, resulting in ${impact.impact_name}.`;
+
+        // Only auto-fill if risk_description is empty or was previously auto-generated
+        // (to avoid overwriting user's custom edits)
+        if (!formData.risk_description || formData.risk_description.startsWith('Due to ')) {
+          setFormData(prev => ({
+            ...prev,
+            risk_description: generatedStatement
+          }));
+        }
+      }
+    }
+  }, [formData.event_text, selectedRootCauseId, selectedImpactId, rootCauses, impacts]);
 
   // Initialize form when editing
   useEffect(() => {
@@ -271,7 +368,14 @@ export default function RiskForm({
         status: editingRisk.status,
         period: editingRisk.period,
         is_priority: editingRisk.is_priority,
+        root_cause_id: editingRisk.root_cause_id || null,
+        impact_id: editingRisk.impact_id || null,
+        event_text: editingRisk.event_text || null,
       });
+
+      // Set selected root cause and impact
+      setSelectedRootCauseId(editingRisk.root_cause_id || '');
+      setSelectedImpactId(editingRisk.impact_id || '');
 
       // Load existing controls for this risk
       loadExistingControls(editingRisk.id);
@@ -308,9 +412,14 @@ export default function RiskForm({
         status: 'OPEN',
         period: null,
         is_priority: false,
+        root_cause_id: null,
+        impact_id: null,
+        event_text: null,
       });
       setSelectedCategory('');
       setSelectedSubcategory('');
+      setSelectedRootCauseId('');
+      setSelectedImpactId('');
     }
     setError(null);
     setRefinement(null);
@@ -349,8 +458,11 @@ export default function RiskForm({
         ? refinement.refined_statement
         : formData.risk_description;
 
+      // Destructure to exclude fields that don't exist in database
+      const { event_text, root_cause_id, impact_id, ...validFormData } = formData as any;
+
       const dataToSave = {
-        ...formData,
+        ...validFormData,
         risk_description: finalDescription,
         category: selectedSubcategory, // Store subcategory in category field
       };
@@ -678,6 +790,75 @@ export default function RiskForm({
     setSelectedSuggestions(newSelected);
   }
 
+  // Custom library entry creation handlers
+  async function handleSaveCustomRootCause() {
+    if (!customRootCause.cause_code || !customRootCause.cause_name) {
+      alert('Please fill in code and name');
+      return;
+    }
+
+    setSavingCustom(true);
+    try {
+      const { data, error } = await createCustomRootCause(customRootCause);
+
+      if (error) {
+        alert(`Failed to create custom root cause: ${error.message}`);
+        return;
+      }
+
+      if (data) {
+        // Reload library list
+        const { data: updatedRootCauses } = await getRootCauses();
+        if (updatedRootCauses) {
+          setRootCauses(updatedRootCauses);
+          setSelectedRootCauseId(data.id);
+        }
+
+        // Reset form and close dialog
+        setCustomRootCause({ cause_code: '', cause_name: '', cause_description: '', category: '' });
+        setShowCustomRootCause(false);
+      }
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setSavingCustom(false);
+    }
+  }
+
+  async function handleSaveCustomImpact() {
+    if (!customImpact.impact_code || !customImpact.impact_name) {
+      alert('Please fill in code and name');
+      return;
+    }
+
+    setSavingCustom(true);
+    try {
+      const { data, error } = await createCustomImpact(customImpact);
+
+      if (error) {
+        alert(`Failed to create custom impact: ${error.message}`);
+        return;
+      }
+
+      if (data) {
+        // Reload library list
+        const { data: updatedImpacts } = await getImpacts();
+        if (updatedImpacts) {
+          setImpacts(updatedImpacts);
+          setSelectedImpactId(data.id);
+        }
+
+        // Reset form and close dialog
+        setCustomImpact({ impact_code: '', impact_name: '', impact_description: '', category: '' });
+        setShowCustomImpact(false);
+      }
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setSavingCustom(false);
+    }
+  }
+
   function calculateEffectiveness(control: AISuggestedControl): number {
     // DIME Framework Rule: If Design = 0 OR Implementation = 0, effectiveness = 0
     if (control.design_score === 0 || control.implementation_score === 0) {
@@ -831,8 +1012,26 @@ export default function RiskForm({
     ? categories.find((cat) => cat.name === selectedCategory)?.subcategories || []
     : [];
 
+  // Filter root causes and impacts based on search
+  const filteredRootCauses = rootCauses.filter((rc) =>
+    rootCauseSearch.trim() === ''
+      ? true
+      : rc.cause_code.toLowerCase().includes(rootCauseSearch.toLowerCase()) ||
+        rc.cause_name.toLowerCase().includes(rootCauseSearch.toLowerCase()) ||
+        (rc.cause_description && rc.cause_description.toLowerCase().includes(rootCauseSearch.toLowerCase()))
+  );
+
+  const filteredImpacts = impacts.filter((imp) =>
+    impactSearch.trim() === ''
+      ? true
+      : imp.impact_code.toLowerCase().includes(impactSearch.toLowerCase()) ||
+        imp.impact_name.toLowerCase().includes(impactSearch.toLowerCase()) ||
+        (imp.impact_description && imp.impact_description.toLowerCase().includes(impactSearch.toLowerCase()))
+  );
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
@@ -918,6 +1117,173 @@ export default function RiskForm({
               required
               disabled={loading}
             />
+          </div>
+
+          {/* EVENT TEXT (Free text describing what's happening) */}
+          <div className="space-y-2">
+            <Label htmlFor="event_text">Event / Situation (Optional)</Label>
+            <Textarea
+              id="event_text"
+              value={formData.event_text || ''}
+              onChange={(e) => handleChange('event_text', e.target.value)}
+              placeholder="Describe the observable event or situation (e.g., 'An employee clicks on a phishing email link')"
+              rows={3}
+              disabled={loading}
+            />
+            <p className="text-xs text-gray-500">
+              Describe what is happening. This will be combined with root cause and impact to create a structured risk statement.
+            </p>
+          </div>
+
+          {/* ROOT CAUSE AND IMPACT DROPDOWNS (from global libraries) */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between mb-1">
+                <Label htmlFor="root_cause">Root Cause (Optional)</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCustomRootCause(true)}
+                  className="h-7 text-xs"
+                  disabled={loading}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Custom
+                </Button>
+              </div>
+              {loadingLibraries ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading root causes...
+                </div>
+              ) : (
+                <Select
+                  value={selectedRootCauseId}
+                  onValueChange={setSelectedRootCauseId}
+                  disabled={loading}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select root cause" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[400px]">
+                    <div className="p-2 border-b sticky top-0 bg-white">
+                      <Input
+                        placeholder="Search root causes..."
+                        value={rootCauseSearch}
+                        onChange={(e) => setRootCauseSearch(e.target.value)}
+                        className="h-8"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto">
+                      {filteredRootCauses.length === 0 ? (
+                        <div className="p-4 text-center text-sm text-gray-500">
+                          No root causes found matching "{rootCauseSearch}"
+                        </div>
+                      ) : (
+                        filteredRootCauses.map((rc) => (
+                          <SelectItem key={rc.id} value={rc.id}>
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs text-gray-500">{rc.cause_code}</span>
+                                <span className="font-medium">{rc.cause_name}</span>
+                                {rc.source === 'global' && (
+                                  <span className="text-xs text-blue-600 bg-blue-50 px-1 rounded">Global</span>
+                                )}
+                              </div>
+                              {rc.cause_description && (
+                                <span className="text-xs text-gray-500">{rc.cause_description}</span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))
+                      )}
+                    </div>
+                  </SelectContent>
+                </Select>
+              )}
+              {selectedRootCauseId && (
+                <p className="text-xs text-gray-500">
+                  {rootCauses.find((rc) => rc.id === selectedRootCauseId)?.cause_description}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between mb-1">
+                <Label htmlFor="impact">Impact (Optional)</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCustomImpact(true)}
+                  className="h-7 text-xs"
+                  disabled={loading}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Custom
+                </Button>
+              </div>
+              {loadingLibraries ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading impacts...
+                </div>
+              ) : (
+                <Select
+                  value={selectedImpactId}
+                  onValueChange={setSelectedImpactId}
+                  disabled={loading}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select impact" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[400px]">
+                    <div className="p-2 border-b sticky top-0 bg-white">
+                      <Input
+                        placeholder="Search impacts..."
+                        value={impactSearch}
+                        onChange={(e) => setImpactSearch(e.target.value)}
+                        className="h-8"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto">
+                      {filteredImpacts.length === 0 ? (
+                        <div className="p-4 text-center text-sm text-gray-500">
+                          No impacts found matching "{impactSearch}"
+                        </div>
+                      ) : (
+                        filteredImpacts.map((imp) => (
+                          <SelectItem key={imp.id} value={imp.id}>
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs text-gray-500">{imp.impact_code}</span>
+                                <span className="font-medium">{imp.impact_name}</span>
+                                {imp.source === 'global' && (
+                                  <span className="text-xs text-blue-600 bg-blue-50 px-1 rounded">Global</span>
+                                )}
+                              </div>
+                              {imp.impact_description && (
+                                <span className="text-xs text-gray-500">{imp.impact_description}</span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))
+                      )}
+                    </div>
+                  </SelectContent>
+                </Select>
+              )}
+              {selectedImpactId && (
+                <p className="text-xs text-gray-500">
+                  {impacts.find((imp) => imp.id === selectedImpactId)?.impact_description}
+                </p>
+              )}
+            </div>
           </div>
 
           {/* TAXONOMY DROPDOWNS */}
@@ -1175,26 +1541,48 @@ export default function RiskForm({
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="division">Division *</Label>
-              <Input
-                id="division"
+              <Select
                 value={formData.division}
-                onChange={(e) => handleChange('division', e.target.value)}
-                placeholder="e.g., IT"
-                required
-                disabled={loading}
-              />
+                onValueChange={(value) => handleChange('division', value)}
+                disabled={loading || !orgConfig?.divisions?.length}
+              >
+                <SelectTrigger id="division">
+                  <SelectValue placeholder={orgConfig?.divisions?.length ? "Select division" : "No divisions configured"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {orgConfig?.divisions?.filter(d => d && d.trim()).map((division) => (
+                    <SelectItem key={division} value={division}>
+                      {division}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {(!orgConfig?.divisions || orgConfig.divisions.length === 0) && (
+                <p className="text-sm text-amber-600">No divisions configured. Please configure in Admin panel.</p>
+              )}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="department">Department *</Label>
-              <Input
-                id="department"
+              <Select
                 value={formData.department}
-                onChange={(e) => handleChange('department', e.target.value)}
-                placeholder="e.g., Security"
-                required
-                disabled={loading}
-              />
+                onValueChange={(value) => handleChange('department', value)}
+                disabled={loading || !orgConfig?.departments?.length}
+              >
+                <SelectTrigger id="department">
+                  <SelectValue placeholder={orgConfig?.departments?.length ? "Select department" : "No departments configured"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {orgConfig?.departments?.filter(d => d && d.trim()).map((department) => (
+                    <SelectItem key={department} value={department}>
+                      {department}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {(!orgConfig?.departments || orgConfig.departments.length === 0) && (
+                <p className="text-sm text-amber-600">No departments configured. Please configure in Admin panel.</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -1218,7 +1606,7 @@ export default function RiskForm({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="likelihood_inherent">
-                Inherent Likelihood (1-5) *
+                Inherent Likelihood *
               </Label>
               <Select
                 value={formData.likelihood_inherent.toString()}
@@ -1231,18 +1619,18 @@ export default function RiskForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1">1 - Very Low</SelectItem>
-                  <SelectItem value="2">2 - Low</SelectItem>
-                  <SelectItem value="3">3 - Medium</SelectItem>
-                  <SelectItem value="4">4 - High</SelectItem>
-                  <SelectItem value="5">5 - Very High</SelectItem>
+                  {getLikelihoodOptions(orgConfig).map((option) => (
+                    <SelectItem key={option.value} value={option.value.toString()}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="impact_inherent">
-                Inherent Impact (1-5) *
+                Inherent Impact *
               </Label>
               <Select
                 value={formData.impact_inherent.toString()}
@@ -1255,11 +1643,11 @@ export default function RiskForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1">1 - Very Low</SelectItem>
-                  <SelectItem value="2">2 - Low</SelectItem>
-                  <SelectItem value="3">3 - Medium</SelectItem>
-                  <SelectItem value="4">4 - High</SelectItem>
-                  <SelectItem value="5">5 - Very High</SelectItem>
+                  {getImpactOptions(orgConfig).map((option) => (
+                    <SelectItem key={option.value} value={option.value.toString()}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -2398,5 +2786,164 @@ export default function RiskForm({
         </form>
       </DialogContent>
     </Dialog>
+
+    {/* Custom Root Cause Dialog */}
+    <Dialog open={showCustomRootCause} onOpenChange={setShowCustomRootCause}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add Custom Root Cause</DialogTitle>
+          <DialogDescription>
+            Create a custom root cause for your organization
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="custom_cause_code">Code *</Label>
+            <Input
+              id="custom_cause_code"
+              placeholder="e.g., RC-ORG-001"
+              value={customRootCause.cause_code}
+              onChange={(e) => setCustomRootCause({ ...customRootCause, cause_code: e.target.value })}
+              disabled={savingCustom}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="custom_cause_name">Name *</Label>
+            <Input
+              id="custom_cause_name"
+              placeholder="e.g., Legacy system vulnerability"
+              value={customRootCause.cause_name}
+              onChange={(e) => setCustomRootCause({ ...customRootCause, cause_name: e.target.value })}
+              disabled={savingCustom}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="custom_cause_description">Description</Label>
+            <Textarea
+              id="custom_cause_description"
+              placeholder="Detailed description of this root cause"
+              value={customRootCause.cause_description}
+              onChange={(e) => setCustomRootCause({ ...customRootCause, cause_description: e.target.value })}
+              disabled={savingCustom}
+              rows={3}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="custom_cause_category">Category</Label>
+            <Input
+              id="custom_cause_category"
+              placeholder="e.g., Technology, Process"
+              value={customRootCause.category}
+              onChange={(e) => setCustomRootCause({ ...customRootCause, category: e.target.value })}
+              disabled={savingCustom}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setShowCustomRootCause(false)}
+            disabled={savingCustom}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSaveCustomRootCause}
+            disabled={savingCustom}
+          >
+            {savingCustom ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save Custom Root Cause'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Custom Impact Dialog */}
+    <Dialog open={showCustomImpact} onOpenChange={setShowCustomImpact}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add Custom Impact</DialogTitle>
+          <DialogDescription>
+            Create a custom impact for your organization
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="custom_impact_code">Code *</Label>
+            <Input
+              id="custom_impact_code"
+              placeholder="e.g., IMP-ORG-001"
+              value={customImpact.impact_code}
+              onChange={(e) => setCustomImpact({ ...customImpact, impact_code: e.target.value })}
+              disabled={savingCustom}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="custom_impact_name">Name *</Label>
+            <Input
+              id="custom_impact_name"
+              placeholder="e.g., Customer data exposure"
+              value={customImpact.impact_name}
+              onChange={(e) => setCustomImpact({ ...customImpact, impact_name: e.target.value })}
+              disabled={savingCustom}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="custom_impact_description">Description</Label>
+            <Textarea
+              id="custom_impact_description"
+              placeholder="Detailed description of this impact"
+              value={customImpact.impact_description}
+              onChange={(e) => setCustomImpact({ ...customImpact, impact_description: e.target.value })}
+              disabled={savingCustom}
+              rows={3}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="custom_impact_category">Category</Label>
+            <Input
+              id="custom_impact_category"
+              placeholder="e.g., Financial, Operational"
+              value={customImpact.category}
+              onChange={(e) => setCustomImpact({ ...customImpact, category: e.target.value })}
+              disabled={savingCustom}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setShowCustomImpact(false)}
+            disabled={savingCustom}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSaveCustomImpact}
+            disabled={savingCustom}
+          >
+            {savingCustom ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save Custom Impact'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

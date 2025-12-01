@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { calculateResidualRisk } from './controls';
 import type { Risk } from '@/types/risk';
 
 /**
@@ -133,8 +134,27 @@ export async function getDashboardMetrics(): Promise<{
     let totalInherentScore = 0;
     let totalResidualScore = 0;
 
-    // Aggregate data
-    risks.forEach((risk) => {
+    // Aggregate data - calculate residual scores in parallel
+    const residualPromises = risks.map(async (risk) => {
+      // Calculate inherent score
+      const inherentScore = risk.likelihood_inherent * risk.impact_inherent;
+
+      // Calculate residual score using controls
+      const { data: residual } = await calculateResidualRisk(
+        risk.id,
+        risk.likelihood_inherent,
+        risk.impact_inherent
+      );
+
+      const residualScore = residual ? residual.residual_score : inherentScore;
+
+      return { risk, inherentScore, residualScore };
+    });
+
+    const riskScores = await Promise.all(residualPromises);
+
+    // Now aggregate with calculated residual scores
+    riskScores.forEach(({ risk, inherentScore, residualScore }) => {
       // By status
       byStatus[risk.status] = (byStatus[risk.status] || 0) + 1;
 
@@ -161,32 +181,46 @@ export async function getDashboardMetrics(): Promise<{
       }
 
       // Scores
-      totalInherentScore +=
-        risk.likelihood_inherent * risk.impact_inherent;
-      // For now, residual = inherent (would be calculated with controls)
-      totalResidualScore +=
-        risk.likelihood_inherent * risk.impact_inherent;
+      totalInherentScore += inherentScore;
+      totalResidualScore += residualScore;
     });
 
-    // Control metrics
+    // Control metrics using correct DIME formula: (D + I + M + E) / 12
     let totalControlEffectiveness = 0;
+    let validControlsCount = 0;
     if (controls && controls.length > 0) {
       controls.forEach((control) => {
-        const effectiveness =
-          (control.design +
-            control.implementation +
-            control.monitoring +
-            control.effectiveness_evaluation) /
-          4;
-        totalControlEffectiveness += effectiveness;
+        // Only count controls with all DIME scores filled
+        if (
+          control.design_score !== null &&
+          control.implementation_score !== null &&
+          control.monitoring_score !== null &&
+          control.evaluation_score !== null
+        ) {
+          // Skip if design or implementation is 0 (control cannot be effective)
+          if (control.design_score === 0 || control.implementation_score === 0) {
+            validControlsCount++;
+            // effectiveness = 0 (don't add to total)
+          } else {
+            // Calculate effectiveness: (D + I + M + E) / 12 gives 0 to 1
+            const effectiveness =
+              (control.design_score +
+                control.implementation_score +
+                control.monitoring_score +
+                control.evaluation_score) /
+              12;
+            totalControlEffectiveness += effectiveness;
+            validControlsCount++;
+          }
+        }
       });
     }
 
     const avgInherentScore = totalInherentScore / risks.length;
     const avgResidualScore = totalResidualScore / risks.length;
     const avgControlEffectiveness =
-      controls && controls.length > 0
-        ? (totalControlEffectiveness / controls.length / 3) * 100 // Convert 0-3 to percentage
+      validControlsCount > 0
+        ? Math.round((totalControlEffectiveness / validControlsCount) * 100) // Convert 0-1 to percentage
         : 0;
 
     const metrics: DashboardMetrics = {
@@ -596,10 +630,7 @@ export async function getEnhancedHeatmapData(matrixSize: 5 | 6 = 5): Promise<{
         status,
         owner,
         likelihood_inherent,
-        impact_inherent,
-        residual_likelihood,
-        residual_impact,
-        residual_score
+        impact_inherent
       `);
 
     if (risksError) {
@@ -635,10 +666,25 @@ export async function getEnhancedHeatmapData(matrixSize: 5 | 6 = 5): Promise<{
 
     // Populate matrix with risk data
     if (risks && risks.length > 0) {
-      risks.forEach((risk) => {
-        // Use residual values if available, otherwise fallback to inherent
-        const residualL = risk.residual_likelihood || risk.likelihood_inherent;
-        const residualI = risk.residual_impact || risk.impact_inherent;
+      // Calculate residual risk for all risks
+      const risksWithResidual = await Promise.all(
+        risks.map(async (risk) => {
+          const { data: residualData } = await calculateResidualRisk(
+            risk.id,
+            risk.likelihood_inherent,
+            risk.impact_inherent
+          );
+          return {
+            ...risk,
+            residualL: residualData?.residual_likelihood ?? risk.likelihood_inherent,
+            residualI: residualData?.residual_impact ?? risk.impact_inherent,
+          };
+        })
+      );
+
+      risksWithResidual.forEach((risk) => {
+        const residualL = risk.residualL;
+        const residualI = risk.residualI;
 
         const riskWithPosition: RiskWithPosition = {
           ...risk,

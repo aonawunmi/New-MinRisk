@@ -11,6 +11,7 @@ import { getRisks, deleteRisk, updateRisk } from '@/lib/risks';
 import { calculateResidualRisk } from '@/lib/controls';
 import { getActivePeriod, commitPeriodSnapshot } from '@/lib/periods';
 import { getKRIsForRisk, type KRIDefinition } from '@/lib/kri';
+import { getOrganizationConfig, getLikelihoodLabel, getImpactLabel, type OrganizationConfig } from '@/lib/config';
 import { supabase } from '@/lib/supabase';
 import type { Risk } from '@/types/risk';
 import type { ResidualRisk } from '@/types/control';
@@ -55,6 +56,11 @@ export default function RiskRegister() {
   const [kriCounts, setKriCounts] = useState<Map<string, number>>(new Map());
   const [showKRIDialog, setShowKRIDialog] = useState(false);
   const [selectedRiskKRIs, setSelectedRiskKRIs] = useState<{ risk: Risk; kris: any[] } | null>(null);
+  const [orgConfig, setOrgConfig] = useState<OrganizationConfig | null>(null);
+
+  // Bulk delete state
+  const [selectedRiskIds, setSelectedRiskIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const loadRisks = async () => {
     setLoading(true);
@@ -125,6 +131,7 @@ export default function RiskRegister() {
     loadActivePeriodData();
     loadRisks();
     checkAdminRole();
+    loadConfig();
   }, []);
 
   async function loadActivePeriodData() {
@@ -146,6 +153,19 @@ export default function RiskRegister() {
       setIsAdmin(profile?.role === 'admin');
     } catch (err) {
       console.error('Error checking admin role:', err);
+    }
+  }
+
+  async function loadConfig() {
+    try {
+      const { data, error: configError } = await getOrganizationConfig();
+      if (configError) {
+        console.error('Failed to load organization config:', configError);
+      } else {
+        setOrgConfig(data);
+      }
+    } catch (err) {
+      console.error('Unexpected config load error:', err);
     }
   }
 
@@ -259,6 +279,70 @@ export default function RiskRegister() {
       console.error('Unexpected delete error:', err);
       alert('An unexpected error occurred during deletion');
     }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedRiskIds.size === 0) {
+      alert('Please select risks to delete');
+      return;
+    }
+
+    const confirmMessage = `Are you sure you want to delete ${selectedRiskIds.size} risk(s)? This action cannot be undone.`;
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    setBulkDeleting(true);
+    try {
+      let successCount = 0;
+      let failCount = 0;
+
+      // Delete each selected risk
+      for (const riskId of selectedRiskIds) {
+        const { error: deleteError } = await deleteRisk(riskId);
+        if (deleteError) {
+          console.error('Failed to delete risk:', riskId, deleteError);
+          failCount++;
+        } else {
+          successCount++;
+        }
+      }
+
+      // Show result
+      if (failCount > 0) {
+        alert(`Deleted ${successCount} risk(s). Failed to delete ${failCount} risk(s).`);
+      } else {
+        alert(`Successfully deleted ${successCount} risk(s).`);
+      }
+
+      // Clear selection and reload
+      setSelectedRiskIds(new Set());
+      await loadRisks();
+    } catch (err) {
+      console.error('Unexpected bulk delete error:', err);
+      alert('An unexpected error occurred during bulk deletion');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const allIds = new Set(filteredRisks.map((r) => r.id));
+      setSelectedRiskIds(allIds);
+    } else {
+      setSelectedRiskIds(new Set());
+    }
+  };
+
+  const handleSelectRisk = (riskId: string, checked: boolean) => {
+    const newSelection = new Set(selectedRiskIds);
+    if (checked) {
+      newSelection.add(riskId);
+    } else {
+      newSelection.delete(riskId);
+    }
+    setSelectedRiskIds(newSelection);
   };
 
   const getRiskScore = (likelihood: number, impact: number) => likelihood * impact;
@@ -423,10 +507,22 @@ export default function RiskRegister() {
                   Manage risks for your organization
                 </CardDescription>
               </div>
-              <Button onClick={handleAddRisk}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Risk
-              </Button>
+              <div className="flex gap-2">
+                {selectedRiskIds.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    onClick={handleBulkDelete}
+                    disabled={bulkDeleting}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    {bulkDeleting ? 'Deleting...' : `Delete Selected (${selectedRiskIds.size})`}
+                  </Button>
+                )}
+                <Button onClick={handleAddRisk}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Risk
+                </Button>
+              </div>
             </div>
 
             {/* Filters Row */}
@@ -494,6 +590,13 @@ export default function RiskRegister() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[50px] text-center">
+                      <Checkbox
+                        checked={filteredRisks.length > 0 && filteredRisks.every((r) => selectedRiskIds.has(r.id))}
+                        onCheckedChange={handleSelectAll}
+                        title="Select all risks"
+                      />
+                    </TableHead>
                     <TableHead className="w-[100px] text-center">
                       <div className="flex flex-col items-center gap-1">
                         <Checkbox
@@ -544,8 +647,8 @@ export default function RiskRegister() {
                         Period {getSortIcon('period')}
                       </button>
                     </TableHead>
-                    <TableHead className="text-center" colSpan={2}>Inherent</TableHead>
-                    <TableHead className="text-center" colSpan={2}>Residual</TableHead>
+                    <TableHead className="text-center" colSpan={3}>Inherent</TableHead>
+                    <TableHead className="text-center" colSpan={3}>Residual</TableHead>
                     <TableHead className="text-center">KRIs</TableHead>
                     <TableHead>
                       <button
@@ -558,8 +661,10 @@ export default function RiskRegister() {
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                   <TableRow>
-                    <TableHead colSpan={6}></TableHead>
-                    <TableHead className="text-center text-xs">
+                    <TableHead colSpan={7}></TableHead>
+                    <TableHead className="text-center text-xs w-12">L</TableHead>
+                    <TableHead className="text-center text-xs w-12">I</TableHead>
+                    <TableHead className="text-center text-xs w-16">
                       <button
                         onClick={() => handleSort('inherent')}
                         className="flex items-center justify-center hover:text-gray-900 transition-colors mx-auto"
@@ -567,8 +672,9 @@ export default function RiskRegister() {
                         L×I {getSortIcon('inherent')}
                       </button>
                     </TableHead>
-                    <TableHead className="text-center text-xs">Level</TableHead>
-                    <TableHead className="text-center text-xs">
+                    <TableHead className="text-center text-xs w-12">L</TableHead>
+                    <TableHead className="text-center text-xs w-12">I</TableHead>
+                    <TableHead className="text-center text-xs w-16">
                       <button
                         onClick={() => handleSort('residual')}
                         className="flex items-center justify-center hover:text-gray-900 transition-colors mx-auto"
@@ -576,8 +682,7 @@ export default function RiskRegister() {
                         L×I {getSortIcon('residual')}
                       </button>
                     </TableHead>
-                    <TableHead className="text-center text-xs">Level</TableHead>
-                    <TableHead className="text-center text-xs">Count</TableHead>
+                    <TableHead className="text-center text-xs w-16">Count</TableHead>
                     <TableHead colSpan={2}></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -602,6 +707,15 @@ export default function RiskRegister() {
                       <TableRow key={risk.id}>
                         <TableCell className="text-center">
                           <Checkbox
+                            checked={selectedRiskIds.has(risk.id)}
+                            onCheckedChange={(checked) =>
+                              handleSelectRisk(risk.id, checked === true)
+                            }
+                            title="Select for deletion"
+                          />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Checkbox
                             checked={risk.is_priority}
                             onCheckedChange={(checked) =>
                               handlePriorityToggle(risk, checked === true)
@@ -620,17 +734,29 @@ export default function RiskRegister() {
                         <TableCell className="text-center text-sm text-gray-600">
                           {risk.period || '-'}
                         </TableCell>
-                        <TableCell className="text-center font-semibold">
+                        {/* Inherent Likelihood - Show number with label in tooltip */}
+                        <TableCell className="text-center text-sm font-medium" title={getLikelihoodLabel(orgConfig, risk.likelihood_inherent)}>
+                          {risk.likelihood_inherent}
+                        </TableCell>
+                        {/* Inherent Impact - Show number with label in tooltip */}
+                        <TableCell className="text-center text-sm font-medium" title={getImpactLabel(orgConfig, risk.impact_inherent)}>
+                          {risk.impact_inherent}
+                        </TableCell>
+                        {/* Inherent Score with Level color */}
+                        <TableCell className={`text-center font-semibold ${inherentLevelColor}`} title={`${inherentLevel} Risk`}>
                           {inherentScore}
                         </TableCell>
-                        <TableCell className={`text-center ${inherentLevelColor}`}>
-                          {inherentLevel}
+                        {/* Residual Likelihood - Show number with label in tooltip */}
+                        <TableCell className="text-center text-sm font-medium" title={residual ? getLikelihoodLabel(orgConfig, residual.residual_likelihood) : 'No controls applied'}>
+                          {residual ? residual.residual_likelihood : '-'}
                         </TableCell>
-                        <TableCell className="text-center font-semibold">
+                        {/* Residual Impact - Show number with label in tooltip */}
+                        <TableCell className="text-center text-sm font-medium" title={residual ? getImpactLabel(orgConfig, residual.residual_impact) : 'No controls applied'}>
+                          {residual ? residual.residual_impact : '-'}
+                        </TableCell>
+                        {/* Residual Score with Level color */}
+                        <TableCell className={`text-center font-semibold ${residualLevelColor}`} title={`${residualLevel} Risk`}>
                           {residualScore}
-                        </TableCell>
-                        <TableCell className={`text-center ${residualLevelColor}`}>
-                          {residualLevel}
                         </TableCell>
                         <TableCell className="text-center">
                           {kriCounts.get(risk.id) ? (

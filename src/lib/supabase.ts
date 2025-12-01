@@ -20,6 +20,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
+    storageKey: 'minrisk-auth', // Unique key to avoid conflicts
+    flowType: 'pkce',
   },
   global: {
     headers: {

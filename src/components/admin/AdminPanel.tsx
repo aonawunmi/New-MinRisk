@@ -1,17 +1,19 @@
 /**
  * Admin Panel Component
  *
- * Main admin interface with three sections:
+ * Main admin interface with four sections:
  * 1. Risk Taxonomy Management
- * 2. User Management
- * 3. Organization Settings
+ * 2. Risk Configuration (Divisions, Departments, Labels)
+ * 3. User Management
+ * 4. Organization Settings
  */
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import TaxonomyManagement from './TaxonomyManagement';
 import UserManagement from './UserManagement';
 import OrganizationSettings from './OrganizationSettings';
-import { Shield, Users, Settings, BookOpen } from 'lucide-react';
+import RiskConfiguration from './RiskConfiguration';
+import { Shield, Users, Settings, BookOpen, Sliders } from 'lucide-react';
 
 export default function AdminPanel() {
   return (
@@ -33,10 +35,14 @@ export default function AdminPanel() {
       </div>
 
       <Tabs defaultValue="taxonomy" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="taxonomy" className="flex items-center gap-2">
             <BookOpen className="h-4 w-4" />
             Risk Taxonomy
+          </TabsTrigger>
+          <TabsTrigger value="configuration" className="flex items-center gap-2">
+            <Sliders className="h-4 w-4" />
+            Risk Configuration
           </TabsTrigger>
           <TabsTrigger value="users" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
@@ -50,6 +56,10 @@ export default function AdminPanel() {
 
         <TabsContent value="taxonomy" className="mt-6">
           <TaxonomyManagement />
+        </TabsContent>
+
+        <TabsContent value="configuration" className="mt-6">
+          <RiskConfiguration />
         </TabsContent>
 
         <TabsContent value="users" className="mt-6">

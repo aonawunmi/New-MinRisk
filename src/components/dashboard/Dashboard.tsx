@@ -182,17 +182,16 @@ export default function Dashboard() {
           color="blue"
         />
         <MetricCard
-          title="Priority Risks"
-          value={metrics.priority_risks}
-          icon="⚠️"
-          color="red"
-          subtitle={`${Math.round((metrics.priority_risks / metrics.total_risks) * 100)}% of total`}
-        />
-        <MetricCard
-          title="Avg Inherent Score"
+          title="Avg Inherent Risk"
           value={metrics.avg_inherent_score.toFixed(1)}
           icon="📊"
           color="orange"
+        />
+        <MetricCard
+          title="Avg Residual Risk"
+          value={metrics.avg_residual_score.toFixed(1)}
+          icon="🎯"
+          color="blue"
         />
         <MetricCard
           title="Control Effectiveness"
