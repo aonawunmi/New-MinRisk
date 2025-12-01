@@ -1,504 +1,301 @@
-import { supabase } from './supabase';
-
 /**
- * Incident Management Service Layer
+ * Incident Management Library
  *
- * Handles incident logging, AI-powered risk linking,
- * control adequacy assessment, and enhancement plans.
- *
- * Uses Anthropic Claude API for AI features.
+ * Functions for managing incidents, linking to risks, and tracking
+ * incident lifecycle from reporting to resolution.
  */
 
-// ============================================================================
+import { supabase } from './supabase';
+
+// =====================================================
 // TYPES
-// ============================================================================
+// =====================================================
 
 export interface Incident {
   id: string;
-  organization_id: string;
-  user_id: string;
-  incident_code: string;
-  title: string;
-  description: string | null;
-  incident_date: string;
-  reported_by: string | null;
-  division: string | null;
-  department: string | null;
-  incident_type: string | null;
-  severity: number; // 1-5
-  financial_impact: number | null;
-  status: 'Reported' | 'Under Investigation' | 'Resolved' | 'Closed';
-  root_cause: string | null;
-  corrective_actions: string | null;
-  ai_suggested_risks: any[]; // JSONB array
-  ai_control_recommendations: any[]; // JSONB array
-  linked_risk_codes: string[]; // TEXT array
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateIncidentData {
+  org_id: string;
+  incident_number: string;
   title: string;
   description?: string;
+  incident_type: 'security' | 'operational' | 'compliance' | 'financial' | 'reputational' | 'other';
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  status: 'reported' | 'investigating' | 'contained' | 'resolved' | 'closed';
   incident_date: string;
-  reported_by?: string;
-  division?: string;
-  department?: string;
-  incident_type?: string;
-  severity: number;
+  discovered_date: string;
+  reported_date: string;
+  resolved_date?: string;
+  closed_date?: string;
+  impact_description?: string;
   financial_impact?: number;
-  status?: 'Reported' | 'Under Investigation' | 'Resolved' | 'Closed';
-  root_cause?: string;
-  corrective_actions?: string;
-}
-
-export interface UpdateIncidentData extends Partial<CreateIncidentData> {
-  id: string;
-}
-
-export interface ControlEnhancementPlan {
-  id: string;
-  organization_id: string;
-  incident_id: string;
-  risk_code: string;
-  control_gap: string;
-  enhancement_plan: string;
-  target_completion_date: string | null;
-  responsible_party: string | null;
-  status: 'Planned' | 'In Progress' | 'Completed' | 'On Hold';
+  affected_systems?: string[];
+  affected_customers?: number;
+  data_breach?: boolean;
+  root_cause_id?: string;
+  root_cause_description?: string;
+  contributing_factors?: string[];
+  reported_by?: string;
+  assigned_to?: string;
+  investigated_by?: string[];
+  resolution_summary?: string;
+  corrective_actions?: string[];
+  preventive_actions?: string[];
+  lessons_learned?: string;
+  regulatory_notification_required?: boolean;
+  regulatory_body?: string;
+  notification_date?: string;
+  regulatory_reference?: string;
+  created_by: string;
   created_at: string;
+  updated_at: string;
+  tags?: string[];
+  attachments?: any[];
 }
 
-export interface CreateEnhancementPlanData {
+export interface IncidentRiskLink {
+  id: string;
   incident_id: string;
-  risk_code: string;
-  control_gap: string;
-  enhancement_plan: string;
-  target_completion_date?: string;
-  responsible_party?: string;
-  status?: 'Planned' | 'In Progress' | 'Completed' | 'On Hold';
+  risk_id: string;
+  link_type: 'materialized' | 'near_miss' | 'control_failure';
+  notes?: string;
+  linked_at: string;
+  linked_by?: string;
 }
 
-export interface AIRiskSuggestion {
-  risk_code: string;
-  risk_title: string;
-  confidence: number; // 0-100
-  reasoning: string;
-  suggested_linkage: 'direct' | 'indirect' | 'potential';
+export interface IncidentSummary extends Incident {
+  linked_risks_count: number;
+  linked_risk_ids: string[];
+  linked_risk_titles: string[];
 }
 
-export interface AIControlAssessment {
-  control_id?: string;
-  control_description: string;
-  adequacy_rating: 'adequate' | 'partially_adequate' | 'inadequate';
-  confidence: number; // 0-100
-  gaps_identified: string[];
-  recommendations: string[];
-  reasoning: string;
-}
-
-// ============================================================================
-// INCIDENT CODE GENERATION
-// ============================================================================
-
-/**
- * Generate next incident code for organization
- * Format: INC-DIV-001
- */
-async function generateIncidentCode(
-  organizationId: string,
-  division: string
-): Promise<string> {
-  try {
-    // Get division prefix (first 3 letters, uppercase)
-    const divPrefix = division.substring(0, 3).toUpperCase();
-
-    // Find max number for this division
-    const { data: incidents, error } = await supabase
-      .from('incidents')
-      .select('incident_code')
-      .eq('organization_id', organizationId)
-      .ilike('incident_code', `INC-${divPrefix}-%`);
-
-    if (error) {
-      console.error('Error fetching incidents for code generation:', error);
-      // Fallback to timestamp-based code
-      return `INC-${divPrefix}-${Date.now()}`;
-    }
-
-    // Extract numbers and find max
-    let maxNum = 0;
-    if (incidents && incidents.length > 0) {
-      incidents.forEach((inc) => {
-        const match = inc.incident_code.match(/INC-[A-Z]+-(\d+)/);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxNum) maxNum = num;
-        }
-      });
-    }
-
-    // Generate next code
-    const nextNum = maxNum + 1;
-    return `INC-${divPrefix}-${String(nextNum).padStart(3, '0')}`;
-  } catch (err) {
-    console.error('Unexpected error generating incident code:', err);
-    // Fallback
-    const divPrefix = division.substring(0, 3).toUpperCase();
-    return `INC-${divPrefix}-${Date.now()}`;
-  }
-}
-
-// ============================================================================
-// INCIDENTS CRUD
-// ============================================================================
-
-/**
- * Get all incidents for the current user's organization
- */
-export async function getIncidents(options?: {
+export interface IncidentFormData {
+  title: string;
+  description?: string;
+  incident_type: string;
+  severity: string;
   status?: string;
-  division?: string;
-  limit?: number;
-}): Promise<{ data: Incident[] | null; error: Error | null }> {
-  try {
-    let query = supabase
-      .from('incidents')
-      .select('*')
-      .order('incident_date', { ascending: false });
+  incident_date: string;
+  discovered_date: string;
+  impact_description?: string;
+  financial_impact?: number;
+  affected_systems?: string[];
+  affected_customers?: number;
+  data_breach?: boolean;
+  root_cause_id?: string;
+  root_cause_description?: string;
+  contributing_factors?: string[];
+  assigned_to?: string;
+  resolution_summary?: string;
+  corrective_actions?: string[];
+  preventive_actions?: string[];
+  lessons_learned?: string;
+  regulatory_notification_required?: boolean;
+  regulatory_body?: string;
+  notification_date?: string;
+  regulatory_reference?: string;
+  tags?: string[];
+}
 
-    if (options?.status) {
-      query = query.eq('status', options.status);
-    }
+// =====================================================
+// INCIDENT CRUD OPERATIONS
+// =====================================================
 
-    if (options?.division) {
-      query = query.eq('division', options.division);
-    }
+/**
+ * Get all incidents for an organization with risk links
+ */
+export async function getIncidents(orgId: string) {
+  const { data, error } = await supabase
+    .from('incident_summary')
+    .select('*')
+    .eq('org_id', orgId)
+    .order('incident_date', { ascending: false });
 
-    if (options?.limit) {
-      query = query.limit(options.limit);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Get incidents error:', error.message);
-      return { data: null, error: new Error(error.message) };
-    }
-
-    return { data, error: null };
-  } catch (err) {
-    console.error('Unexpected get incidents error:', err);
-    return {
-      data: null,
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
-  }
+  return { data: data as IncidentSummary[] | null, error };
 }
 
 /**
- * Get a single incident by ID
+ * Get a single incident by ID with full details
  */
-export async function getIncident(
-  incidentId: string
-): Promise<{ data: Incident | null; error: Error | null }> {
-  try {
-    const { data, error } = await supabase
-      .from('incidents')
-      .select('*')
-      .eq('id', incidentId)
-      .single();
+export async function getIncidentById(incidentId: string) {
+  const { data, error } = await supabase
+    .from('incidents')
+    .select('*')
+    .eq('id', incidentId)
+    .single();
 
-    if (error) {
-      console.error('Get incident error:', error.message);
-      return { data: null, error: new Error(error.message) };
-    }
+  return { data: data as Incident | null, error };
+}
 
-    return { data, error: null };
-  } catch (err) {
-    console.error('Unexpected get incident error:', err);
-    return {
-      data: null,
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
+/**
+ * Get incidents by status
+ */
+export async function getIncidentsByStatus(
+  orgId: string,
+  status: string
+) {
+  const { data, error } = await supabase
+    .from('incident_summary')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('status', status)
+    .order('incident_date', { ascending: false });
+
+  return { data: data as IncidentSummary[] | null, error };
+}
+
+/**
+ * Get incidents by severity
+ */
+export async function getIncidentsBySeverity(
+  orgId: string,
+  severity: string
+) {
+  const { data, error } = await supabase
+    .from('incident_summary')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('severity', severity)
+    .order('incident_date', { ascending: false });
+
+  return { data: data as IncidentSummary[] | null, error };
+}
+
+/**
+ * Get incidents linked to a specific risk
+ */
+export async function getIncidentsByRisk(riskId: string) {
+  // First get incident IDs linked to this risk
+  const { data: links, error: linksError } = await supabase
+    .from('incident_risk_links')
+    .select('incident_id')
+    .eq('risk_id', riskId);
+
+  if (linksError || !links || links.length === 0) {
+    return { data: [] as IncidentSummary[], error: linksError };
   }
+
+  const incidentIds = links.map((link) => link.incident_id);
+
+  // Get incident details
+  const { data, error } = await supabase
+    .from('incident_summary')
+    .select('*')
+    .in('id', incidentIds)
+    .order('incident_date', { ascending: false });
+
+  return { data: data as IncidentSummary[] | null, error };
 }
 
 /**
  * Create a new incident
  */
 export async function createIncident(
-  incidentData: CreateIncidentData
-): Promise<{ data: Incident | null; error: Error | null }> {
-  try {
-    // Get current user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+  orgId: string,
+  userId: string,
+  incidentData: IncidentFormData
+) {
+  // First, generate incident number
+  const { data: numberData, error: numberError } = await supabase.rpc(
+    'generate_incident_number',
+    { p_org_id: orgId }
+  );
 
-    if (userError || !user) {
-      return { data: null, error: new Error('User not authenticated') };
-    }
-
-    // Get user profile for organization_id
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return { data: null, error: new Error('User profile not found') };
-    }
-
-    // Generate incident code
-    const incidentCode = await generateIncidentCode(
-      profile.organization_id,
-      incidentData.division || 'GEN'
-    );
-
-    // Create incident
-    const { data, error } = await supabase
-      .from('incidents')
-      .insert([
-        {
-          ...incidentData,
-          organization_id: profile.organization_id,
-          user_id: user.id,
-          incident_code: incidentCode,
-          status: incidentData.status || 'Reported',
-          ai_suggested_risks: [],
-          ai_control_recommendations: [],
-          linked_risk_codes: [],
-        },
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Create incident error:', error.message);
-      return { data: null, error: new Error(error.message) };
-    }
-
-    console.log('Incident created successfully:', data.id);
-    return { data, error: null };
-  } catch (err) {
-    console.error('Unexpected create incident error:', err);
-    return {
-      data: null,
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
+  if (numberError) {
+    return { data: null, error: numberError };
   }
+
+  const incident_number = numberData as string;
+
+  // Create incident
+  const { data, error } = await supabase
+    .from('incidents')
+    .insert({
+      org_id: orgId,
+      incident_number,
+      ...incidentData,
+      reported_by: userId,
+      created_by: userId,
+      status: incidentData.status || 'reported',
+    })
+    .select()
+    .single();
+
+  return { data: data as Incident | null, error };
 }
 
 /**
- * Update an existing incident
+ * Update an incident
  */
 export async function updateIncident(
-  incidentData: UpdateIncidentData
-): Promise<{ data: Incident | null; error: Error | null }> {
-  try {
-    const { id, ...updates } = incidentData;
+  incidentId: string,
+  updates: Partial<IncidentFormData>
+) {
+  const { data, error } = await supabase
+    .from('incidents')
+    .update(updates)
+    .eq('id', incidentId)
+    .select()
+    .single();
 
-    const { data, error } = await supabase
-      .from('incidents')
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Update incident error:', error.message);
-      return { data: null, error: new Error(error.message) };
-    }
-
-    console.log('Incident updated successfully:', data.id);
-    return { data, error: null };
-  } catch (err) {
-    console.error('Unexpected update incident error:', err);
-    return {
-      data: null,
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
-  }
+  return { data: data as Incident | null, error };
 }
 
 /**
  * Delete an incident
  */
-export async function deleteIncident(
-  incidentId: string
-): Promise<{ error: Error | null }> {
-  try {
-    const { error } = await supabase
-      .from('incidents')
-      .delete()
-      .eq('id', incidentId);
+export async function deleteIncident(incidentId: string) {
+  const { error } = await supabase
+    .from('incidents')
+    .delete()
+    .eq('id', incidentId);
 
-    if (error) {
-      console.error('Delete incident error:', error.message);
-      return { error: new Error(error.message) };
-    }
-
-    console.log('Incident deleted successfully:', incidentId);
-    return { error: null };
-  } catch (err) {
-    console.error('Unexpected delete incident error:', err);
-    return {
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
-  }
-}
-
-// ============================================================================
-// AI-POWERED RISK LINKING
-// ============================================================================
-
-/**
- * Use AI to suggest relevant risks for an incident
- */
-export async function suggestRisksForIncident(
-  incident: Incident
-): Promise<{ data: AIRiskSuggestion[] | null; error: Error | null }> {
-  try {
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-
-    if (!apiKey) {
-      return {
-        data: null,
-        error: new Error('Anthropic API key not configured'),
-      };
-    }
-
-    // Get all active risks
-    const { data: risks, error: risksError } = await supabase
-      .from('risks')
-      .select('risk_code, risk_title, risk_description, category, division')
-      .in('status', ['OPEN', 'MONITORING']);
-
-    if (risksError) {
-      return { data: null, error: new Error(risksError.message) };
-    }
-
-    if (!risks || risks.length === 0) {
-      return { data: [], error: null };
-    }
-
-    const prompt = `You are analyzing an incident to identify related risks.
-
-INCIDENT:
-Code: ${incident.incident_code}
-Title: ${incident.title}
-Description: ${incident.description || 'No description'}
-Division: ${incident.division || 'Not specified'}
-Department: ${incident.department || 'Not specified'}
-Type: ${incident.incident_type || 'Not specified'}
-Severity: ${incident.severity}/5
-Root Cause: ${incident.root_cause || 'Not yet identified'}
-
-AVAILABLE RISKS:
-${risks.map((r) => `- ${r.risk_code}: ${r.risk_title} (${r.category})`).join('\n')}
-
-TASK:
-Identify which risks are related to this incident. Consider:
-1. Direct causal relationship
-2. Same category or domain
-3. Could this incident indicate the risk is materializing?
-4. Could this incident worsen the risk's likelihood or impact?
-
-Respond ONLY with valid JSON array:
-[
-  {
-    "risk_code": "RISK-CODE",
-    "risk_title": "Risk Title",
-    "confidence": 85,
-    "reasoning": "brief explanation",
-    "suggested_linkage": "direct" or "indirect" or "potential"
-  }
-]
-
-Only include risks with confidence >= 60. Return empty array [] if no relevant risks found.`;
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 2048,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Claude API error:', errorText);
-      return {
-        data: null,
-        error: new Error(`Claude API error: ${response.status}`),
-      };
-    }
-
-    const result = await response.json();
-    const contentText = result.content[0].text;
-
-    // Extract JSON array from response
-    const jsonMatch = contentText.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      return { data: [], error: null };
-    }
-
-    const suggestions: AIRiskSuggestion[] = JSON.parse(jsonMatch[0]);
-
-    console.log('AI risk suggestions generated:', suggestions.length);
-    return { data: suggestions, error: null };
-  } catch (err) {
-    console.error('Unexpected suggest risks error:', err);
-    return {
-      data: null,
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
-  }
+  return { error };
 }
 
 /**
- * Save AI risk suggestions to incident
+ * Close an incident
  */
-export async function saveRiskSuggestions(
+export async function closeIncident(
   incidentId: string,
-  suggestions: AIRiskSuggestion[]
-): Promise<{ error: Error | null }> {
-  try {
-    const { error } = await supabase
-      .from('incidents')
-      .update({
-        ai_suggested_risks: suggestions,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', incidentId);
+  resolutionSummary: string,
+  lessonsLearned?: string
+) {
+  const { data, error } = await supabase
+    .from('incidents')
+    .update({
+      status: 'closed',
+      closed_date: new Date().toISOString(),
+      resolution_summary: resolutionSummary,
+      lessons_learned: lessonsLearned,
+    })
+    .eq('id', incidentId)
+    .select()
+    .single();
 
-    if (error) {
-      console.error('Save risk suggestions error:', error.message);
-      return { error: new Error(error.message) };
-    }
+  return { data: data as Incident | null, error };
+}
 
-    console.log('Risk suggestions saved for incident:', incidentId);
-    return { error: null };
-  } catch (err) {
-    console.error('Unexpected save risk suggestions error:', err);
-    return {
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
-  }
+// =====================================================
+// INCIDENT-RISK LINKS
+// =====================================================
+
+/**
+ * Get all risk links for an incident
+ */
+export async function getIncidentRiskLinks(incidentId: string) {
+  const { data, error } = await supabase
+    .from('incident_risk_links')
+    .select(`
+      *,
+      risks:risk_id (
+        id,
+        title,
+        risk_id,
+        category
+      )
+    `)
+    .eq('incident_id', incidentId);
+
+  return { data, error };
 }
 
 /**
@@ -506,426 +303,254 @@ export async function saveRiskSuggestions(
  */
 export async function linkIncidentToRisk(
   incidentId: string,
-  riskCode: string
-): Promise<{ error: Error | null }> {
-  try {
-    // Get current incident
-    const { data: incident, error: getError } = await supabase
-      .from('incidents')
-      .select('linked_risk_codes')
-      .eq('id', incidentId)
-      .single();
+  riskId: string,
+  userId: string,
+  linkType: 'materialized' | 'near_miss' | 'control_failure' = 'materialized',
+  notes?: string
+) {
+  const { data, error } = await supabase
+    .from('incident_risk_links')
+    .insert({
+      incident_id: incidentId,
+      risk_id: riskId,
+      link_type: linkType,
+      notes,
+      linked_by: userId,
+    })
+    .select()
+    .single();
 
-    if (getError) {
-      return { error: new Error(getError.message) };
-    }
-
-    // Add risk code if not already linked
-    const linkedCodes = incident.linked_risk_codes || [];
-    if (!linkedCodes.includes(riskCode)) {
-      linkedCodes.push(riskCode);
-
-      const { error: updateError } = await supabase
-        .from('incidents')
-        .update({
-          linked_risk_codes: linkedCodes,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', incidentId);
-
-      if (updateError) {
-        return { error: new Error(updateError.message) };
-      }
-    }
-
-    console.log('Incident linked to risk:', { incidentId, riskCode });
-    return { error: null };
-  } catch (err) {
-    console.error('Unexpected link incident to risk error:', err);
-    return {
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
-  }
+  return { data: data as IncidentRiskLink | null, error };
 }
-
-// ============================================================================
-// AI-POWERED CONTROL ADEQUACY ASSESSMENT
-// ============================================================================
 
 /**
- * Use AI to assess control adequacy based on incident
+ * Unlink an incident from a risk
  */
-export async function assessControlAdequacy(
-  incident: Incident,
-  riskCode: string
-): Promise<{ data: AIControlAssessment[] | null; error: Error | null }> {
-  try {
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+export async function unlinkIncidentFromRisk(linkId: string) {
+  const { error } = await supabase
+    .from('incident_risk_links')
+    .delete()
+    .eq('id', linkId);
 
-    if (!apiKey) {
-      return {
-        data: null,
-        error: new Error('Anthropic API key not configured'),
-      };
-    }
-
-    // Get risk and its controls
-    const { data: risk, error: riskError } = await supabase
-      .from('risks')
-      .select('*')
-      .eq('risk_code', riskCode)
-      .single();
-
-    if (riskError) {
-      return { data: null, error: new Error(riskError.message) };
-    }
-
-    const { data: controls, error: controlsError } = await supabase
-      .from('controls')
-      .select('*')
-      .eq('risk_id', risk.id);
-
-    if (controlsError) {
-      return { data: null, error: new Error(controlsError.message) };
-    }
-
-    const prompt = `You are assessing if existing controls were adequate to prevent an incident.
-
-INCIDENT THAT OCCURRED:
-Title: ${incident.title}
-Description: ${incident.description || 'No description'}
-Severity: ${incident.severity}/5
-Root Cause: ${incident.root_cause || 'Not yet identified'}
-Corrective Actions: ${incident.corrective_actions || 'None specified'}
-
-RISK:
-Code: ${risk.risk_code}
-Title: ${risk.risk_title}
-Description: ${risk.risk_description}
-
-EXISTING CONTROLS:
-${
-  controls && controls.length > 0
-    ? controls
-        .map(
-          (c) =>
-            `- ${c.description} (DIME: D=${c.design}/3, I=${c.implementation}/3, M=${c.monitoring}/3, E=${c.effectiveness_evaluation}/3)`
-        )
-        .join('\n')
-    : 'No controls defined for this risk.'
+  return { error };
 }
 
-TASK:
-Assess each control's adequacy in preventing this incident. For each control (or if no controls exist, provide general assessment):
+/**
+ * Update a risk link
+ */
+export async function updateIncidentRiskLink(
+  linkId: string,
+  updates: { link_type?: string; notes?: string }
+) {
+  const { data, error } = await supabase
+    .from('incident_risk_links')
+    .update(updates)
+    .eq('id', linkId)
+    .select()
+    .single();
 
-Respond ONLY with valid JSON array:
-[
-  {
-    "control_description": "Description of control (or 'No controls' if none exist)",
-    "adequacy_rating": "adequate" or "partially_adequate" or "inadequate",
-    "confidence": 85,
-    "gaps_identified": ["gap 1", "gap 2"],
-    "recommendations": ["recommendation 1", "recommendation 2"],
-    "reasoning": "brief explanation"
-  }
-]`;
+  return { data: data as IncidentRiskLink | null, error };
+}
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 2048,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }),
-    });
+// =====================================================
+// ANALYTICS & REPORTING
+// =====================================================
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Claude API error:', errorText);
-      return {
-        data: null,
-        error: new Error(`Claude API error: ${response.status}`),
-      };
-    }
+/**
+ * Get incident statistics for an organization
+ */
+export async function getIncidentStats(orgId: string) {
+  const { data: incidents, error } = await supabase
+    .from('incidents')
+    .select('severity, status, incident_type, financial_impact, incident_date, resolved_date')
+    .eq('org_id', orgId);
 
-    const result = await response.json();
-    const contentText = result.content[0].text;
-
-    // Extract JSON array from response
-    const jsonMatch = contentText.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      return { data: [], error: null };
-    }
-
-    const assessments: AIControlAssessment[] = JSON.parse(jsonMatch[0]);
-
-    console.log('AI control assessments generated:', assessments.length);
-    return { data: assessments, error: null };
-  } catch (err) {
-    console.error('Unexpected assess control adequacy error:', err);
+  if (error || !incidents) {
     return {
       data: null,
-      error: err instanceof Error ? err : new Error('Unknown error'),
+      error,
     };
   }
+
+  // Calculate statistics
+  const stats = {
+    total_incidents: incidents.length,
+    by_severity: {} as Record<string, number>,
+    by_status: {} as Record<string, number>,
+    by_type: {} as Record<string, number>,
+    total_financial_impact: 0,
+    open_incidents: 0,
+    closed_incidents: 0,
+    avg_time_to_resolution: 0,
+  };
+
+  let resolutionTimes: number[] = [];
+
+  incidents.forEach((incident) => {
+    // By severity
+    stats.by_severity[incident.severity] =
+      (stats.by_severity[incident.severity] || 0) + 1;
+
+    // By status
+    stats.by_status[incident.status] =
+      (stats.by_status[incident.status] || 0) + 1;
+
+    // By type
+    stats.by_type[incident.incident_type] =
+      (stats.by_type[incident.incident_type] || 0) + 1;
+
+    // Financial impact
+    if (incident.financial_impact) {
+      stats.total_financial_impact += incident.financial_impact;
+    }
+
+    // Open vs closed
+    if (['reported', 'investigating', 'contained'].includes(incident.status)) {
+      stats.open_incidents++;
+    } else {
+      stats.closed_incidents++;
+    }
+
+    // Resolution time
+    if (incident.resolved_date) {
+      const incidentDate = new Date(incident.incident_date).getTime();
+      const resolvedDate = new Date(incident.resolved_date).getTime();
+      const days = Math.floor((resolvedDate - incidentDate) / (1000 * 60 * 60 * 24));
+      resolutionTimes.push(days);
+    }
+  });
+
+  if (resolutionTimes.length > 0) {
+    stats.avg_time_to_resolution = Math.round(
+      resolutionTimes.reduce((a, b) => a + b, 0) / resolutionTimes.length
+    );
+  }
+
+  return { data: stats, error: null };
 }
 
 /**
- * Save AI control recommendations to incident
+ * Get recent incidents (last 30 days)
  */
-export async function saveControlRecommendations(
-  incidentId: string,
-  assessments: AIControlAssessment[]
-): Promise<{ error: Error | null }> {
-  try {
-    const { error } = await supabase
-      .from('incidents')
-      .update({
-        ai_control_recommendations: assessments,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', incidentId);
+export async function getRecentIncidents(orgId: string, days: number = 30) {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
 
-    if (error) {
-      console.error('Save control recommendations error:', error.message);
-      return { error: new Error(error.message) };
-    }
+  const { data, error } = await supabase
+    .from('incident_summary')
+    .select('*')
+    .eq('org_id', orgId)
+    .gte('incident_date', cutoffDate.toISOString())
+    .order('incident_date', { ascending: false });
 
-    console.log('Control recommendations saved for incident:', incidentId);
-    return { error: null };
-  } catch (err) {
-    console.error('Unexpected save control recommendations error:', err);
-    return {
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
-  }
-}
-
-// ============================================================================
-// CONTROL ENHANCEMENT PLANS
-// ============================================================================
-
-/**
- * Get enhancement plans for an incident
- */
-export async function getEnhancementPlans(
-  incidentId: string
-): Promise<{ data: ControlEnhancementPlan[] | null; error: Error | null }> {
-  try {
-    const { data, error } = await supabase
-      .from('control_enhancement_plans')
-      .select('*')
-      .eq('incident_id', incidentId)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Get enhancement plans error:', error.message);
-      return { data: null, error: new Error(error.message) };
-    }
-
-    return { data, error: null };
-  } catch (err) {
-    console.error('Unexpected get enhancement plans error:', err);
-    return {
-      data: null,
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
-  }
+  return { data: data as IncidentSummary[] | null, error };
 }
 
 /**
- * Create a control enhancement plan
+ * Get critical incidents (critical severity or unresolved for >30 days)
  */
-export async function createEnhancementPlan(
-  planData: CreateEnhancementPlanData
-): Promise<{ data: ControlEnhancementPlan | null; error: Error | null }> {
-  try {
-    // Get user profile for organization_id
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+export async function getCriticalIncidents(orgId: string) {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    if (userError || !user) {
-      return { data: null, error: new Error('User not authenticated') };
-    }
+  const { data, error } = await supabase
+    .from('incident_summary')
+    .select('*')
+    .eq('org_id', orgId)
+    .or(`severity.eq.critical,and(status.in.(reported,investigating),incident_date.lt.${thirtyDaysAgo.toISOString()})`)
+    .order('incident_date', { ascending: false });
 
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return { data: null, error: new Error('User profile not found') };
-    }
-
-    const { data, error } = await supabase
-      .from('control_enhancement_plans')
-      .insert([
-        {
-          ...planData,
-          organization_id: profile.organization_id,
-          status: planData.status || 'Planned',
-        },
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Create enhancement plan error:', error.message);
-      return { data: null, error: new Error(error.message) };
-    }
-
-    console.log('Enhancement plan created:', data.id);
-    return { data, error: null };
-  } catch (err) {
-    console.error('Unexpected create enhancement plan error:', err);
-    return {
-      data: null,
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
-  }
+  return { data: data as IncidentSummary[] | null, error };
 }
 
 /**
- * Update an enhancement plan
+ * Search incidents by keyword
  */
-export async function updateEnhancementPlan(
-  planId: string,
-  updates: Partial<CreateEnhancementPlanData>
-): Promise<{ data: ControlEnhancementPlan | null; error: Error | null }> {
-  try {
-    const { data, error } = await supabase
-      .from('control_enhancement_plans')
-      .update(updates)
-      .eq('id', planId)
-      .select()
-      .single();
+export async function searchIncidents(orgId: string, searchTerm: string) {
+  const { data, error } = await supabase
+    .from('incident_summary')
+    .select('*')
+    .eq('org_id', orgId)
+    .or(
+      `title.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,incident_number.ilike.%${searchTerm}%`
+    )
+    .order('incident_date', { ascending: false });
 
-    if (error) {
-      console.error('Update enhancement plan error:', error.message);
-      return { data: null, error: new Error(error.message) };
-    }
-
-    console.log('Enhancement plan updated:', data.id);
-    return { data, error: null };
-  } catch (err) {
-    console.error('Unexpected update enhancement plan error:', err);
-    return {
-      data: null,
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
-  }
+  return { data: data as IncidentSummary[] | null, error };
 }
 
-// ============================================================================
-// INCIDENT STATISTICS
-// ============================================================================
+// =====================================================
+// HELPERS
+// =====================================================
 
 /**
- * Get incident statistics
+ * Get severity color class
  */
-export async function getIncidentStatistics(): Promise<{
-  data: {
-    total: number;
-    by_status: Record<string, number>;
-    by_severity: Record<number, number>;
-    by_division: Record<string, number>;
-    total_financial_impact: number;
-    avg_resolution_time_days: number | null;
-  } | null;
-  error: Error | null;
-}> {
-  try {
-    const { data: incidents, error } = await supabase
-      .from('incidents')
-      .select('*');
+export function getSeverityColor(severity: string): string {
+  const colors: Record<string, string> = {
+    critical: 'text-red-700 bg-red-100 border-red-300',
+    high: 'text-orange-700 bg-orange-100 border-orange-300',
+    medium: 'text-yellow-700 bg-yellow-100 border-yellow-300',
+    low: 'text-blue-700 bg-blue-100 border-blue-300',
+  };
+  return colors[severity.toLowerCase()] || 'text-gray-700 bg-gray-100 border-gray-300';
+}
 
-    if (error) {
-      return { data: null, error: new Error(error.message) };
-    }
+/**
+ * Get status color class
+ */
+export function getStatusColor(status: string): string {
+  const colors: Record<string, string> = {
+    reported: 'text-blue-700 bg-blue-100 border-blue-300',
+    investigating: 'text-yellow-700 bg-yellow-100 border-yellow-300',
+    contained: 'text-orange-700 bg-orange-100 border-orange-300',
+    resolved: 'text-green-700 bg-green-100 border-green-300',
+    closed: 'text-gray-700 bg-gray-100 border-gray-300',
+  };
+  return colors[status.toLowerCase()] || 'text-gray-700 bg-gray-100 border-gray-300';
+}
 
-    if (!incidents || incidents.length === 0) {
-      return {
-        data: {
-          total: 0,
-          by_status: {},
-          by_severity: {},
-          by_division: {},
-          total_financial_impact: 0,
-          avg_resolution_time_days: null,
-        },
-        error: null,
-      };
-    }
+/**
+ * Format incident number for display
+ */
+export function formatIncidentNumber(incidentNumber: string): string {
+  return incidentNumber; // Already formatted as INC-2025-001
+}
 
-    // Calculate statistics
-    const byStatus: Record<string, number> = {};
-    const bySeverity: Record<number, number> = {};
-    const byDivision: Record<string, number> = {};
-    let totalFinancialImpact = 0;
-    let resolutionTimes: number[] = [];
+/**
+ * Validate incident data
+ */
+export function validateIncidentData(data: IncidentFormData): string[] {
+  const errors: string[] = [];
 
-    incidents.forEach((inc) => {
-      // By status
-      byStatus[inc.status] = (byStatus[inc.status] || 0) + 1;
-
-      // By severity
-      bySeverity[inc.severity] = (bySeverity[inc.severity] || 0) + 1;
-
-      // By division
-      if (inc.division) {
-        byDivision[inc.division] = (byDivision[inc.division] || 0) + 1;
-      }
-
-      // Financial impact
-      if (inc.financial_impact) {
-        totalFinancialImpact += inc.financial_impact;
-      }
-
-      // Resolution time
-      if (inc.status === 'Resolved' || inc.status === 'Closed') {
-        const created = new Date(inc.created_at);
-        const updated = new Date(inc.updated_at);
-        const daysDiff = Math.floor(
-          (updated.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)
-        );
-        resolutionTimes.push(daysDiff);
-      }
-    });
-
-    const avgResolutionTime =
-      resolutionTimes.length > 0
-        ? resolutionTimes.reduce((a, b) => a + b, 0) / resolutionTimes.length
-        : null;
-
-    return {
-      data: {
-        total: incidents.length,
-        by_status: byStatus,
-        by_severity: bySeverity,
-        by_division: byDivision,
-        total_financial_impact: totalFinancialImpact,
-        avg_resolution_time_days: avgResolutionTime,
-      },
-      error: null,
-    };
-  } catch (err) {
-    console.error('Unexpected get incident statistics error:', err);
-    return {
-      data: null,
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
+  if (!data.title || data.title.trim().length === 0) {
+    errors.push('Title is required');
   }
+
+  if (!data.incident_type) {
+    errors.push('Incident type is required');
+  }
+
+  if (!data.severity) {
+    errors.push('Severity is required');
+  }
+
+  if (!data.incident_date) {
+    errors.push('Incident date is required');
+  }
+
+  if (!data.discovered_date) {
+    errors.push('Discovery date is required');
+  }
+
+  // Validate that incident_date <= discovered_date
+  if (data.incident_date && data.discovered_date) {
+    const incidentDate = new Date(data.incident_date);
+    const discoveredDate = new Date(data.discovered_date);
+    if (incidentDate > discoveredDate) {
+      errors.push('Incident date cannot be after discovery date');
+    }
+  }
+
+  return errors;
 }
