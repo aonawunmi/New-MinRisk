@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdvancedRiskHeatmap from './AdvancedRiskHeatmap';
 import HeatmapComparison from './HeatmapComparison';
-import TrendsView from './TrendsView';
+import EnhancedTrendsView from './EnhancedTrendsView';
 
 export default function Analytics() {
   const [matrixSize, setMatrixSize] = useState<5 | 6>(5);
@@ -68,7 +68,7 @@ export default function Analytics() {
         </TabsContent>
 
         <TabsContent value="trends" className="mt-6">
-          <TrendsView />
+          <EnhancedTrendsView />
         </TabsContent>
 
         <TabsContent value="reports" className="mt-6">

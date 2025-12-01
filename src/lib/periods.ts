@@ -470,3 +470,166 @@ export function parsePeriod(period: string): { quarter: number; year: number } |
   }
   return null;
 }
+
+// =====================================================
+// TREND ANALYSIS
+// =====================================================
+
+export interface PeriodTrendData {
+  period: string;
+  snapshot_date: string;
+  total_risks: number;
+  by_status: Record<string, number>;
+  by_level: Record<string, number>;
+  by_category: Record<string, number>;
+  avg_inherent_score: number;
+  avg_residual_score: number;
+  high_severe_count: number;
+}
+
+export interface RiskMigration {
+  risk_code: string;
+  risk_title: string;
+  from_period: string;
+  to_period: string;
+  from_level: string;
+  to_level: string;
+  from_score: number;
+  to_score: number;
+  direction: 'improved' | 'deteriorated' | 'unchanged';
+}
+
+/**
+ * Get trend data across all snapshots for an organization
+ */
+export async function getPeriodTrends(
+  orgId: string
+): Promise<{ data: PeriodTrendData[] | null; error: Error | null }> {
+  try {
+    const { data: snapshots, error } = await getAvailableSnapshots(orgId);
+
+    if (error) {
+      return { data: null, error: new Error(error.message) };
+    }
+
+    if (!snapshots || snapshots.length === 0) {
+      return { data: [], error: null };
+    }
+
+    // Load full snapshot data for each period
+    const trends: PeriodTrendData[] = [];
+
+    for (const snapshot of snapshots) {
+      const { data: fullSnapshot } = await getSnapshotByPeriod(orgId, snapshot.period);
+
+      if (fullSnapshot && fullSnapshot.snapshot_data) {
+        const summary = fullSnapshot.snapshot_data.summary;
+
+        // Count high/severe risks
+        const highSevereCount =
+          (summary.by_level['High'] || 0) +
+          (summary.by_level['Severe'] || 0) +
+          (summary.by_level['Extreme'] || 0);
+
+        trends.push({
+          period: snapshot.period,
+          snapshot_date: snapshot.snapshot_date,
+          total_risks: summary.total_risks,
+          by_status: summary.by_status,
+          by_level: summary.by_level,
+          by_category: summary.by_category,
+          avg_inherent_score: summary.avg_inherent_score,
+          avg_residual_score: summary.avg_residual_score,
+          high_severe_count: highSevereCount,
+        });
+      }
+    }
+
+    // Sort by date (oldest to newest for trend charts)
+    trends.sort((a, b) => new Date(a.snapshot_date).getTime() - new Date(b.snapshot_date).getTime());
+
+    return { data: trends, error: null };
+  } catch (err) {
+    console.error('Get period trends error:', err);
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error('Unknown error'),
+    };
+  }
+}
+
+/**
+ * Analyze risk migrations between two periods
+ * Shows how individual risks moved between risk levels
+ */
+export async function analyzeRiskMigrations(
+  orgId: string,
+  period1: string,
+  period2: string
+): Promise<{ data: RiskMigration[] | null; error: Error | null }> {
+  try {
+    const { data: snapshot1, error: error1 } = await getSnapshotByPeriod(orgId, period1);
+    const { data: snapshot2, error: error2 } = await getSnapshotByPeriod(orgId, period2);
+
+    if (error1 || error2) {
+      return {
+        data: null,
+        error: new Error('Failed to load snapshots for migration analysis'),
+      };
+    }
+
+    if (!snapshot1 || !snapshot2) {
+      return { data: null, error: new Error('Snapshots not found') };
+    }
+
+    const risks1Map = new Map(
+      snapshot1.snapshot_data.risks.map((r) => [r.risk_code, r])
+    );
+    const risks2Map = new Map(
+      snapshot2.snapshot_data.risks.map((r) => [r.risk_code, r])
+    );
+
+    const migrations: RiskMigration[] = [];
+
+    // Find risks that exist in both periods and check for level changes
+    snapshot2.snapshot_data.risks.forEach((risk2) => {
+      const risk1 = risks1Map.get(risk2.risk_code);
+
+      if (risk1) {
+        const level1 = getRiskLevel(risk1.score_inherent);
+        const level2 = getRiskLevel(risk2.score_inherent);
+
+        // Only include if level changed
+        if (level1 !== level2) {
+          let direction: 'improved' | 'deteriorated' | 'unchanged' = 'unchanged';
+
+          if (risk2.score_inherent < risk1.score_inherent) {
+            direction = 'improved';
+          } else if (risk2.score_inherent > risk1.score_inherent) {
+            direction = 'deteriorated';
+          }
+
+          migrations.push({
+            risk_code: risk2.risk_code,
+            risk_title: risk2.risk_title,
+            from_period: period1,
+            to_period: period2,
+            from_level: level1,
+            to_level: level2,
+            from_score: risk1.score_inherent,
+            to_score: risk2.score_inherent,
+            direction,
+          });
+        }
+      }
+    });
+
+    return { data: migrations, error: null };
+  } catch (err) {
+    console.error('Analyze risk migrations error:', err);
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error('Unknown error'),
+    };
+  }
+}
