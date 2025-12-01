@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdvancedRiskHeatmap from './AdvancedRiskHeatmap';
+import HeatmapComparison from './HeatmapComparison';
 import TrendsView from './TrendsView';
 
 export default function Analytics() {
@@ -53,12 +54,17 @@ export default function Analytics() {
       <Tabs defaultValue="heatmap" className="w-full">
         <TabsList>
           <TabsTrigger value="heatmap">🔥 Heatmap</TabsTrigger>
+          <TabsTrigger value="comparison">🔄 Period Comparison</TabsTrigger>
           <TabsTrigger value="trends">📈 Trends</TabsTrigger>
           <TabsTrigger value="reports">📊 Reports</TabsTrigger>
         </TabsList>
 
         <TabsContent value="heatmap" className="mt-6">
           <AdvancedRiskHeatmap matrixSize={matrixSize} />
+        </TabsContent>
+
+        <TabsContent value="comparison" className="mt-6">
+          <HeatmapComparison />
         </TabsContent>
 
         <TabsContent value="trends" className="mt-6">
