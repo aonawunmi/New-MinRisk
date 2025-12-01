@@ -3,40 +3,81 @@
  *
  * Interactive 5x5 or 6x6 risk matrix heatmap visualization
  * showing likelihood vs impact with risk counts and details
+ * Supports historical period snapshots for trend analysis
  */
 
 import { useState, useEffect } from 'react';
 import { getHeatmapData, getRiskLevelColor, type HeatmapCell } from '@/lib/analytics';
+import { getAvailableSnapshots, generatePeriodOptions } from '@/lib/periods';
+import { useAuth } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Calendar, Clock } from 'lucide-react';
 
 interface RiskHeatmapProps {
   matrixSize?: 5 | 6;
 }
 
 export default function RiskHeatmap({ matrixSize = 5 }: RiskHeatmapProps) {
+  const { profile } = useAuth();
   const [heatmapData, setHeatmapData] = useState<HeatmapCell[]>([]);
   const [selectedCell, setSelectedCell] = useState<HeatmapCell | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('current');
+  const [availablePeriods, setAvailablePeriods] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isHistorical, setIsHistorical] = useState(false);
+  const [snapshotDate, setSnapshotDate] = useState<string | undefined>();
 
+  // Load available periods on mount
+  useEffect(() => {
+    if (profile?.organization_id) {
+      loadAvailablePeriods();
+    }
+  }, [profile]);
+
+  // Reload heatmap when period or matrix size changes
   useEffect(() => {
     loadHeatmapData();
-  }, [matrixSize]);
+  }, [matrixSize, selectedPeriod, profile]);
+
+  async function loadAvailablePeriods() {
+    if (!profile?.organization_id) return;
+
+    const { data: snapshots } = await getAvailableSnapshots(profile.organization_id);
+    if (snapshots) {
+      const periods = snapshots.map((s) => s.period);
+      setAvailablePeriods(periods);
+    }
+  }
 
   async function loadHeatmapData() {
     setLoading(true);
     setError(null);
 
     try {
-      const { data, error: heatmapError } = await getHeatmapData(matrixSize);
+      const {
+        data,
+        error: heatmapError,
+        isHistorical: historical,
+        snapshotDate: snapDate,
+      } = await getHeatmapData(matrixSize, selectedPeriod, profile?.organization_id);
 
       if (heatmapError) {
         throw new Error(heatmapError.message);
       }
 
       setHeatmapData(data || []);
+      setIsHistorical(historical);
+      setSnapshotDate(snapDate);
     } catch (err) {
       console.error('Heatmap load error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load heatmap');
@@ -89,6 +130,62 @@ export default function RiskHeatmap({ matrixSize = 5 }: RiskHeatmapProps) {
 
   return (
     <div className="space-y-6">
+      {/* Period Selector Card */}
+      <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between gap-4">
+            {/* Period Selector */}
+            <div className="flex items-center gap-3 flex-1">
+              <Calendar className="h-5 w-5 text-blue-600" />
+              <div className="flex-1 max-w-xs">
+                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                  View Period:
+                </label>
+                <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                  <SelectTrigger className="bg-white">
+                    <SelectValue placeholder="Select period" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="current">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500" />
+                        <span className="font-medium">Current (Live Data)</span>
+                      </div>
+                    </SelectItem>
+                    {availablePeriods.map((period) => (
+                      <SelectItem key={period} value={period}>
+                        {period}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Historical Indicator */}
+            {isHistorical && snapshotDate && (
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-amber-100 border-amber-300 text-amber-800">
+                  <Clock className="h-3 w-3 mr-1" />
+                  HISTORICAL SNAPSHOT
+                </Badge>
+                <span className="text-sm text-gray-600">
+                  As of {new Date(snapshotDate).toLocaleDateString()}
+                </span>
+              </div>
+            )}
+
+            {/* Live Indicator */}
+            {!isHistorical && (
+              <Badge variant="outline" className="bg-green-100 border-green-300 text-green-800">
+                <div className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse" />
+                LIVE DATA
+              </Badge>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Heatmap Grid */}
       <Card>
         <CardHeader>

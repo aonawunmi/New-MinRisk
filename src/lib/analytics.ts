@@ -290,19 +290,61 @@ export function getRiskLevelColor(
 
 /**
  * Generate heatmap data (5x5 or 6x6 matrix)
+ * Can load from current risks table or historical snapshots
+ *
+ * @param matrixSize - 5x5 or 6x6 matrix
+ * @param period - Optional period (e.g., "Q1 2025"). If null/undefined, loads current risks
+ * @param orgId - Organization ID (required when loading historical data)
  */
-export async function getHeatmapData(matrixSize: 5 | 6 = 5): Promise<{
+export async function getHeatmapData(
+  matrixSize: 5 | 6 = 5,
+  period?: string | null,
+  orgId?: string
+): Promise<{
   data: HeatmapCell[] | null;
   error: Error | null;
+  isHistorical: boolean;
+  snapshotDate?: string;
 }> {
   try {
-    // Fetch all risks
-    const { data: risks, error: risksError } = await supabase
-      .from('risks')
-      .select('risk_code, risk_title, likelihood_inherent, impact_inherent');
+    let risks: any[] = [];
+    let isHistorical = false;
+    let snapshotDate: string | undefined;
 
-    if (risksError) {
-      return { data: null, error: new Error(risksError.message) };
+    // Load from snapshot if period is specified
+    if (period && period !== 'current' && orgId) {
+      const { data: snapshot, error: snapshotError } = await supabase
+        .from('risk_snapshots')
+        .select('snapshot_data, snapshot_date')
+        .eq('organization_id', orgId)
+        .eq('period', period)
+        .single();
+
+      if (snapshotError) {
+        return {
+          data: null,
+          error: new Error(`Snapshot not found for period ${period}`),
+          isHistorical: false
+        };
+      }
+
+      if (snapshot && snapshot.snapshot_data) {
+        // Extract risks from snapshot JSONB
+        risks = snapshot.snapshot_data.risks || [];
+        isHistorical = true;
+        snapshotDate = snapshot.snapshot_date;
+      }
+    } else {
+      // Load current risks from risks table
+      const { data: currentRisks, error: risksError } = await supabase
+        .from('risks')
+        .select('risk_code, risk_title, likelihood_inherent, impact_inherent');
+
+      if (risksError) {
+        return { data: null, error: new Error(risksError.message), isHistorical: false };
+      }
+
+      risks = currentRisks || [];
     }
 
     // Initialize matrix
@@ -335,12 +377,18 @@ export async function getHeatmapData(matrixSize: 5 | 6 = 5): Promise<{
     // Convert to array
     const heatmapData = Object.values(matrix);
 
-    return { data: heatmapData, error: null };
+    return {
+      data: heatmapData,
+      error: null,
+      isHistorical,
+      snapshotDate
+    };
   } catch (err) {
     console.error('Unexpected get heatmap data error:', err);
     return {
       data: null,
       error: err instanceof Error ? err : new Error('Unknown error'),
+      isHistorical: false
     };
   }
 }

@@ -13,9 +13,13 @@ import TaxonomyManagement from './TaxonomyManagement';
 import UserManagement from './UserManagement';
 import OrganizationSettings from './OrganizationSettings';
 import RiskConfiguration from './RiskConfiguration';
-import { Shield, Users, Settings, BookOpen, Sliders } from 'lucide-react';
+import PeriodManagement from './PeriodManagement';
+import { Shield, Users, Settings, BookOpen, Sliders, Calendar } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
 
 export default function AdminPanel() {
+  const { user, profile } = useAuth();
+
   return (
     <div className="space-y-4">
       <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-6">
@@ -35,7 +39,7 @@ export default function AdminPanel() {
       </div>
 
       <Tabs defaultValue="taxonomy" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="taxonomy" className="flex items-center gap-2">
             <BookOpen className="h-4 w-4" />
             Risk Taxonomy
@@ -47,6 +51,10 @@ export default function AdminPanel() {
           <TabsTrigger value="users" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             User Management
+          </TabsTrigger>
+          <TabsTrigger value="periods" className="flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Period Management
           </TabsTrigger>
           <TabsTrigger value="settings" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
@@ -64,6 +72,15 @@ export default function AdminPanel() {
 
         <TabsContent value="users" className="mt-6">
           <UserManagement />
+        </TabsContent>
+
+        <TabsContent value="periods" className="mt-6">
+          {user && profile && (
+            <PeriodManagement
+              orgId={profile.organization_id}
+              userId={user.id}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="settings" className="mt-6">

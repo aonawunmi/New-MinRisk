@@ -1,281 +1,472 @@
 /**
  * Period Management Library
  *
- * Functions for managing risk register periods (quarters, fiscal years)
- * and creating historical snapshots.
+ * Handles period snapshots, commits, and historical risk data retrieval.
+ * Enables organizations to track risk evolution over time.
  */
 
 import { supabase } from './supabase';
+import { getRisks } from './risks';
+import { getControlsForRisk, calculateResidualRisk } from './controls';
+
+// =====================================================
+// TYPES
+// =====================================================
+
+export interface RiskSnapshot {
+  id: string;
+  organization_id: string;
+  period: string;
+  snapshot_date: string;
+  committed_by: string | null;
+  risk_count: number;
+  snapshot_data: SnapshotData;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface SnapshotData {
+  period: string;
+  snapshot_date: string;
+  risk_count: number;
+  risks: SnapshotRisk[];
+  summary: {
+    total_risks: number;
+    by_status: Record<string, number>;
+    by_level: Record<string, number>;
+    by_category: Record<string, number>;
+    avg_inherent_score: number;
+    avg_residual_score: number;
+  };
+}
+
+export interface SnapshotRisk {
+  risk_code: string;
+  risk_title: string;
+  risk_description: string;
+  category: string;
+  division: string | null;
+  likelihood_inherent: number;
+  impact_inherent: number;
+  score_inherent: number;
+  likelihood_residual: number | null;
+  impact_residual: number | null;
+  score_residual: number | null;
+  status: string;
+  is_priority: boolean;
+  controls_count: number;
+  controls: any[];
+}
+
+export interface PeriodComparison {
+  period1: string;
+  period2: string;
+  risk_count_change: number;
+  new_risks: SnapshotRisk[];
+  closed_risks: SnapshotRisk[];
+  risk_changes: RiskChange[];
+  score_changes: {
+    avg_inherent_change: number;
+    avg_residual_change: number;
+  };
+}
+
+export interface RiskChange {
+  risk_code: string;
+  risk_title: string;
+  likelihood_change: number;
+  impact_change: number;
+  score_change: number;
+  old_status: string;
+  new_status: string;
+}
+
+// =====================================================
+// PERIOD SNAPSHOT OPERATIONS
+// =====================================================
 
 /**
- * Period options for dropdown selection
+ * Get all committed periods (snapshots) for an organization
  */
-export const PERIOD_OPTIONS = [
-  { value: 'Q1 2025', label: 'Q1 2025' },
-  { value: 'Q2 2025', label: 'Q2 2025' },
-  { value: 'Q3 2025', label: 'Q3 2025' },
-  { value: 'Q4 2025', label: 'Q4 2025' },
-  { value: 'FY 2025', label: 'FY 2025' },
-  { value: 'Q1 2026', label: 'Q1 2026' },
-  { value: 'Q2 2026', label: 'Q2 2026' },
-  { value: 'Q3 2026', label: 'Q3 2026' },
-  { value: 'Q4 2026', label: 'Q4 2026' },
-  { value: 'FY 2026', label: 'FY 2026' },
-];
+export async function getAvailableSnapshots(orgId: string) {
+  const { data, error } = await supabase
+    .from('risk_snapshots')
+    .select('id, period, snapshot_date, risk_count, committed_by, notes, created_at')
+    .eq('organization_id', orgId)
+    .order('snapshot_date', { ascending: false });
 
-/**
- * Get the active period for the current organization
- */
-export async function getActivePeriod(): Promise<{
-  data: string | null;
-  error: Error | null;
-}> {
-  try {
-    // Get current user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      return { data: null, error: new Error('User not authenticated') };
-    }
-
-    // Get user's organization
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return { data: null, error: new Error('User profile not found') };
-    }
-
-    // Get active period from risk_configs
-    const { data: config, error: configError } = await supabase
-      .from('risk_configs')
-      .select('active_period')
-      .eq('organization_id', profile.organization_id)
-      .single();
-
-    if (configError) {
-      console.error('Error fetching active period:', configError);
-      return { data: 'Q1 2025', error: null }; // Default period
-    }
-
-    return { data: config?.active_period || 'Q1 2025', error: null };
-  } catch (err) {
-    console.error('Unexpected error getting active period:', err);
-    return {
-      data: null,
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
-  }
+  return { data: data as Omit<RiskSnapshot, 'snapshot_data'>[] | null, error };
 }
 
 /**
- * Set the active period for the current organization
+ * Get a specific snapshot by period
  */
-export async function setActivePeriod(
-  period: string
-): Promise<{ error: Error | null }> {
-  try {
-    // Get current user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+export async function getSnapshotByPeriod(orgId: string, period: string) {
+  const { data, error } = await supabase
+    .from('risk_snapshots')
+    .select('*')
+    .eq('organization_id', orgId)
+    .eq('period', period)
+    .single();
 
-    if (userError || !user) {
-      return { error: new Error('User not authenticated') };
-    }
-
-    // Get user's organization
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id, role')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return { error: new Error('User profile not found') };
-    }
-
-    // Check if user is admin
-    if (profile.role !== 'admin') {
-      return { error: new Error('Only administrators can change the active period') };
-    }
-
-    // Update active period in risk_configs
-    const { error: updateError } = await supabase
-      .from('risk_configs')
-      .update({ active_period: period })
-      .eq('organization_id', profile.organization_id);
-
-    if (updateError) {
-      console.error('Error updating active period:', updateError);
-      return { error: new Error(updateError.message) };
-    }
-
-    console.log('Active period updated to:', period);
-    return { error: null };
-  } catch (err) {
-    console.error('Unexpected error setting active period:', err);
-    return {
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
-  }
+  return { data: data as RiskSnapshot | null, error };
 }
 
 /**
- * Get all committed period snapshots for the organization
+ * Get the latest snapshot for an organization
  */
-export async function getPeriodSnapshots(): Promise<{
-  data: any[] | null;
-  error: Error | null;
-}> {
-  try {
-    // Get current user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+export async function getLatestSnapshot(orgId: string) {
+  const { data, error } = await supabase
+    .from('risk_snapshots')
+    .select('*')
+    .eq('organization_id', orgId)
+    .order('snapshot_date', { ascending: false })
+    .limit(1)
+    .single();
 
-    if (userError || !user) {
-      return { data: null, error: new Error('User not authenticated') };
-    }
-
-    // Get user's organization
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return { data: null, error: new Error('User profile not found') };
-    }
-
-    // Fetch all snapshots for the organization
-    const { data: snapshots, error: snapshotsError } = await supabase
-      .from('risk_snapshots')
-      .select('*')
-      .eq('organization_id', profile.organization_id)
-      .order('snapshot_date', { ascending: false });
-
-    if (snapshotsError) {
-      console.error('Error fetching period snapshots:', snapshotsError);
-      return { data: null, error: new Error(snapshotsError.message) };
-    }
-
-    return { data: snapshots || [], error: null };
-  } catch (err) {
-    console.error('Unexpected error getting period snapshots:', err);
-    return {
-      data: null,
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
-  }
+  return { data: data as RiskSnapshot | null, error };
 }
 
 /**
- * Create a snapshot of the current risk register
- * (Commit Period functionality)
+ * Check if a period snapshot already exists
  */
-export async function commitPeriodSnapshot(
+export async function periodSnapshotExists(orgId: string, period: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('risk_snapshots')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('period', period)
+    .single();
+
+  return !error && data !== null;
+}
+
+// =====================================================
+// COMMIT PERIOD (CREATE SNAPSHOT)
+// =====================================================
+
+/**
+ * Commit current period - Take snapshot of all risks
+ * This is the main function for end-of-period activities
+ */
+export async function commitPeriod(
+  orgId: string,
   period: string,
+  userId: string,
   notes?: string
-): Promise<{ data: any | null; error: Error | null }> {
+): Promise<{ data: RiskSnapshot | null; error: Error | null }> {
   try {
-    // Get current user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      return { data: null, error: new Error('User not authenticated') };
-    }
-
-    // Get user's organization
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id, role')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return { data: null, error: new Error('User profile not found') };
-    }
-
-    // Check if user is admin
-    if (profile.role !== 'admin') {
+    // Check if snapshot already exists
+    const exists = await periodSnapshotExists(orgId, period);
+    if (exists) {
       return {
         data: null,
-        error: new Error('Only administrators can commit periods'),
+        error: new Error(`Snapshot for ${period} already exists`),
       };
     }
 
-    // Fetch all risks for the period
-    const { data: risks, error: risksError } = await supabase
-      .from('risks')
-      .select('*')
-      .eq('organization_id', profile.organization_id)
-      .eq('period', period);
+    // Get all current risks for the organization
+    const { data: risks, error: risksError } = await getRisks(orgId);
 
     if (risksError) {
-      console.error('Error fetching risks for snapshot:', risksError);
       return { data: null, error: new Error(risksError.message) };
     }
 
-    // Fetch all controls for these risks
-    const riskIds = risks?.map((r) => r.id) || [];
-    const { data: controls, error: controlsError } = await supabase
-      .from('controls')
-      .select('*')
-      .in('risk_id', riskIds);
-
-    if (controlsError) {
-      console.error('Error fetching controls for snapshot:', controlsError);
+    if (!risks || risks.length === 0) {
+      return {
+        data: null,
+        error: new Error('No risks found to snapshot'),
+      };
     }
 
-    // Create snapshot data
-    const snapshotData = {
+    // Build snapshot data with controls and residual calculations
+    const snapshotRisks: SnapshotRisk[] = [];
+
+    for (const risk of risks) {
+      // Get controls for this risk
+      const { data: controls } = await getControlsForRisk(risk.id);
+
+      // Calculate residual risk
+      const residual = controls && controls.length > 0
+        ? calculateResidualRisk(
+            risk.likelihood_inherent,
+            risk.impact_inherent,
+            controls
+          )
+        : null;
+
+      snapshotRisks.push({
+        risk_code: risk.risk_code,
+        risk_title: risk.risk_title,
+        risk_description: risk.risk_description || '',
+        category: risk.category,
+        division: risk.division,
+        likelihood_inherent: risk.likelihood_inherent,
+        impact_inherent: risk.impact_inherent,
+        score_inherent: risk.likelihood_inherent * risk.impact_inherent,
+        likelihood_residual: residual?.likelihood || null,
+        impact_residual: residual?.impact || null,
+        score_residual: residual ? residual.likelihood * residual.impact : null,
+        status: risk.status,
+        is_priority: risk.is_priority || false,
+        controls_count: controls?.length || 0,
+        controls: controls || [],
+      });
+    }
+
+    // Calculate summary statistics
+    const summary = calculateSnapshotSummary(snapshotRisks);
+
+    // Build complete snapshot data
+    const snapshotData: SnapshotData = {
       period,
-      risks: risks || [],
-      controls: controls || [],
-      risk_count: risks?.length || 0,
-      control_count: controls?.length || 0,
-      snapshot_timestamp: new Date().toISOString(),
+      snapshot_date: new Date().toISOString(),
+      risk_count: snapshotRisks.length,
+      risks: snapshotRisks,
+      summary,
     };
 
-    // Insert snapshot
-    const { data: snapshot, error: insertError } = await supabase
+    // Insert snapshot into database
+    const { data, error } = await supabase
       .from('risk_snapshots')
       .insert({
-        organization_id: profile.organization_id,
+        organization_id: orgId,
         period,
-        committed_by_profile_id: user.id,
-        risk_count: risks?.length || 0,
+        snapshot_date: new Date().toISOString(),
+        committed_by: userId,
+        risk_count: snapshotRisks.length,
         snapshot_data: snapshotData,
         notes,
       })
       .select()
       .single();
 
-    if (insertError) {
-      console.error('Error creating period snapshot:', insertError);
-      return { data: null, error: new Error(insertError.message) };
+    if (error) {
+      console.error('Commit period error:', error);
+      return { data: null, error: new Error(error.message) };
     }
 
-    console.log('Period snapshot created:', period);
-    return { data: snapshot, error: null };
+    console.log(`✅ Period committed: ${period} (${snapshotRisks.length} risks)`);
+    return { data: data as RiskSnapshot, error: null };
   } catch (err) {
-    console.error('Unexpected error committing period snapshot:', err);
+    console.error('Unexpected commit period error:', err);
     return {
       data: null,
       error: err instanceof Error ? err : new Error('Unknown error'),
     };
   }
+}
+
+/**
+ * Calculate summary statistics for snapshot
+ */
+function calculateSnapshotSummary(risks: SnapshotRisk[]) {
+  const summary = {
+    total_risks: risks.length,
+    by_status: {} as Record<string, number>,
+    by_level: {} as Record<string, number>,
+    by_category: {} as Record<string, number>,
+    avg_inherent_score: 0,
+    avg_residual_score: 0,
+  };
+
+  let totalInherent = 0;
+  let totalResidual = 0;
+  let residualCount = 0;
+
+  risks.forEach((risk) => {
+    // By status
+    summary.by_status[risk.status] = (summary.by_status[risk.status] || 0) + 1;
+
+    // By category
+    summary.by_category[risk.category] = (summary.by_category[risk.category] || 0) + 1;
+
+    // By level (based on inherent score)
+    const level = getRiskLevel(risk.score_inherent);
+    summary.by_level[level] = (summary.by_level[level] || 0) + 1;
+
+    // Average scores
+    totalInherent += risk.score_inherent;
+    if (risk.score_residual !== null) {
+      totalResidual += risk.score_residual;
+      residualCount++;
+    }
+  });
+
+  summary.avg_inherent_score = Math.round((totalInherent / risks.length) * 10) / 10;
+  summary.avg_residual_score = residualCount > 0
+    ? Math.round((totalResidual / residualCount) * 10) / 10
+    : 0;
+
+  return summary;
+}
+
+/**
+ * Get risk level from score (5x5 matrix)
+ */
+function getRiskLevel(score: number): string {
+  if (score >= 20) return 'Severe';
+  if (score >= 12) return 'High';
+  if (score >= 6) return 'Moderate';
+  if (score >= 3) return 'Low';
+  return 'Minimal';
+}
+
+// =====================================================
+// PERIOD COMPARISON
+// =====================================================
+
+/**
+ * Compare two periods to identify changes
+ */
+export async function compareSnapshots(
+  orgId: string,
+  period1: string,
+  period2: string
+): Promise<{ data: PeriodComparison | null; error: Error | null }> {
+  try {
+    // Get both snapshots
+    const { data: snapshot1, error: error1 } = await getSnapshotByPeriod(orgId, period1);
+    const { data: snapshot2, error: error2 } = await getSnapshotByPeriod(orgId, period2);
+
+    if (error1 || error2) {
+      return {
+        data: null,
+        error: new Error(error1?.message || error2?.message || 'Failed to load snapshots'),
+      };
+    }
+
+    if (!snapshot1 || !snapshot2) {
+      return { data: null, error: new Error('One or both snapshots not found') };
+    }
+
+    const data1 = snapshot1.snapshot_data;
+    const data2 = snapshot2.snapshot_data;
+
+    // Build comparison
+    const comparison: PeriodComparison = {
+      period1,
+      period2,
+      risk_count_change: data2.risk_count - data1.risk_count,
+      new_risks: [],
+      closed_risks: [],
+      risk_changes: [],
+      score_changes: {
+        avg_inherent_change: data2.summary.avg_inherent_score - data1.summary.avg_inherent_score,
+        avg_residual_change: data2.summary.avg_residual_score - data1.summary.avg_residual_score,
+      },
+    };
+
+    // Create maps for quick lookup
+    const risks1Map = new Map(data1.risks.map((r) => [r.risk_code, r]));
+    const risks2Map = new Map(data2.risks.map((r) => [r.risk_code, r]));
+
+    // Find new risks (in period2 but not in period1)
+    data2.risks.forEach((risk2) => {
+      if (!risks1Map.has(risk2.risk_code)) {
+        comparison.new_risks.push(risk2);
+      }
+    });
+
+    // Find closed risks (in period1 but not in period2)
+    data1.risks.forEach((risk1) => {
+      if (!risks2Map.has(risk1.risk_code)) {
+        comparison.closed_risks.push(risk1);
+      }
+    });
+
+    // Find changed risks
+    data2.risks.forEach((risk2) => {
+      const risk1 = risks1Map.get(risk2.risk_code);
+      if (risk1) {
+        const likelihoodChange = risk2.likelihood_inherent - risk1.likelihood_inherent;
+        const impactChange = risk2.impact_inherent - risk1.impact_inherent;
+        const scoreChange = risk2.score_inherent - risk1.score_inherent;
+
+        // Only include if something changed
+        if (likelihoodChange !== 0 || impactChange !== 0 || risk1.status !== risk2.status) {
+          comparison.risk_changes.push({
+            risk_code: risk2.risk_code,
+            risk_title: risk2.risk_title,
+            likelihood_change: likelihoodChange,
+            impact_change: impactChange,
+            score_change: scoreChange,
+            old_status: risk1.status,
+            new_status: risk2.status,
+          });
+        }
+      }
+    });
+
+    return { data: comparison, error: null };
+  } catch (err) {
+    console.error('Compare snapshots error:', err);
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error('Unknown error'),
+    };
+  }
+}
+
+// =====================================================
+// DELETE SNAPSHOT
+// =====================================================
+
+/**
+ * Delete a period snapshot (admin only)
+ */
+export async function deleteSnapshot(snapshotId: string) {
+  const { error } = await supabase
+    .from('risk_snapshots')
+    .delete()
+    .eq('id', snapshotId);
+
+  return { error };
+}
+
+// =====================================================
+// UTILITY FUNCTIONS
+// =====================================================
+
+/**
+ * Generate period options (Q1-Q4 for current and next year)
+ */
+export function generatePeriodOptions(): { value: string; label: string }[] {
+  const currentYear = new Date().getFullYear();
+  const periods: { value: string; label: string }[] = [];
+
+  // Generate for previous year, current year, and next year
+  for (let year = currentYear - 1; year <= currentYear + 1; year++) {
+    for (let quarter = 1; quarter <= 4; quarter++) {
+      const period = `Q${quarter} ${year}`;
+      periods.push({ value: period, label: period });
+    }
+  }
+
+  // Reverse to show most recent first
+  return periods.reverse();
+}
+
+/**
+ * Get current quarter and year
+ */
+export function getCurrentPeriod(): string {
+  const now = new Date();
+  const quarter = Math.floor(now.getMonth() / 3) + 1;
+  const year = now.getFullYear();
+  return `Q${quarter} ${year}`;
+}
+
+/**
+ * Parse period string to get quarter and year
+ */
+export function parsePeriod(period: string): { quarter: number; year: number } | null {
+  const match = period.match(/Q(\d) (\d{4})/);
+  if (match) {
+    return {
+      quarter: parseInt(match[1], 10),
+      year: parseInt(match[2], 10),
+    };
+  }
+  return null;
 }
