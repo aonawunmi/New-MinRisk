@@ -517,6 +517,360 @@ export function formatIncidentNumber(incidentNumber: string): string {
   return incidentNumber; // Already formatted as INC-2025-001
 }
 
+// =====================================================
+// AI-POWERED FEATURES
+// =====================================================
+
+/**
+ * AI-suggested risk structure
+ */
+export interface AISuggestedRisk {
+  risk_code: string;
+  risk_title: string;
+  confidence: number; // 0-100
+  reasoning: string;
+  link_type: 'materialized' | 'near_miss' | 'control_failure';
+  status: 'pending' | 'accepted' | 'rejected';
+  suggested_at: string;
+}
+
+/**
+ * Control adequacy assessment structure
+ */
+export interface ControlAdequacyAssessment {
+  assessment: 'Adequate' | 'Partially Adequate' | 'Inadequate';
+  reasoning: string;
+  dime_adjustments: Array<{
+    control_id: string;
+    control_name: string;
+    dimension: 'design' | 'implementation' | 'monitoring' | 'evaluation';
+    current_score: number;
+    suggested_score: number;
+    reason: string;
+  }>;
+  suggested_controls: Array<{
+    name: string;
+    description: string;
+    control_type: 'preventive' | 'detective' | 'corrective';
+    target: 'likelihood' | 'impact';
+    expected_dime: {
+      design: number;
+      implementation: number;
+      monitoring: number;
+      evaluation: number;
+    };
+    implementation_priority: 'High' | 'Medium' | 'Low';
+  }>;
+  priority: 'High' | 'Medium' | 'Low';
+  analyzed_at: string;
+}
+
+/**
+ * Suggest risks for an incident using AI analysis
+ */
+export async function suggestRisksForIncident(incidentId: string) {
+  try {
+    // 1. Get incident details
+    const { data: incident, error: incidentError } = await getIncidentById(incidentId);
+    if (incidentError || !incident) {
+      return { data: null, error: new Error('Incident not found') };
+    }
+
+    // 2. Get all active risks for the organization
+    const { data: allRisks } = await supabase
+      .from('risks')
+      .select('id, risk_code, risk_title, risk_description, category, division, department')
+      .eq('org_id', incident.org_id)
+      .in('status', ['OPEN', 'MONITORING']);
+
+    const risks = allRisks || [];
+
+    if (risks.length === 0) {
+      return { data: [], error: null };
+    }
+
+    // 3. Call Edge Function for AI analysis
+    console.log(`Calling AI to analyze incident "${incident.title}" against ${risks.length} risks...`);
+
+    const { data: aiResult, error: aiError } = await supabase.functions.invoke('analyze-incident', {
+      body: {
+        action: 'suggest_risks',
+        incident: {
+          title: incident.title,
+          description: incident.description,
+          incident_type: incident.incident_type,
+          severity: incident.severity,
+          incident_date: incident.incident_date,
+          division: incident.division,
+          department: incident.department,
+          financial_impact: incident.financial_impact,
+          root_cause: incident.root_cause_description,
+          impact_description: incident.impact_description,
+        },
+        risks,
+      },
+    });
+
+    if (aiError) {
+      console.error('AI analysis error:', aiError);
+      return { data: null, error: new Error('AI analysis failed: ' + aiError.message) };
+    }
+
+    if (!aiResult?.success) {
+      return { data: null, error: new Error(aiResult?.error || 'AI analysis failed') };
+    }
+
+    const suggestedRisks: AISuggestedRisk[] = (aiResult.data || []).map((suggestion: any) => ({
+      risk_code: suggestion.risk_code,
+      risk_title: suggestion.risk_title,
+      confidence: suggestion.confidence,
+      reasoning: suggestion.reasoning,
+      link_type: suggestion.link_type || 'materialized',
+      status: 'pending',
+      suggested_at: new Date().toISOString(),
+    }));
+
+    // 4. Update incident with AI suggestions
+    const { error: updateError } = await supabase
+      .from('incidents')
+      .update({
+        ai_suggested_risks: suggestedRisks,
+        ai_analysis_date: new Date().toISOString(),
+        ai_analysis_status: 'completed',
+      })
+      .eq('id', incidentId);
+
+    if (updateError) {
+      console.error('Error updating incident with AI suggestions:', updateError);
+      return { data: null, error: updateError };
+    }
+
+    console.log(`✅ AI suggested ${suggestedRisks.length} risk link(s)`);
+    return { data: suggestedRisks, error: null };
+
+  } catch (error) {
+    console.error('Error in suggestRisksForIncident:', error);
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error('Unknown error'),
+    };
+  }
+}
+
+/**
+ * Accept an AI-suggested risk link
+ */
+export async function acceptRiskSuggestion(incidentId: string, riskCode: string) {
+  try {
+    // 1. Get incident
+    const { data: incident, error: incidentError } = await getIncidentById(incidentId);
+    if (incidentError || !incident) {
+      return { data: null, error: new Error('Incident not found') };
+    }
+
+    // 2. Get the suggestion from ai_suggested_risks
+    const suggestions = incident.ai_suggested_risks as AISuggestedRisk[];
+    const suggestion = suggestions?.find(s => s.risk_code === riskCode);
+
+    if (!suggestion) {
+      return { data: null, error: new Error('Risk suggestion not found') };
+    }
+
+    // 3. Get the risk ID
+    const { data: risk } = await supabase
+      .from('risks')
+      .select('id')
+      .eq('risk_code', riskCode)
+      .eq('org_id', incident.org_id)
+      .single();
+
+    if (!risk) {
+      return { data: null, error: new Error('Risk not found') };
+    }
+
+    // 4. Create the incident-risk link
+    const linkResult = await linkIncidentToRisk(incidentId, risk.id, {
+      link_type: suggestion.link_type,
+      notes: `AI-suggested link (${suggestion.confidence}% confidence): ${suggestion.reasoning}`,
+    });
+
+    if (linkResult.error) {
+      return { data: null, error: linkResult.error };
+    }
+
+    // 5. Update suggestion status to 'accepted'
+    const updatedSuggestions = suggestions.map(s =>
+      s.risk_code === riskCode ? { ...s, status: 'accepted' as const } : s
+    );
+
+    const { error: updateError } = await supabase
+      .from('incidents')
+      .update({ ai_suggested_risks: updatedSuggestions })
+      .eq('id', incidentId);
+
+    if (updateError) {
+      return { data: null, error: updateError };
+    }
+
+    return { data: linkResult.data, error: null };
+
+  } catch (error) {
+    console.error('Error accepting risk suggestion:', error);
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error('Unknown error'),
+    };
+  }
+}
+
+/**
+ * Reject an AI-suggested risk link
+ */
+export async function rejectRiskSuggestion(incidentId: string, riskCode: string) {
+  try {
+    // 1. Get incident
+    const { data: incident, error: incidentError } = await getIncidentById(incidentId);
+    if (incidentError || !incident) {
+      return { data: null, error: new Error('Incident not found') };
+    }
+
+    // 2. Update suggestion status to 'rejected'
+    const suggestions = incident.ai_suggested_risks as AISuggestedRisk[];
+    const updatedSuggestions = suggestions?.map(s =>
+      s.risk_code === riskCode ? { ...s, status: 'rejected' as const } : s
+    ) || [];
+
+    const { error: updateError } = await supabase
+      .from('incidents')
+      .update({ ai_suggested_risks: updatedSuggestions })
+      .eq('id', incidentId);
+
+    if (updateError) {
+      return { data: null, error: updateError };
+    }
+
+    return { data: true, error: null };
+
+  } catch (error) {
+    console.error('Error rejecting risk suggestion:', error);
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error('Unknown error'),
+    };
+  }
+}
+
+/**
+ * Assess control adequacy for a linked risk
+ */
+export async function assessControlAdequacy(incidentId: string, riskId: string) {
+  try {
+    // 1. Get incident
+    const { data: incident, error: incidentError } = await getIncidentById(incidentId);
+    if (incidentError || !incident) {
+      return { data: null, error: new Error('Incident not found') };
+    }
+
+    // 2. Get risk details
+    const { data: risk, error: riskError } = await supabase
+      .from('risks')
+      .select('*')
+      .eq('id', riskId)
+      .single();
+
+    if (riskError || !risk) {
+      return { data: null, error: new Error('Risk not found') };
+    }
+
+    // 3. Get controls for this risk
+    const { data: controls } = await supabase
+      .from('risk_controls')
+      .select(`
+        control_id,
+        controls:control_id (
+          id,
+          name,
+          description,
+          control_type,
+          target,
+          design_score,
+          implementation_score,
+          monitoring_score,
+          evaluation_score
+        )
+      `)
+      .eq('risk_id', riskId);
+
+    const controlsList = controls?.map(rc => rc.controls).filter(Boolean) || [];
+
+    // 4. Call Edge Function for control assessment
+    console.log(`Assessing controls for risk ${risk.risk_code}...`);
+
+    const { data: aiResult, error: aiError } = await supabase.functions.invoke('analyze-incident', {
+      body: {
+        action: 'assess_controls',
+        incident: {
+          title: incident.title,
+          description: incident.description,
+          incident_type: incident.incident_type,
+          severity: incident.severity,
+          financial_impact: incident.financial_impact,
+          root_cause: incident.root_cause_description,
+        },
+        risk: {
+          risk_code: risk.risk_code,
+          risk_title: risk.risk_title,
+          risk_description: risk.risk_description,
+          category: risk.category,
+          likelihood_inherent: risk.likelihood_inherent,
+          impact_inherent: risk.impact_inherent,
+        },
+        controls: controlsList,
+      },
+    });
+
+    if (aiError) {
+      console.error('Control assessment error:', aiError);
+      return { data: null, error: new Error('Control assessment failed: ' + aiError.message) };
+    }
+
+    if (!aiResult?.success) {
+      return { data: null, error: new Error(aiResult?.error || 'Control assessment failed') };
+    }
+
+    const assessment: ControlAdequacyAssessment = {
+      ...aiResult.data,
+      analyzed_at: new Date().toISOString(),
+    };
+
+    // 5. Update incident with control recommendations
+    const { error: updateError } = await supabase
+      .from('incidents')
+      .update({
+        ai_control_recommendations: assessment,
+      })
+      .eq('id', incidentId);
+
+    if (updateError) {
+      return { data: null, error: updateError };
+    }
+
+    console.log(`✅ Control assessment: ${assessment.assessment}`);
+    return { data: assessment, error: null };
+
+  } catch (error) {
+    console.error('Error assessing control adequacy:', error);
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error('Unknown error'),
+    };
+  }
+}
+
+// =====================================================
+// VALIDATION
+// =====================================================
+
 /**
  * Validate incident data
  */
