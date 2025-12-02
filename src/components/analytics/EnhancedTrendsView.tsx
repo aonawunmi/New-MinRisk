@@ -10,10 +10,11 @@ import { useAuth } from '@/lib/auth';
 import {
   getPeriodTrends,
   analyzeRiskMigrations,
-  getAvailableSnapshots,
+  getCommittedPeriods,
+  formatPeriod,
   type PeriodTrendData,
   type RiskMigration,
-} from '@/lib/periods';
+} from '@/lib/periods-v2';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -77,9 +78,15 @@ export default function EnhancedTrendsView() {
       setTrendData(trends || []);
 
       // Load available periods
-      const { data: snapshots } = await getAvailableSnapshots(orgId);
-      if (snapshots && snapshots.length > 0) {
-        const periods = snapshots.map((s) => s.period);
+      const { data: committedPeriods } = await getCommittedPeriods(orgId);
+      if (committedPeriods && committedPeriods.length > 0) {
+        // Sort periods chronologically (oldest first for migration analysis)
+        const sortedPeriods = [...committedPeriods].sort((a, b) => {
+          if (a.period_year !== b.period_year) return a.period_year - b.period_year;
+          return a.period_quarter - b.period_quarter;
+        });
+
+        const periods = sortedPeriods.map((cp) => formatPeriod({ year: cp.period_year, quarter: cp.period_quarter }));
         setAvailablePeriods(periods);
 
         // Auto-select last two periods for migration analysis
@@ -436,7 +443,7 @@ export default function EnhancedTrendsView() {
                               >
                                 {migration.from_level}
                               </Badge>
-                              <span className="text-gray-400">’</span>
+                              <span className="text-gray-400">ï¿½</span>
                               <Badge
                                 variant="outline"
                                 className="text-xs bg-red-100 border-red-300"
@@ -485,7 +492,7 @@ export default function EnhancedTrendsView() {
                               >
                                 {migration.from_level}
                               </Badge>
-                              <span className="text-gray-400">’</span>
+                              <span className="text-gray-400">ï¿½</span>
                               <Badge
                                 variant="outline"
                                 className="text-xs bg-green-100 border-green-300"

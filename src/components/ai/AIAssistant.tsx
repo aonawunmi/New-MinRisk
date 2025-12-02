@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { generateAIRisks, type AIGeneratedRisk } from '@/lib/ai';
 import { createRisk, getRisks } from '@/lib/risks';
-import { getActivePeriod } from '@/lib/periods';
+import { getActivePeriod } from '@/lib/periods-v2';
 import type { RiskCategory } from '@/types/risk';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

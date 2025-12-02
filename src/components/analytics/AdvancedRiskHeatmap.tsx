@@ -13,12 +13,13 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import html2canvas from 'html2canvas';
-import { Download, ArrowRight } from 'lucide-react';
+import { Download, ArrowRight, Calendar, Clock } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -35,6 +36,8 @@ import { supabase } from '@/lib/supabase';
 import { getRiskLevel, getRiskLevelColor } from '@/lib/analytics';
 import { calculateResidualRisk } from '@/lib/controls';
 import { getOrganizationConfig, getLikelihoodLabel, getImpactLabel, type OrganizationConfig } from '@/lib/config';
+import { getCommittedPeriods, formatPeriod, type Period } from '@/lib/periods-v2';
+import { useAuth } from '@/lib/auth';
 import type { Risk } from '@/types/risk';
 
 interface AdvancedRiskHeatmapProps {
@@ -57,11 +60,20 @@ const IMPACT_LABELS_6X6 = ['Insignificant', 'Minimal', 'Low', 'Moderate', 'High'
 export default function AdvancedRiskHeatmap({
   matrixSize: propMatrixSize,
 }: AdvancedRiskHeatmapProps) {
+  // Auth
+  const { profile } = useAuth();
+
   // State management
   const [risks, setRisks] = useState<ProcessedRisk[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [orgConfig, setOrgConfig] = useState<OrganizationConfig | null>(null);
+
+  // Period management (NEW)
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('current');
+  const [availablePeriods, setAvailablePeriods] = useState<string[]>([]);
+  const [isHistorical, setIsHistorical] = useState(false);
+  const [snapshotDate, setSnapshotDate] = useState<string | undefined>();
 
   // Use matrix size from config if available, otherwise use prop
   const matrixSize = orgConfig?.matrix_size || propMatrixSize || 5;
@@ -85,11 +97,6 @@ export default function AdvancedRiskHeatmap({
 
   // Highlighting
   const [highlightedRisk, setHighlightedRisk] = useState<ProcessedRisk | null>(null);
-
-  // Comparison mode
-  const [comparisonMode, setComparisonMode] = useState(false);
-  const [comparisonPeriod1, setComparisonPeriod1] = useState<string>('');
-  const [comparisonPeriod2, setComparisonPeriod2] = useState<string>('');
 
   // Get axis labels from config or use defaults
   const getLikelihoodLabels = (): string[] => {
@@ -120,8 +127,42 @@ export default function AdvancedRiskHeatmap({
   // Load risks data and config
   useEffect(() => {
     loadConfig();
+    if (profile?.organization_id) {
+      loadAvailablePeriods();
+    }
+  }, [profile]);
+
+  // Reload risks when period or matrix size changes
+  useEffect(() => {
     loadRisks();
-  }, []);
+  }, [selectedPeriod, matrixSize]);
+
+  // Load available periods
+  async function loadAvailablePeriods() {
+    if (!profile?.organization_id) return;
+
+    const { data: committedPeriods, error } = await getCommittedPeriods(profile.organization_id);
+    if (error) {
+      console.error('Failed to load committed periods:', error);
+      return;
+    }
+
+    if (committedPeriods && committedPeriods.length > 0) {
+      // Sort periods by year and quarter (most recent first)
+      const sortedPeriods = [...committedPeriods].sort((a, b) => {
+        if (a.period_year !== b.period_year) return b.period_year - a.period_year;
+        return b.period_quarter - a.period_quarter;
+      });
+
+      // Format periods as strings (e.g., "Q2 2026")
+      const periods = sortedPeriods.map((cp) => formatPeriod({ year: cp.period_year, quarter: cp.period_quarter }));
+
+      // Always include "current" as first option
+      setAvailablePeriods(['current', ...periods]);
+    } else {
+      setAvailablePeriods(['current']);
+    }
+  }
 
   async function loadConfig() {
     try {
@@ -141,31 +182,103 @@ export default function AdvancedRiskHeatmap({
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from('risks')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let rawRisks: any[] = [];
+      let historical = false;
+      let snapDate: string | undefined;
 
-      if (fetchError) {
-        throw new Error(fetchError.message);
+      // Load from risk_history if period is specified
+      if (selectedPeriod && selectedPeriod !== 'current' && profile?.organization_id) {
+        // Parse period string (e.g., "Q2 2026" -> {year: 2026, quarter: 2})
+        const periodMatch = selectedPeriod.match(/Q(\d+)\s+(\d{4})/);
+        if (!periodMatch) {
+          throw new Error(`Invalid period format: ${selectedPeriod}`);
+        }
+
+        const quarter = parseInt(periodMatch[1]);
+        const year = parseInt(periodMatch[2]);
+
+        // Load from risk_history table
+        const { data: historyRecords, error: historyError } = await supabase
+          .from('risk_history')
+          .select('*')
+          .eq('organization_id', profile.organization_id)
+          .eq('period_year', year)
+          .eq('period_quarter', quarter);
+
+        if (historyError) {
+          throw new Error(`Failed to load risk history: ${historyError.message}`);
+        }
+
+        if (!historyRecords || historyRecords.length === 0) {
+          throw new Error(`No risk history found for period ${selectedPeriod}`);
+        }
+
+        // Convert risk_history records to risk objects
+        rawRisks = historyRecords.map((h: any) => ({
+          id: h.risk_id,
+          risk_code: h.risk_code,
+          risk_title: h.risk_title,
+          risk_description: h.risk_description,
+          category: h.category,
+          division: h.division,
+          department: h.department,
+          owner: h.owner,
+          status: h.status,
+          likelihood_inherent: h.likelihood_inherent,
+          impact_inherent: h.impact_inherent,
+          score_inherent: h.score_inherent,
+          residual_likelihood: h.likelihood_residual,
+          residual_impact: h.impact_residual,
+          residual_score: h.score_residual,
+        }));
+
+        historical = true;
+        snapDate = historyRecords[0]?.committed_at;
+      } else {
+        // Load current risks from risks table
+        const { data, error: fetchError } = await supabase
+          .from('risks')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (fetchError) {
+          throw new Error(fetchError.message);
+        }
+
+        rawRisks = data || [];
       }
 
-      // Calculate residual risk from controls for each risk
-      const processed: ProcessedRisk[] = await Promise.all(
-        (data || []).map(async (risk) => {
-          // Calculate residual risk using controls
-          const { data: residualData } = await calculateResidualRisk(
-            risk.id,
-            risk.likelihood_inherent,
-            risk.impact_inherent
-          );
+      setIsHistorical(historical);
+      setSnapshotDate(snapDate);
 
-          return {
-            ...risk,
-            likelihood_residual_calc: residualData?.residual_likelihood ?? risk.likelihood_inherent,
-            impact_residual_calc: residualData?.residual_impact ?? risk.impact_inherent,
-            residual_score_calc: residualData?.residual_score ?? (risk.likelihood_inherent * risk.impact_inherent),
-          };
+      // Process risks based on whether they're historical or current
+      const processed: ProcessedRisk[] = await Promise.all(
+        rawRisks.map(async (risk) => {
+          if (historical) {
+            // For historical snapshots: Use stored residual values (no calculation)
+            const resL = risk.residual_likelihood || risk.likelihood_residual || risk.likelihood_inherent;
+            const resI = risk.residual_impact || risk.impact_residual || risk.impact_inherent;
+            return {
+              ...risk,
+              likelihood_residual_calc: resL,
+              impact_residual_calc: resI,
+              residual_score_calc: risk.residual_score || risk.score_residual || (resL * resI),
+            };
+          } else {
+            // For current risks: Calculate residual risk using controls
+            const { data: residualData } = await calculateResidualRisk(
+              risk.id,
+              risk.likelihood_inherent,
+              risk.impact_inherent
+            );
+
+            return {
+              ...risk,
+              likelihood_residual_calc: residualData?.residual_likelihood ?? risk.likelihood_inherent,
+              impact_residual_calc: residualData?.residual_impact ?? risk.impact_inherent,
+              residual_score_calc: residualData?.residual_score ?? (risk.likelihood_inherent * risk.impact_inherent),
+            };
+          }
         })
       );
 
@@ -339,17 +452,48 @@ export default function AdvancedRiskHeatmap({
             </div>
           </div>
 
-          {/* Data Source placeholder - can be extended later */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Data Source:</span>
-            <Select value="active" disabled>
-              <SelectTrigger className="w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active Risks</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Period Selector & Status */}
+          <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200">
+            <div className="flex items-center gap-3">
+              <Calendar className="h-5 w-5 text-blue-600" />
+              <span className="text-sm font-medium text-gray-700">View Period:</span>
+              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                <SelectTrigger className="w-48 bg-white">
+                  <SelectValue placeholder="Select period" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="current">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="font-medium">Current (Live Data)</span>
+                    </div>
+                  </SelectItem>
+                  {availablePeriods.map((period) => (
+                    <SelectItem key={period} value={period}>
+                      {period}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Historical/Live Indicator */}
+            {isHistorical && snapshotDate ? (
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-amber-100 border-amber-300 text-amber-800">
+                  <Clock className="h-3 w-3 mr-1" />
+                  HISTORICAL
+                </Badge>
+                <span className="text-xs text-gray-600">
+                  As of {new Date(snapshotDate).toLocaleDateString()}
+                </span>
+              </div>
+            ) : (
+              <Badge variant="outline" className="bg-green-100 border-green-300 text-green-800">
+                <div className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse" />
+                LIVE DATA
+              </Badge>
+            )}
           </div>
 
           {/* Filters row */}
@@ -448,48 +592,6 @@ export default function AdvancedRiskHeatmap({
               </Select>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="comparisonMode"
-                checked={comparisonMode}
-                onCheckedChange={(c) => {
-                  setComparisonMode(!!c);
-                  if (!c) {
-                    setComparisonPeriod1('');
-                    setComparisonPeriod2('');
-                  }
-                }}
-              />
-              <label htmlFor="comparisonMode" className="text-sm font-medium cursor-pointer">
-                Quarter Comparison
-              </label>
-            </div>
-
-            {comparisonMode && uniqueValues.periods.length > 0 && (
-              <>
-                <Select value={comparisonPeriod1} onValueChange={setComparisonPeriod1}>
-                  <SelectTrigger className="w-36">
-                    <SelectValue placeholder="Period 1" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {uniqueValues.periods.map(p => (
-                      <SelectItem key={p} value={p}>{p}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <ArrowRight className="h-4 w-4 text-gray-400" />
-                <Select value={comparisonPeriod2} onValueChange={setComparisonPeriod2}>
-                  <SelectTrigger className="w-36">
-                    <SelectValue placeholder="Period 2" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {uniqueValues.periods.map(p => (
-                      <SelectItem key={p} value={p}>{p}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </>
-            )}
           </div>
         </div>
 

@@ -194,11 +194,11 @@ export default function Dashboard() {
           color="blue"
         />
         <MetricCard
-          title="Control Effectiveness"
+          title="Control Quality"
           value={`${metrics.avg_control_effectiveness}%`}
           icon="🛡️"
           color="green"
-          subtitle={`${metrics.total_controls} controls`}
+          subtitle={`DIME Assessment • ${metrics.total_controls} controls`}
         />
       </div>
 

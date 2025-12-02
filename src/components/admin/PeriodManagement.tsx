@@ -1,31 +1,24 @@
 /**
- * Period Management Component
+ * Period Management Component - UPDATED for Continuous Risk Architecture
  *
- * Admin interface for committing end-of-period snapshots
- * and viewing historical periods.
+ * Admin interface for committing end-of-period snapshots using the new
+ * continuous risk evolution architecture (structured periods, risk_history table).
  */
 
 import { useState, useEffect } from 'react';
 import {
   commitPeriod,
-  getAvailableSnapshots,
-  deleteSnapshot,
-  generatePeriodOptions,
-  getCurrentPeriod,
-  type RiskSnapshot,
-} from '@/lib/periods';
+  getActivePeriod,
+  getCommittedPeriods,
+  formatPeriod,
+  type Period,
+  type PeriodCommit,
+} from '@/lib/periods-v2';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,7 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Calendar, Download, Trash2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Calendar, CheckCircle2, AlertTriangle, TrendingUp, Archive } from 'lucide-react';
 
 interface PeriodManagementProps {
   orgId: string;
@@ -52,37 +45,56 @@ interface PeriodManagementProps {
 }
 
 export default function PeriodManagement({ orgId, userId }: PeriodManagementProps) {
-  const [selectedPeriod, setSelectedPeriod] = useState<string>(getCurrentPeriod());
+  const [activePeriod, setActivePeriod] = useState<Period | null>(null);
+  const [committedPeriods, setCommittedPeriods] = useState<PeriodCommit[]>([]);
   const [notes, setNotes] = useState('');
-  const [snapshots, setSnapshots] = useState<Omit<RiskSnapshot, 'snapshot_data'>[]>([]);
   const [loading, setLoading] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<string | null>(null);
-
-  const periodOptions = generatePeriodOptions();
 
   useEffect(() => {
-    loadSnapshots();
+    loadPeriodData();
   }, [orgId]);
 
-  async function loadSnapshots() {
+  async function loadPeriodData() {
     setLoading(true);
-    const { data, error: loadError } = await getAvailableSnapshots(orgId);
+    try {
+      // Get active period
+      const { data: activeData, error: activeError } = await getActivePeriod(orgId);
+      if (activeError) {
+        setError('Failed to load active period');
+        console.error(activeError);
+      } else if (activeData) {
+        setActivePeriod({
+          year: activeData.current_period_year,
+          quarter: activeData.current_period_quarter,
+        });
+      }
 
-    if (loadError) {
-      setError('Failed to load period snapshots');
-      console.error(loadError);
-    } else {
-      setSnapshots(data || []);
+      // Get committed periods
+      const { data: commitsData, error: commitsError } = await getCommittedPeriods(orgId);
+      if (commitsError) {
+        setError('Failed to load committed periods');
+        console.error(commitsError);
+      } else {
+        setCommittedPeriods(commitsData || []);
+      }
+    } catch (err) {
+      setError('Unexpected error loading period data');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   async function handleCommitPeriod() {
+    if (!activePeriod) {
+      setError('No active period found');
+      return;
+    }
+
     setCommitting(true);
     setError(null);
     setSuccess(null);
@@ -90,17 +102,21 @@ export default function PeriodManagement({ orgId, userId }: PeriodManagementProp
     try {
       const { data, error: commitError } = await commitPeriod(
         orgId,
-        selectedPeriod,
+        activePeriod,
         userId,
         notes || undefined
       );
 
       if (commitError) {
         setError(commitError.message);
-      } else {
-        setSuccess(`Period ${selectedPeriod} committed successfully with ${data?.risk_count} risks`);
+      } else if (data) {
+        setSuccess(
+          `Period ${formatPeriod(activePeriod)} committed successfully! ` +
+          `${data.risks_count} risks snapshotted ` +
+          `(${data.active_risks_count || 0} active, ${data.closed_risks_count || 0} closed).`
+        );
         setNotes('');
-        await loadSnapshots();
+        await loadPeriodData();
         setShowConfirmDialog(false);
       }
     } catch (err) {
@@ -111,25 +127,12 @@ export default function PeriodManagement({ orgId, userId }: PeriodManagementProp
     }
   }
 
-  async function handleDeleteSnapshot(snapshotId: string) {
-    const { error: deleteError } = await deleteSnapshot(snapshotId);
-
-    if (deleteError) {
-      setError('Failed to delete snapshot');
-      console.error(deleteError);
-    } else {
-      setSuccess('Snapshot deleted successfully');
-      await loadSnapshots();
-      setDeleteConfirmDialog(null);
-    }
-  }
-
-  function handleDownloadReport(snapshot: Omit<RiskSnapshot, 'snapshot_data'>) {
-    // TODO: Implement report download (Phase 1.5)
-    alert(`Download report for ${snapshot.period} - Coming soon!`);
-  }
-
-  const snapshotExists = snapshots.some((s) => s.period === selectedPeriod);
+  // Check if current period already committed
+  const currentPeriodCommitted = activePeriod
+    ? committedPeriods.some(
+        (c) => c.period_year === activePeriod.year && c.period_quarter === activePeriod.quarter
+      )
+    : false;
 
   return (
     <div className="space-y-6">
@@ -141,17 +144,42 @@ export default function PeriodManagement({ orgId, userId }: PeriodManagementProp
             Period Management
           </CardTitle>
           <CardDescription>
-            Commit end-of-period snapshots to track risk evolution over time
+            Commit end-of-period snapshots to track risk evolution over time using the continuous
+            risk architecture
           </CardDescription>
         </CardHeader>
       </Card>
+
+      {/* Active Period Info */}
+      {activePeriod && (
+        <Card className="border-2 border-blue-200 bg-blue-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-blue-600 font-medium mb-1">Current Active Period</div>
+                <div className="text-2xl font-bold text-blue-900">
+                  {formatPeriod(activePeriod)}
+                </div>
+                {currentPeriodCommitted && (
+                  <Badge variant="outline" className="mt-2 border-green-600 text-green-700">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Already Committed
+                  </Badge>
+                )}
+              </div>
+              <TrendingUp className="h-12 w-12 text-blue-600 opacity-50" />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Commit New Period */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Commit Period Snapshot</CardTitle>
           <CardDescription>
-            Take a snapshot of all current risks for historical tracking and reporting
+            Take a snapshot of all current risks (active and closed) for historical tracking. The
+            continuous risk model ensures risks are preserved and never deleted.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -170,33 +198,11 @@ export default function PeriodManagement({ orgId, userId }: PeriodManagementProp
             </Alert>
           )}
 
-          {/* Period Selection */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Select Period</label>
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select period" />
-              </SelectTrigger>
-              <SelectContent>
-                {periodOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {snapshotExists && (
-              <p className="text-sm text-amber-600">
-                ⚠️ Snapshot already exists for this period
-              </p>
-            )}
-          </div>
-
           {/* Notes */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Notes (Optional)</label>
             <Textarea
-              placeholder="Add any notes about this period (e.g., 'Q1 2025 - Completed risk review')"
+              placeholder={`Add notes for ${activePeriod ? formatPeriod(activePeriod) : 'this period'} (e.g., 'Q4 2025 - Annual risk review completed')`}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
@@ -206,75 +212,110 @@ export default function PeriodManagement({ orgId, userId }: PeriodManagementProp
           {/* Commit Button */}
           <Button
             onClick={() => setShowConfirmDialog(true)}
-            disabled={committing || snapshotExists}
+            disabled={committing || currentPeriodCommitted || !activePeriod}
             className="w-full"
+            size="lg"
           >
-            {committing ? 'Committing Period...' : 'Commit Period Snapshot'}
+            {committing
+              ? 'Committing Period...'
+              : currentPeriodCommitted
+              ? `${activePeriod ? formatPeriod(activePeriod) : 'Period'} Already Committed`
+              : `Commit ${activePeriod ? formatPeriod(activePeriod) : 'Current Period'}`}
           </Button>
 
-          <p className="text-sm text-gray-500">
-            This will create a snapshot of all current risks, including controls and calculated
-            residual scores. The snapshot is immutable and cannot be edited.
-          </p>
+          {currentPeriodCommitted && (
+            <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded p-3">
+              ⚠️ This period has already been committed. Risks continue to be editable in the
+              continuous model.
+            </p>
+          )}
+
+          <div className="bg-blue-50 border border-blue-200 rounded p-3 space-y-2">
+            <div className="font-medium text-blue-900 text-sm">What happens when you commit?</div>
+            <ul className="text-sm text-blue-800 space-y-1 ml-4 list-disc">
+              <li>All current risks are snapshotted to risk_history table</li>
+              <li>Residual risk scores are calculated based on active controls</li>
+              <li>The active period advances to the next quarter automatically</li>
+              <li>
+                <strong>Risks are NOT deleted</strong> - they remain editable (continuous model)
+              </li>
+              <li>Historical snapshots become immutable for reporting</li>
+            </ul>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Existing Snapshots */}
+      {/* Existing Commits */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Committed Periods</CardTitle>
-          <CardDescription>View and manage historical period snapshots</CardDescription>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Archive className="h-5 w-5" />
+            Committed Periods ({committedPeriods.length})
+          </CardTitle>
+          <CardDescription>Historical period snapshots for reporting and comparison</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-gray-500">Loading snapshots...</div>
-          ) : snapshots.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">Loading period history...</div>
+          ) : committedPeriods.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              No period snapshots yet. Commit your first period to track historical risks.
+              No periods committed yet. Commit your first period to start tracking risk evolution.
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Period</TableHead>
-                  <TableHead>Snapshot Date</TableHead>
-                  <TableHead>Risk Count</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>Committed</TableHead>
+                  <TableHead>Total Risks</TableHead>
+                  <TableHead>Active / Closed</TableHead>
+                  <TableHead>Controls</TableHead>
+                  <TableHead className="max-w-xs">Notes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {snapshots.map((snapshot) => (
-                  <TableRow key={snapshot.id}>
-                    <TableCell className="font-medium">
-                      <Badge variant="outline">{snapshot.period}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(snapshot.snapshot_date).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>{snapshot.risk_count} risks</TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      {snapshot.notes || <span className="text-gray-400">—</span>}
-                    </TableCell>
-                    <TableCell className="text-right space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDownloadReport(snapshot)}
-                      >
-                        <Download className="h-4 w-4 mr-1" />
-                        Report
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setDeleteConfirmDialog(snapshot.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {committedPeriods
+                  .sort((a, b) => {
+                    // Sort descending (newest first)
+                    if (a.period_year !== b.period_year) return b.period_year - a.period_year;
+                    return b.period_quarter - a.period_quarter;
+                  })
+                  .map((commit) => {
+                    const period: Period = {
+                      year: commit.period_year,
+                      quarter: commit.period_quarter,
+                    };
+                    return (
+                      <TableRow key={commit.id}>
+                        <TableCell className="font-medium">
+                          <Badge variant="outline" className="text-sm">
+                            {formatPeriod(period)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-600">
+                          {new Date(commit.committed_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-semibold">{commit.risks_count}</span> risks
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          <span className="text-green-600 font-medium">
+                            {commit.active_risks_count || 0} active
+                          </span>
+                          {' / '}
+                          <span className="text-gray-500">
+                            {commit.closed_risks_count || 0} closed
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-600">
+                          {commit.controls_count || 0} controls
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate text-sm text-gray-600">
+                          {commit.notes || <span className="text-gray-400">—</span>}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
               </TableBody>
             </Table>
           )}
@@ -287,10 +328,18 @@ export default function PeriodManagement({ orgId, userId }: PeriodManagementProp
           <AlertDialogHeader>
             <AlertDialogTitle>Commit Period Snapshot?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will create a snapshot of all current risks for period <strong>{selectedPeriod}</strong>.
+              This will create a snapshot of all current risks for period{' '}
+              <strong>{activePeriod ? formatPeriod(activePeriod) : 'unknown'}</strong>.
               <br />
               <br />
-              This snapshot will be immutable and used for historical comparison and reporting.
+              The snapshot will be stored in the risk_history table and the active period will
+              automatically advance to the next quarter.
+              <br />
+              <br />
+              <strong>Important:</strong> Risks will remain editable (continuous model), but this
+              snapshot will be immutable for historical reporting.
+              <br />
+              <br />
               Are you sure you want to proceed?
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -298,33 +347,6 @@ export default function PeriodManagement({ orgId, userId }: PeriodManagementProp
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleCommitPeriod} disabled={committing}>
               {committing ? 'Committing...' : 'Yes, Commit Period'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Confirmation Dialog for Delete */}
-      <AlertDialog
-        open={deleteConfirmDialog !== null}
-        onOpenChange={() => setDeleteConfirmDialog(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Snapshot?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete this period snapshot. This action cannot be undone.
-              <br />
-              <br />
-              Are you sure you want to delete this snapshot?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteConfirmDialog && handleDeleteSnapshot(deleteConfirmDialog)}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Yes, Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

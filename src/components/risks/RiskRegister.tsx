@@ -9,14 +9,13 @@
 import { useState, useEffect } from 'react';
 import { getRisks, deleteRisk, updateRisk } from '@/lib/risks';
 import { calculateResidualRisk } from '@/lib/controls';
-import { getActivePeriod, commitPeriodSnapshot } from '@/lib/periods';
+import { getActivePeriod as getActivePeriodV2, formatPeriod, type Period } from '@/lib/periods-v2';
 import { getKRIsForRisk, type KRIDefinition } from '@/lib/kri';
 import { getOrganizationConfig, getLikelihoodLabel, getImpactLabel, type OrganizationConfig } from '@/lib/config';
 import { supabase } from '@/lib/supabase';
 import type { Risk } from '@/types/risk';
 import type { ResidualRisk } from '@/types/control';
 import RiskForm from './RiskForm';
-import PeriodSelector from '@/components/periods/PeriodSelector';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -35,7 +34,7 @@ import {
 } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit, Trash2, AlertCircle, RefreshCw, Star, Archive, ArrowUpDown, ArrowUp, ArrowDown, Activity } from 'lucide-react';
+import { Plus, Edit, Trash2, AlertCircle, RefreshCw, Star, Archive, ArrowUpDown, ArrowUp, ArrowDown, Activity, Calendar } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 
@@ -47,10 +46,8 @@ export default function RiskRegister() {
   const [editingRisk, setEditingRisk] = useState<Risk | null>(null);
   const [showPriorityOnly, setShowPriorityOnly] = useState(false);
   const [residualRisks, setResidualRisks] = useState<Map<string, ResidualRisk>>(new Map());
-  const [activePeriod, setActivePeriod] = useState<string | null>(null);
-  const [showAllPeriods, setShowAllPeriods] = useState(false);
+  const [activePeriod, setActivePeriod] = useState<Period | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [committing, setCommitting] = useState(false);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [kriCounts, setKriCounts] = useState<Map<string, number>>(new Map());
@@ -135,8 +132,24 @@ export default function RiskRegister() {
   }, []);
 
   async function loadActivePeriodData() {
-    const { data } = await getActivePeriod();
-    setActivePeriod(data);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile) return;
+
+    const { data } = await getActivePeriodV2(profile.organization_id);
+    if (data) {
+      setActivePeriod({
+        year: data.current_period_year,
+        quarter: data.current_period_quarter,
+      });
+    }
   }
 
   async function checkAdminRole() {
@@ -166,50 +179,6 @@ export default function RiskRegister() {
       }
     } catch (err) {
       console.error('Unexpected config load error:', err);
-    }
-  }
-
-  async function handleCommitPeriod() {
-    if (!activePeriod) {
-      alert('No active period selected');
-      return;
-    }
-
-    const periodRisks = risks.filter((r) => r.period === activePeriod);
-
-    if (periodRisks.length === 0) {
-      alert(`No risks found for period ${activePeriod}`);
-      return;
-    }
-
-    const confirmed = confirm(
-      `Commit period "${activePeriod}"?\n\n` +
-      `This will create a snapshot of ${periodRisks.length} risk(s) and archive them.\n\n` +
-      `This action creates a permanent historical record.`
-    );
-
-    if (!confirmed) return;
-
-    setCommitting(true);
-
-    try {
-      const { error } = await commitPeriodSnapshot(activePeriod);
-
-      if (error) {
-        alert('Failed to commit period: ' + error.message);
-        console.error('Commit error:', error);
-      } else {
-        alert(
-          `Period "${activePeriod}" committed successfully!\n\n` +
-          `${periodRisks.length} risk(s) have been archived.`
-        );
-        await loadRisks(); // Reload to reflect changes
-      }
-    } catch (err) {
-      console.error('Unexpected commit error:', err);
-      alert('An unexpected error occurred');
-    } finally {
-      setCommitting(false);
     }
   }
 
@@ -431,10 +400,7 @@ export default function RiskRegister() {
         return false;
       }
 
-      // Period filter (unless showing all periods)
-      if (!showAllPeriods && activePeriod && risk.period !== activePeriod) {
-        return false;
-      }
+      // No period filter needed - continuous model shows all risks
 
       return true;
     })
@@ -500,11 +466,23 @@ export default function RiskRegister() {
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4">
+            {/* Current Period Banner */}
+            {activePeriod && (
+              <Alert className="border-blue-500 bg-blue-50">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-blue-600" />
+                  <div className="font-medium text-blue-900">
+                    Current Period: {formatPeriod(activePeriod)}
+                  </div>
+                </div>
+              </Alert>
+            )}
+
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Risk Register</CardTitle>
                 <CardDescription>
-                  Manage risks for your organization
+                  Manage risks continuously across all periods
                 </CardDescription>
               </div>
               <div className="flex gap-2">
@@ -527,35 +505,6 @@ export default function RiskRegister() {
 
             {/* Filters Row */}
             <div className="flex flex-wrap items-center gap-3">
-              <PeriodSelector
-                showLabel={false}
-                onPeriodChange={(period) => {
-                  setActivePeriod(period);
-                  loadRisks(); // Reload to update display
-                }}
-              />
-
-              {isAdmin && activePeriod && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCommitPeriod}
-                  disabled={committing}
-                  className="border-blue-500 text-blue-600 hover:bg-blue-50"
-                >
-                  <Archive className="h-4 w-4 mr-2" />
-                  {committing ? 'Committing...' : 'Commit Period'}
-                </Button>
-              )}
-
-              <Button
-                variant={showAllPeriods ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setShowAllPeriods(!showAllPeriods)}
-              >
-                {showAllPeriods ? 'Current Period Only' : 'Show All Periods'}
-              </Button>
-
               <Button
                 variant={showPriorityOnly ? 'default' : 'outline'}
                 size="sm"
@@ -641,10 +590,10 @@ export default function RiskRegister() {
                     </TableHead>
                     <TableHead className="text-center">
                       <button
-                        onClick={() => handleSort('period')}
+                        onClick={() => handleSort('created')}
                         className="flex items-center justify-center hover:text-gray-900 transition-colors mx-auto"
                       >
-                        Period {getSortIcon('period')}
+                        Created {getSortIcon('created')}
                       </button>
                     </TableHead>
                     <TableHead className="text-center" colSpan={3}>Inherent</TableHead>
@@ -732,7 +681,9 @@ export default function RiskRegister() {
                         <TableCell className="whitespace-normal break-words">{risk.category}</TableCell>
                         <TableCell className="max-w-[150px] whitespace-normal break-words">{risk.owner}</TableCell>
                         <TableCell className="text-center text-sm text-gray-600">
-                          {risk.period || '-'}
+                          {risk.created_period_year && risk.created_period_quarter
+                            ? `Q${risk.created_period_quarter} ${risk.created_period_year}`
+                            : '-'}
                         </TableCell>
                         {/* Inherent Likelihood - Show number with label in tooltip */}
                         <TableCell className="text-center text-sm font-medium" title={getLikelihoodLabel(orgConfig, risk.likelihood_inherent)}>

@@ -10,8 +10,11 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { getActivePeriod, setActivePeriod, PERIOD_OPTIONS } from '@/lib/periods';
+import { getActivePeriod, setActivePeriod, generatePeriodOptions, formatPeriod } from '@/lib/periods-v2';
 import { getCurrentUserProfile } from '@/lib/profiles';
+
+// Generate period options (formatted strings like "Q1 2025")
+const PERIOD_OPTIONS = generatePeriodOptions().map(p => formatPeriod(p));
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

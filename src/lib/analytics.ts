@@ -299,7 +299,8 @@ export function getRiskLevelColor(
 export async function getHeatmapData(
   matrixSize: 5 | 6 = 5,
   period?: string | null,
-  orgId?: string
+  orgId?: string,
+  viewType: 'inherent' | 'residual' = 'inherent'
 ): Promise<{
   data: HeatmapCell[] | null;
   error: Error | null;
@@ -311,40 +312,93 @@ export async function getHeatmapData(
     let isHistorical = false;
     let snapshotDate: string | undefined;
 
-    // Load from snapshot if period is specified
+    // Load from risk_history if period is specified
     if (period && period !== 'current' && orgId) {
-      const { data: snapshot, error: snapshotError } = await supabase
-        .from('risk_snapshots')
-        .select('snapshot_data, snapshot_date')
-        .eq('organization_id', orgId)
-        .eq('period', period)
-        .single();
-
-      if (snapshotError) {
+      // Parse period string (e.g., "Q2 2026" -> {year: 2026, quarter: 2})
+      const periodMatch = period.match(/Q(\d+)\s+(\d{4})/);
+      if (!periodMatch) {
         return {
           data: null,
-          error: new Error(`Snapshot not found for period ${period}`),
+          error: new Error(`Invalid period format: ${period}. Expected format: "Q1 2025"`),
           isHistorical: false
         };
       }
 
-      if (snapshot && snapshot.snapshot_data) {
-        // Extract risks from snapshot JSONB
-        risks = snapshot.snapshot_data.risks || [];
-        isHistorical = true;
-        snapshotDate = snapshot.snapshot_date;
+      const quarter = parseInt(periodMatch[1]);
+      const year = parseInt(periodMatch[2]);
+
+      // Load from risk_history table
+      const { data: historyRecords, error: historyError } = await supabase
+        .from('risk_history')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('period_year', year)
+        .eq('period_quarter', quarter);
+
+      if (historyError) {
+        return {
+          data: null,
+          error: new Error(`Failed to load risk history: ${historyError.message}`),
+          isHistorical: false
+        };
       }
+
+      if (!historyRecords || historyRecords.length === 0) {
+        return {
+          data: null,
+          error: new Error(`No risk history found for ${period}`),
+          isHistorical: false
+        };
+      }
+
+      // Convert risk_history records to risk objects
+      risks = historyRecords.map((h: any) => ({
+        id: h.risk_id,
+        risk_code: h.risk_code,
+        risk_title: h.risk_title,
+        likelihood_inherent: h.likelihood_inherent,
+        impact_inherent: h.impact_inherent,
+        residual_likelihood: h.likelihood_residual,
+        residual_impact: h.impact_residual,
+      }));
+
+      isHistorical = true;
+      snapshotDate = historyRecords[0]?.committed_at;
     } else {
       // Load current risks from risks table
       const { data: currentRisks, error: risksError } = await supabase
         .from('risks')
-        .select('risk_code, risk_title, likelihood_inherent, impact_inherent');
+        .select('risk_code, risk_title, likelihood_inherent, impact_inherent, residual_likelihood, residual_impact, id');
 
       if (risksError) {
         return { data: null, error: new Error(risksError.message), isHistorical: false };
       }
 
       risks = currentRisks || [];
+
+      // For current risks viewing residual, calculate residual values if needed
+      if (viewType === 'residual') {
+        risks = await Promise.all(
+          risks.map(async (risk) => {
+            // Use stored residual values if available, otherwise calculate
+            if (risk.residual_likelihood && risk.residual_impact) {
+              return risk;
+            } else {
+              // Calculate using controls
+              const { data: residualData } = await calculateResidualRisk(
+                risk.id,
+                risk.likelihood_inherent,
+                risk.impact_inherent
+              );
+              return {
+                ...risk,
+                residual_likelihood: residualData?.residual_likelihood ?? risk.likelihood_inherent,
+                residual_impact: residualData?.residual_impact ?? risk.impact_inherent,
+              };
+            }
+          })
+        );
+      }
     }
 
     // Initialize matrix
@@ -363,10 +417,23 @@ export async function getHeatmapData(
       }
     }
 
-    // Populate matrix with risks
+    // Populate matrix with risks based on view type
     if (risks && risks.length > 0) {
       risks.forEach((risk) => {
-        const key = `${risk.likelihood_inherent}-${risk.impact_inherent}`;
+        let likelihood: number;
+        let impact: number;
+
+        if (viewType === 'residual') {
+          // Use residual values (from snapshot or calculated)
+          likelihood = risk.residual_likelihood || risk.likelihood_residual || risk.likelihood_inherent;
+          impact = risk.residual_impact || risk.impact_residual || risk.impact_inherent;
+        } else {
+          // Use inherent values
+          likelihood = risk.likelihood_inherent;
+          impact = risk.impact_inherent;
+        }
+
+        const key = `${likelihood}-${impact}`;
         if (matrix[key]) {
           matrix[key].count++;
           matrix[key].risk_codes.push(risk.risk_code);

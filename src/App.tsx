@@ -13,6 +13,7 @@ import LoginForm from '@/components/auth/LoginForm';
 import UserMenu from '@/components/auth/UserMenu';
 import Dashboard from '@/components/dashboard/Dashboard';
 import Analytics from '@/components/analytics/Analytics';
+import RiskHistoryView from '@/components/analytics/RiskHistoryView';
 import RiskRegister from '@/components/risks/RiskRegister';
 import ControlRegister from '@/components/controls/ControlRegister';
 import KRIManagement from '@/components/kri/KRIManagement';
@@ -167,7 +168,18 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="analytics">
-            <Analytics />
+            <Tabs defaultValue="current" className="w-full">
+              <TabsList>
+                <TabsTrigger value="current">📊 Current Analysis</TabsTrigger>
+                <TabsTrigger value="history">🕐 Risk History</TabsTrigger>
+              </TabsList>
+              <TabsContent value="current">
+                <Analytics />
+              </TabsContent>
+              <TabsContent value="history">
+                <RiskHistoryView />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="kri">

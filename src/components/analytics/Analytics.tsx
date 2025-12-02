@@ -51,15 +51,15 @@ export default function Analytics() {
       </div>
 
       {/* Tabs for different views */}
-      <Tabs defaultValue="heatmap" className="w-full">
+      <Tabs defaultValue="advanced" className="w-full">
         <TabsList>
-          <TabsTrigger value="heatmap">🔥 Heatmap</TabsTrigger>
+          <TabsTrigger value="advanced">⚡ Risk Analysis</TabsTrigger>
           <TabsTrigger value="comparison">🔄 Period Comparison</TabsTrigger>
           <TabsTrigger value="trends">📈 Trends</TabsTrigger>
           <TabsTrigger value="reports">📊 Reports</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="heatmap" className="mt-6">
+        <TabsContent value="advanced" className="mt-6">
           <AdvancedRiskHeatmap matrixSize={matrixSize} />
         </TabsContent>
 

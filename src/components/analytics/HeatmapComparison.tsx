@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { getHeatmapData, getRiskLevelColor, type HeatmapCell } from '@/lib/analytics';
-import { getAvailableSnapshots, compareSnapshots, type PeriodComparison } from '@/lib/periods';
+import { getCommittedPeriods, getRiskHistoryForPeriod, formatPeriod, type Period } from '@/lib/periods-v2';
 import { useAuth } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -24,14 +24,17 @@ import { Calendar, TrendingUp, TrendingDown, ArrowRight, AlertTriangle, CheckCir
 
 export default function HeatmapComparison() {
   const { profile } = useAuth();
-  const [period1, setPeriod1] = useState<string>('');
-  const [period2, setPeriod2] = useState<string>('');
-  const [availablePeriods, setAvailablePeriods] = useState<string[]>([]);
+  const [period1, setPeriod1] = useState<Period | null>(null);
+  const [period2, setPeriod2] = useState<Period | null>(null);
+  const [availablePeriods, setAvailablePeriods] = useState<Period[]>([]);
   const [heatmap1, setHeatmap1] = useState<HeatmapCell[]>([]);
   const [heatmap2, setHeatmap2] = useState<HeatmapCell[]>([]);
-  const [comparison, setComparison] = useState<PeriodComparison | null>(null);
+  const [comparisonStats, setComparisonStats] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewType, setViewType] = useState<'inherent' | 'residual'>('inherent');
+  const [selectedCell1, setSelectedCell1] = useState<HeatmapCell | null>(null);
+  const [selectedCell2, setSelectedCell2] = useState<HeatmapCell | null>(null);
 
   const matrixSize = 5;
 
@@ -42,21 +45,37 @@ export default function HeatmapComparison() {
     }
   }, [profile]);
 
-  // Load heatmaps when both periods selected
+  // Load heatmaps when both periods selected or view type changes
   useEffect(() => {
     if (period1 && period2 && profile?.organization_id) {
       loadComparison();
     }
-  }, [period1, period2, profile]);
+  }, [period1, period2, viewType, profile]);
 
   async function loadAvailablePeriods() {
     if (!profile?.organization_id) return;
 
-    const { data: snapshots } = await getAvailableSnapshots(profile.organization_id);
-    if (snapshots && snapshots.length > 0) {
-      const periods = snapshots.map((s) => s.period);
+    const { data: committedPeriods, error } = await getCommittedPeriods(profile.organization_id);
+    if (error) {
+      console.error('Failed to load committed periods:', error);
+      return;
+    }
+
+    if (committedPeriods && committedPeriods.length > 0) {
+      // Sort periods by year and quarter (most recent first)
+      const sortedPeriods = [...committedPeriods].sort((a, b) => {
+        if (a.period_year !== b.period_year) return b.period_year - a.period_year;
+        return b.period_quarter - a.period_quarter;
+      });
+
+      // Extract Period objects
+      const periods: Period[] = sortedPeriods.map((cp) => ({
+        year: cp.period_year,
+        quarter: cp.period_quarter,
+      }));
+
       setAvailablePeriods(periods);
-      
+
       // Auto-select last two periods if available
       if (periods.length >= 2) {
         setPeriod1(periods[1]); // Second most recent
@@ -70,14 +89,22 @@ export default function HeatmapComparison() {
   async function loadComparison() {
     if (!profile?.organization_id || !period1 || !period2) return;
 
+    // Prevent comparing same period to itself
+    if (period1.year === period2.year && period1.quarter === period2.quarter) {
+      setError('Please select two different periods to compare');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      // Load both heatmaps
+      // Load both heatmaps with selected view type
+      // Note: getHeatmapData will be updated in Phase 8 to accept Period objects
+      // For now, we convert to formatted strings
       const [result1, result2] = await Promise.all([
-        getHeatmapData(matrixSize, period1, profile.organization_id),
-        getHeatmapData(matrixSize, period2, profile.organization_id),
+        getHeatmapData(matrixSize, formatPeriod(period1), profile.organization_id, viewType),
+        getHeatmapData(matrixSize, formatPeriod(period2), profile.organization_id, viewType),
       ]);
 
       if (result1.error || result2.error) {
@@ -87,18 +114,24 @@ export default function HeatmapComparison() {
       setHeatmap1(result1.data || []);
       setHeatmap2(result2.data || []);
 
-      // Load detailed comparison
-      const { data: comparisonData, error: compError } = await compareSnapshots(
-        profile.organization_id,
-        period1,
-        period2
-      );
+      // Load risk history for both periods to calculate comparison stats
+      const [history1, history2] = await Promise.all([
+        getRiskHistoryForPeriod(profile.organization_id, period1),
+        getRiskHistoryForPeriod(profile.organization_id, period2),
+      ]);
 
-      if (compError) {
-        console.error('Comparison error:', compError);
-        // Don't fail completely if comparison fails
-      } else {
-        setComparison(comparisonData);
+      if (!history1.error && !history2.error && history1.data && history2.data) {
+        // Calculate comparison statistics
+        const stats = {
+          period1Count: history1.data.length,
+          period2Count: history2.data.length,
+          risksAdded: history2.data.length - history1.data.length,
+          avgInherent1: history1.data.reduce((sum, r) => sum + r.score_inherent, 0) / history1.data.length || 0,
+          avgInherent2: history2.data.reduce((sum, r) => sum + r.score_inherent, 0) / history2.data.length || 0,
+          avgResidual1: history1.data.reduce((sum, r) => sum + (r.score_residual || r.score_inherent), 0) / history1.data.length || 0,
+          avgResidual2: history2.data.reduce((sum, r) => sum + (r.score_residual || r.score_inherent), 0) / history2.data.length || 0,
+        };
+        setComparisonStats(stats);
       }
     } catch (err) {
       console.error('Load comparison error:', err);
@@ -196,21 +229,58 @@ export default function HeatmapComparison() {
             Compare risk profiles between two periods to track changes
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* View Type Toggle */}
+          <div className="flex items-center justify-center gap-6 py-3 border-b border-blue-200">
+            <span className="text-sm font-medium text-gray-700">Risk View:</span>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setViewType('inherent')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  viewType === 'inherent'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                }`}
+              >
+                Inherent Risk
+              </button>
+              <button
+                onClick={() => setViewType('residual')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  viewType === 'residual'
+                    ? 'bg-green-600 text-white shadow-md'
+                    : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                }`}
+              >
+                Residual Risk
+              </button>
+            </div>
+            <div className="text-xs text-gray-500">
+              {viewType === 'inherent' ? '(Before controls)' : '(After controls)'}
+            </div>
+          </div>
+
+          {/* Period Selectors */}
           <div className="flex items-center gap-4">
             {/* Period 1 */}
             <div className="flex-1">
               <label className="text-sm font-medium text-gray-700 mb-1 block">
                 Period 1 (Earlier):
               </label>
-              <Select value={period1} onValueChange={setPeriod1}>
+              <Select
+                value={period1 ? `${period1.year}-${period1.quarter}` : undefined}
+                onValueChange={(value) => {
+                  const [year, quarter] = value.split('-').map(Number);
+                  setPeriod1({ year, quarter });
+                }}
+              >
                 <SelectTrigger className="bg-white">
                   <SelectValue placeholder="Select first period" />
                 </SelectTrigger>
                 <SelectContent>
                   {availablePeriods.map((period) => (
-                    <SelectItem key={period} value={period}>
-                      {period}
+                    <SelectItem key={`${period.year}-${period.quarter}`} value={`${period.year}-${period.quarter}`}>
+                      {formatPeriod(period)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -226,14 +296,20 @@ export default function HeatmapComparison() {
               <label className="text-sm font-medium text-gray-700 mb-1 block">
                 Period 2 (Later):
               </label>
-              <Select value={period2} onValueChange={setPeriod2}>
+              <Select
+                value={period2 ? `${period2.year}-${period2.quarter}` : undefined}
+                onValueChange={(value) => {
+                  const [year, quarter] = value.split('-').map(Number);
+                  setPeriod2({ year, quarter });
+                }}
+              >
                 <SelectTrigger className="bg-white">
                   <SelectValue placeholder="Select second period" />
                 </SelectTrigger>
                 <SelectContent>
                   {availablePeriods.map((period) => (
-                    <SelectItem key={period} value={period}>
-                      {period}
+                    <SelectItem key={`${period.year}-${period.quarter}`} value={`${period.year}-${period.quarter}`}>
+                      {formatPeriod(period)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -267,68 +343,61 @@ export default function HeatmapComparison() {
       )}
 
       {/* Comparison Metrics */}
-      {!loading && comparison && (
+      {!loading && comparisonStats && period1 && period2 && (
         <Card className="border-blue-200 bg-blue-50">
           <CardHeader>
-            <CardTitle>Comparison Summary</CardTitle>
+            <CardTitle>Comparison Summary: {formatPeriod(period1)} vs {formatPeriod(period2)}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {/* Total Change */}
               <div className="bg-white rounded-lg border p-4">
-                <div className="text-sm text-gray-600 mb-1">Total Risk Count</div>
-                <div className={`text-2xl font-bold ${getChangeColor(comparison.risk_count_change)}`}>
-                  {comparison.risk_count_change > 0 ? '+' : ''}
-                  {comparison.risk_count_change}
+                <div className="text-sm text-gray-600 mb-1">Total Risk Count Change</div>
+                <div className={`text-2xl font-bold ${getChangeColor(comparisonStats.risksAdded)}`}>
+                  {comparisonStats.risksAdded > 0 ? '+' : ''}
+                  {comparisonStats.risksAdded}
                 </div>
                 <div className="text-xs text-gray-500 mt-1">
-                  {comparison.risk_count_change > 0 ? 'risks added' : comparison.risk_count_change < 0 ? 'risks reduced' : 'no change'}
+                  {comparisonStats.risksAdded > 0 ? 'risks added' : comparisonStats.risksAdded < 0 ? 'risks removed' : 'no change'}
+                </div>
+                <div className="text-xs text-gray-400 mt-2 border-t pt-2">
+                  {comparisonStats.period1Count} → {comparisonStats.period2Count} risks
                 </div>
               </div>
 
-              {/* New Risks */}
+              {/* Inherent Risk Change */}
               <div className="bg-white rounded-lg border p-4">
-                <div className="text-sm text-gray-600 mb-1">New Risks</div>
-                <div className="text-2xl font-bold text-blue-600">
-                  {comparison.new_risks.length}
+                <div className="text-sm text-gray-600 mb-1">Avg Inherent Risk</div>
+                <div className={`text-2xl font-bold ${getChangeColor(comparisonStats.avgInherent2 - comparisonStats.avgInherent1)}`}>
+                  {comparisonStats.avgInherent2 - comparisonStats.avgInherent1 > 0 ? '+' : ''}
+                  {(comparisonStats.avgInherent2 - comparisonStats.avgInherent1).toFixed(1)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">added</div>
+                <div className="text-xs text-gray-400 mt-2 border-t pt-2">
+                  {comparisonStats.avgInherent1.toFixed(1)} → {comparisonStats.avgInherent2.toFixed(1)}
+                </div>
               </div>
 
-              {/* Closed Risks */}
+              {/* Residual Risk Change */}
               <div className="bg-white rounded-lg border p-4">
-                <div className="text-sm text-gray-600 mb-1">Closed Risks</div>
+                <div className="text-sm text-gray-600 mb-1">Avg Residual Risk</div>
+                <div className={`text-2xl font-bold ${getChangeColor(comparisonStats.avgResidual2 - comparisonStats.avgResidual1)}`}>
+                  {comparisonStats.avgResidual2 - comparisonStats.avgResidual1 > 0 ? '+' : ''}
+                  {(comparisonStats.avgResidual2 - comparisonStats.avgResidual1).toFixed(1)}
+                </div>
+                <div className="text-xs text-gray-400 mt-2 border-t pt-2">
+                  {comparisonStats.avgResidual1.toFixed(1)} → {comparisonStats.avgResidual2.toFixed(1)}
+                </div>
+              </div>
+
+              {/* Risk Reduction Trend */}
+              <div className="bg-white rounded-lg border p-4">
+                <div className="text-sm text-gray-600 mb-1">Risk Reduction</div>
                 <div className="text-2xl font-bold text-green-600">
-                  {comparison.closed_risks.length}
+                  {comparisonStats.avgResidual2 < comparisonStats.avgInherent2 ?
+                    ((comparisonStats.avgInherent2 - comparisonStats.avgResidual2) / comparisonStats.avgInherent2 * 100).toFixed(0) :
+                    0}%
                 </div>
-                <div className="text-xs text-gray-500 mt-1">resolved</div>
-              </div>
-
-              {/* Changed Risks */}
-              <div className="bg-white rounded-lg border p-4">
-                <div className="text-sm text-gray-600 mb-1">Changed Risks</div>
-                <div className="text-2xl font-bold text-amber-600">
-                  {comparison.risk_changes.length}
-                </div>
-                <div className="text-xs text-gray-500 mt-1">modified</div>
-              </div>
-            </div>
-
-            {/* Score Changes */}
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              <div className="bg-white rounded-lg border p-4">
-                <div className="text-sm text-gray-600 mb-1">Avg Inherent Score Change</div>
-                <div className={`text-xl font-bold ${getChangeColor(comparison.score_changes.avg_inherent_change)}`}>
-                  {comparison.score_changes.avg_inherent_change > 0 ? '+' : ''}
-                  {comparison.score_changes.avg_inherent_change.toFixed(1)}
-                </div>
-              </div>
-              <div className="bg-white rounded-lg border p-4">
-                <div className="text-sm text-gray-600 mb-1">Avg Residual Score Change</div>
-                <div className={`text-xl font-bold ${getChangeColor(comparison.score_changes.avg_residual_change)}`}>
-                  {comparison.score_changes.avg_residual_change > 0 ? '+' : ''}
-                  {comparison.score_changes.avg_residual_change.toFixed(1)}
-                </div>
+                <div className="text-xs text-gray-500 mt-1">in {formatPeriod(period2)}</div>
               </div>
             </div>
           </CardContent>
@@ -342,8 +411,16 @@ export default function HeatmapComparison() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                <span>{period1}</span>
-                <Badge variant="outline" className="bg-gray-100">Earlier</Badge>
+                <div className="flex items-center gap-3">
+                  <span>{formatPeriod(period1)}</span>
+                  <Badge variant="outline" className="bg-gray-100">Earlier</Badge>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={viewType === 'inherent' ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-green-100 border-green-300 text-green-800'}
+                >
+                  {viewType === 'inherent' ? 'INHERENT' : 'RESIDUAL'}
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -353,11 +430,15 @@ export default function HeatmapComparison() {
                     {row.map((cell) => {
                       const cellColor = getRiskLevelColor(cell.level);
                       const opacity = getOpacity(cell.count);
+                      const isSelected = selectedCell1?.likelihood === cell.likelihood && selectedCell1?.impact === cell.impact;
 
                       return (
-                        <div
+                        <button
                           key={`${cell.likelihood}-${cell.impact}`}
-                          className="relative w-16 h-16 rounded border border-gray-300"
+                          onClick={() => setSelectedCell1(cell)}
+                          className={`relative w-16 h-16 rounded border-2 transition-all hover:scale-105 hover:shadow-lg hover:z-10 ${
+                            isSelected ? 'border-blue-600 shadow-lg scale-105 z-10' : 'border-gray-300'
+                          }`}
                           style={{
                             backgroundColor: cellColor,
                             opacity,
@@ -369,7 +450,7 @@ export default function HeatmapComparison() {
                               {cell.likelihood}×{cell.impact}
                             </div>
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -382,8 +463,16 @@ export default function HeatmapComparison() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                <span>{period2}</span>
-                <Badge variant="outline" className="bg-blue-100 text-blue-800">Later</Badge>
+                <div className="flex items-center gap-3">
+                  <span>{formatPeriod(period2)}</span>
+                  <Badge variant="outline" className="bg-blue-100 text-blue-800">Later</Badge>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={viewType === 'inherent' ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-green-100 border-green-300 text-green-800'}
+                >
+                  {viewType === 'inherent' ? 'INHERENT' : 'RESIDUAL'}
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -397,12 +486,20 @@ export default function HeatmapComparison() {
                       );
                       const change = cell.count - (cell1?.count || 0);
                       const opacity = getOpacity(cell.count);
+                      const isSelected = selectedCell2?.likelihood === cell.likelihood && selectedCell2?.impact === cell.impact;
 
                       return (
-                        <div
+                        <button
                           key={`${cell.likelihood}-${cell.impact}`}
-                          className={`relative w-16 h-16 rounded border-2 ${
-                            change > 0 ? 'border-red-500' : change < 0 ? 'border-green-500' : 'border-gray-300'
+                          onClick={() => setSelectedCell2(cell)}
+                          className={`relative w-16 h-16 rounded border-2 transition-all hover:scale-105 hover:shadow-lg hover:z-10 ${
+                            isSelected
+                              ? 'border-blue-600 shadow-lg scale-105 z-10'
+                              : change > 0
+                              ? 'border-red-500'
+                              : change < 0
+                              ? 'border-green-500'
+                              : 'border-gray-300'
                           }`}
                           style={{
                             backgroundColor: cellColor,
@@ -417,7 +514,7 @@ export default function HeatmapComparison() {
                               </div>
                             )}
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -428,96 +525,108 @@ export default function HeatmapComparison() {
         </div>
       )}
 
-      {/* Risk Changes Details */}
-      {!loading && comparison && comparison.risk_changes.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Risk Changes Detail</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {comparison.risk_changes.map((change) => (
-                <div
-                  key={change.risk_code}
-                  className="bg-gray-50 rounded-lg p-3 border border-gray-200"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900">{change.risk_code}</div>
-                      <div className="text-sm text-gray-600">{change.risk_title}</div>
-                    </div>
-                    <div className="flex items-center gap-3 text-sm">
-                      {change.likelihood_change !== 0 && (
-                        <div className={getChangeColor(change.likelihood_change)}>
-                          Likelihood: {change.likelihood_change > 0 ? '+' : ''}
-                          {change.likelihood_change}
-                        </div>
-                      )}
-                      {change.impact_change !== 0 && (
-                        <div className={getChangeColor(change.impact_change)}>
-                          Impact: {change.impact_change > 0 ? '+' : ''}
-                          {change.impact_change}
-                        </div>
-                      )}
-                      <div className={`font-bold ${getChangeColor(change.score_change)}`}>
-                        Score: {change.score_change > 0 ? '+' : ''}
-                        {change.score_change}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* New Risks */}
-      {!loading && comparison && comparison.new_risks.length > 0 && (
+      {/* Selected Cell Details for Period 1 */}
+      {selectedCell1 && (
         <Card className="border-blue-200 bg-blue-50">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-blue-600" />
-              New Risks Added ({comparison.new_risks.length})
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-3">
+                <Badge
+                  style={{
+                    backgroundColor: getRiskLevelColor(selectedCell1.level),
+                    color: 'white',
+                  }}
+                  className="text-lg px-3 py-1"
+                >
+                  {selectedCell1.level}
+                </Badge>
+                <span>
+                  {formatPeriod(period1)} - Likelihood: {selectedCell1.likelihood} | Impact: {selectedCell1.impact}
+                </span>
+              </CardTitle>
+              <button
+                onClick={() => setSelectedCell1(null)}
+                className="text-gray-500 hover:text-gray-700 text-xl px-2"
+              >
+                ✕
+              </button>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {comparison.new_risks.map((risk) => (
-                <div key={risk.risk_code} className="bg-white rounded-lg p-3 border">
-                  <div className="font-medium text-gray-900">{risk.risk_code}</div>
-                  <div className="text-sm text-gray-600">{risk.risk_title}</div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Score: {risk.score_inherent} | Status: {risk.status}
-                  </div>
+            {selectedCell1.count === 0 ? (
+              <p className="text-gray-600">
+                No risks in this category (L{selectedCell1.likelihood} × I{selectedCell1.impact})
+              </p>
+            ) : (
+              <div>
+                <p className="text-gray-900 font-medium mb-3">
+                  {selectedCell1.count} risk{selectedCell1.count !== 1 ? 's' : ''} in this category:
+                </p>
+                <div className="space-y-2">
+                  {selectedCell1.risk_codes.map((code) => (
+                    <div
+                      key={code}
+                      className="bg-white rounded-lg px-4 py-2 border border-blue-200"
+                    >
+                      <code className="text-sm font-mono text-blue-900">{code}</code>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
 
-      {/* Closed Risks */}
-      {!loading && comparison && comparison.closed_risks.length > 0 && (
+      {/* Selected Cell Details for Period 2 */}
+      {selectedCell2 && (
         <Card className="border-green-200 bg-green-50">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-green-600" />
-              Risks Closed/Removed ({comparison.closed_risks.length})
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-3">
+                <Badge
+                  style={{
+                    backgroundColor: getRiskLevelColor(selectedCell2.level),
+                    color: 'white',
+                  }}
+                  className="text-lg px-3 py-1"
+                >
+                  {selectedCell2.level}
+                </Badge>
+                <span>
+                  {formatPeriod(period2)} - Likelihood: {selectedCell2.likelihood} | Impact: {selectedCell2.impact}
+                </span>
+              </CardTitle>
+              <button
+                onClick={() => setSelectedCell2(null)}
+                className="text-gray-500 hover:text-gray-700 text-xl px-2"
+              >
+                ✕
+              </button>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {comparison.closed_risks.map((risk) => (
-                <div key={risk.risk_code} className="bg-white rounded-lg p-3 border">
-                  <div className="font-medium text-gray-900">{risk.risk_code}</div>
-                  <div className="text-sm text-gray-600">{risk.risk_title}</div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Score: {risk.score_inherent} | Status: {risk.status}
-                  </div>
+            {selectedCell2.count === 0 ? (
+              <p className="text-gray-600">
+                No risks in this category (L{selectedCell2.likelihood} × I{selectedCell2.impact})
+              </p>
+            ) : (
+              <div>
+                <p className="text-gray-900 font-medium mb-3">
+                  {selectedCell2.count} risk{selectedCell2.count !== 1 ? 's' : ''} in this category:
+                </p>
+                <div className="space-y-2">
+                  {selectedCell2.risk_codes.map((code) => (
+                    <div
+                      key={code}
+                      className="bg-white rounded-lg px-4 py-2 border border-green-200"
+                    >
+                      <code className="text-sm font-mono text-green-900">{code}</code>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
