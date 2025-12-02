@@ -53,6 +53,8 @@ export default function IncidentManagement() {
   const [showAiDialog, setShowAiDialog] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [aiErrorRetryable, setAiErrorRetryable] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     loadIncidents();
@@ -102,19 +104,51 @@ export default function IncidentManagement() {
     }
   }
 
-  async function triggerAiAnalysis(incident: Incident) {
+  async function triggerAiAnalysis(incident: Incident, isRetry: boolean = false) {
     setSelectedIncident(incident);
     setAiLoading(true);
     setAiError(null);
+    setAiErrorRetryable(false);
     setShowAiDialog(true);
+
+    if (isRetry) {
+      setRetryCount(prev => prev + 1);
+    } else {
+      setRetryCount(0);
+    }
 
     try {
       const result = await suggestRisksForIncident(incident.id);
-      if (result.error) throw new Error(result.error.message);
+
+      if (result.error) {
+        // Parse structured error from backend
+        const errorData = result.error as any;
+        const errorMessage = errorData?.error || errorData?.message || 'Failed to analyze incident';
+        const isRetryable = errorData?.retryable ?? false;
+
+        setAiError(errorMessage);
+        setAiErrorRetryable(isRetryable);
+
+        console.error('AI analysis error:', {
+          message: errorMessage,
+          code: errorData?.error_code,
+          retryable: isRetryable,
+          technical: errorData?.technical_details
+        });
+
+        return;
+      }
+
+      // Success - reset retry count
+      setRetryCount(0);
       setAiSuggestions(result.data || []);
+
     } catch (err) {
-      setAiError(err instanceof Error ? err.message : 'Failed to analyze incident');
-      console.error('AI analysis error:', err);
+      // Handle unexpected client-side errors
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
+      setAiError(errorMessage);
+      setAiErrorRetryable(true); // Allow retry for unexpected errors
+      console.error('Unexpected AI analysis error:', err);
     } finally {
       setAiLoading(false);
     }
@@ -349,8 +383,29 @@ export default function IncidentManagement() {
 
           {aiError && (
             <div className="bg-red-50 border border-red-200 rounded p-4">
-              <p className="text-red-800 font-medium">Analysis Failed</p>
-              <p className="text-red-600 text-sm mt-1">{aiError}</p>
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex-1">
+                  <p className="text-red-800 font-medium">
+                    Analysis Failed {retryCount > 0 && `(Attempt ${retryCount + 1})`}
+                  </p>
+                  <p className="text-red-600 text-sm mt-1">{aiError}</p>
+                </div>
+              </div>
+              {aiErrorRetryable && selectedIncident && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-3"
+                  onClick={() => triggerAiAnalysis(selectedIncident, true)}
+                >
+                  Try Again
+                </Button>
+              )}
+              {!aiErrorRetryable && (
+                <p className="text-red-500 text-xs mt-2">
+                  This issue requires manual intervention. Please contact support if the problem persists.
+                </p>
+              )}
             </div>
           )}
 

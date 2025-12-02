@@ -1,6 +1,7 @@
 // Supabase Edge Function for AI-powered incident analysis
 // Feature: AI-Powered Incident-to-Risk Linking & Control Adequacy Assessment
 // Created: 2025-01-02
+// Phase 5: Enhanced error handling, timeouts, and edge cases
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
@@ -11,14 +12,163 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400',
 }
 
+// Configuration
+const CLAUDE_API_TIMEOUT = 30000 // 30 seconds
+const MAX_RETRIES = 2
+const RETRY_DELAY = 1000 // 1 second
+
+/**
+ * Custom error class for better error categorization
+ */
+class AIAnalysisError extends Error {
+  constructor(
+    message: string,
+    public code: string,
+    public userMessage: string,
+    public retryable: boolean = false
+  ) {
+    super(message)
+    this.name = 'AIAnalysisError'
+  }
+}
+
+/**
+ * Validate incident has minimum required fields
+ */
+function validateIncident(incident: any): void {
+  if (!incident) {
+    throw new AIAnalysisError(
+      'Incident object is missing',
+      'INVALID_INPUT',
+      'Incident data is required for analysis.',
+      false
+    )
+  }
+
+  if (!incident.title || incident.title.trim().length === 0) {
+    throw new AIAnalysisError(
+      'Incident title is missing',
+      'MISSING_TITLE',
+      'Incident must have a title for meaningful analysis.',
+      false
+    )
+  }
+
+  if (!incident.description || incident.description.trim().length < 10) {
+    throw new AIAnalysisError(
+      'Incident description too short',
+      'INSUFFICIENT_DESCRIPTION',
+      'Please provide a detailed incident description (at least 10 characters) for accurate AI analysis.',
+      false
+    )
+  }
+}
+
+/**
+ * Fetch with timeout and retry logic
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeout: number = CLAUDE_API_TIMEOUT,
+  retries: number = MAX_RETRIES
+): Promise<Response> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      })
+
+      clearTimeout(timeoutId)
+
+      // Check for rate limiting
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('retry-after')
+        throw new AIAnalysisError(
+          'Rate limit exceeded',
+          'RATE_LIMIT',
+          `AI service is temporarily rate limited. ${retryAfter ? `Try again in ${retryAfter} seconds.` : 'Please try again in a few moments.'}`,
+          true
+        )
+      }
+
+      // Check for authentication errors
+      if (response.status === 401 || response.status === 403) {
+        throw new AIAnalysisError(
+          'Authentication failed',
+          'AUTH_ERROR',
+          'AI service authentication failed. Please contact your administrator.',
+          false
+        )
+      }
+
+      return response
+
+    } catch (error) {
+      // Handle timeout
+      if (error.name === 'AbortError') {
+        if (attempt < retries) {
+          console.log(`   ⏱️ Timeout on attempt ${attempt + 1}, retrying...`)
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (attempt + 1)))
+          continue
+        }
+        throw new AIAnalysisError(
+          'Request timeout',
+          'TIMEOUT',
+          'AI analysis took too long to respond. Please try again.',
+          true
+        )
+      }
+
+      // Handle network errors
+      if (error.message.includes('fetch')) {
+        if (attempt < retries) {
+          console.log(`   🔌 Network error on attempt ${attempt + 1}, retrying...`)
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (attempt + 1)))
+          continue
+        }
+        throw new AIAnalysisError(
+          'Network error',
+          'NETWORK_ERROR',
+          'Unable to connect to AI service. Please check your connection and try again.',
+          true
+        )
+      }
+
+      // Re-throw AIAnalysisErrors
+      if (error instanceof AIAnalysisError) {
+        throw error
+      }
+
+      // Unknown error
+      throw error
+    }
+  }
+
+  throw new Error('Max retries exceeded')
+}
+
 /**
  * Analyze incident and suggest related risks with confidence scores
  */
 async function suggestRisksForIncident(incident: any, risks: any[], claudeApiKey: string) {
   try {
+    // Validate input
+    validateIncident(incident)
+
+    // Check if there are risks to analyze against
     if (risks.length === 0) {
       console.log('   ⚠️ No risks available for analysis!')
-      return []
+      throw new AIAnalysisError(
+        'No risks in organization',
+        'NO_RISKS',
+        'Your organization has no active risks to compare this incident against. Please add risks to your risk register first.',
+        false
+      )
     }
 
     const riskDetails = risks.map((r, idx) =>
@@ -32,9 +182,9 @@ async function suggestRisksForIncident(incident: any, risks: any[], claudeApiKey
 
 INCIDENT DETAILS:
 Title: ${incident.title}
-Type: ${incident.incident_type}
-Severity: ${incident.severity}
-Date: ${incident.incident_date}
+Type: ${incident.incident_type || 'N/A'}
+Severity: ${incident.severity || 'N/A'}
+Date: ${incident.incident_date || 'N/A'}
 Division: ${incident.division || 'N/A'}
 Department: ${incident.department || 'N/A'}
 Description: ${incident.description || 'N/A'}
@@ -69,7 +219,9 @@ RESPOND WITH ONLY THIS JSON (no markdown, no explanations):
   ]
 }`
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    console.log(`   🤖 Calling Claude AI API...`)
+
+    const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -88,29 +240,80 @@ RESPOND WITH ONLY THIS JSON (no markdown, no explanations):
     })
 
     if (!response.ok) {
-      console.error(`   ❌ Claude API error: ${response.status}`)
       const errorBody = await response.text()
+      console.error(`   ❌ Claude API error: ${response.status}`)
       console.error('   Error details:', errorBody)
-      throw new Error(`Claude API error: ${response.status}`)
+
+      // Parse error details if possible
+      try {
+        const errorJson = JSON.parse(errorBody)
+        if (errorJson.error?.message) {
+          throw new AIAnalysisError(
+            errorJson.error.message,
+            'API_ERROR',
+            `AI service error: ${errorJson.error.message}`,
+            response.status >= 500
+          )
+        }
+      } catch {}
+
+      throw new AIAnalysisError(
+        `HTTP ${response.status}`,
+        'API_ERROR',
+        'AI service returned an error. Please try again.',
+        response.status >= 500
+      )
     }
 
     const result = await response.json()
     const text = result.content?.[0]?.text || '{}'
 
+    console.log(`   📄 AI Response received (${text.length} chars)`)
+
     // Extract JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       console.error('   ❌ Could not extract JSON from AI response')
-      console.error('   Raw response:', text)
-      return []
+      console.error('   Raw response:', text.substring(0, 200))
+      throw new AIAnalysisError(
+        'Invalid AI response format',
+        'PARSE_ERROR',
+        'AI returned an unexpected response format. Please try again.',
+        true
+      )
     }
 
-    const analysis = JSON.parse(jsonMatch[0])
-    return analysis.suggested_risks || []
+    try {
+      const analysis = JSON.parse(jsonMatch[0])
+      const suggestedRisks = analysis.suggested_risks || []
+
+      console.log(`   ✅ Successfully parsed ${suggestedRisks.length} suggestions`)
+
+      return suggestedRisks
+    } catch (parseError) {
+      console.error('   ❌ JSON parse error:', parseError.message)
+      throw new AIAnalysisError(
+        'Failed to parse AI response',
+        'PARSE_ERROR',
+        'AI response could not be interpreted. Please try again.',
+        true
+      )
+    }
 
   } catch (error) {
-    console.error('   ❌ Error in risk suggestion:', error.message)
-    throw error
+    // Re-throw AIAnalysisErrors as-is
+    if (error instanceof AIAnalysisError) {
+      throw error
+    }
+
+    // Wrap unknown errors
+    console.error('   ❌ Unexpected error in risk suggestion:', error.message)
+    throw new AIAnalysisError(
+      error.message,
+      'UNKNOWN_ERROR',
+      'An unexpected error occurred during analysis. Please try again.',
+      true
+    )
   }
 }
 
@@ -264,7 +467,12 @@ serve(async (req) => {
     // Get Claude API key from environment
     const claudeApiKey = Deno.env.get('ANTHROPIC_API_KEY')
     if (!claudeApiKey) {
-      throw new Error('ANTHROPIC_API_KEY not configured')
+      throw new AIAnalysisError(
+        'ANTHROPIC_API_KEY not configured',
+        'CONFIG_ERROR',
+        'AI service is not properly configured. Please contact your administrator to set up the ANTHROPIC_API_KEY.',
+        false
+      )
     }
 
     const { action, incident, risks, risk, controls } = await req.json()
@@ -275,7 +483,7 @@ serve(async (req) => {
 
     if (action === 'suggest_risks') {
       // Suggest which risks this incident relates to
-      console.log(`   Analyzing incident: "${incident.title}"`)
+      console.log(`   Analyzing incident: "${incident?.title || 'Unknown'}"`)
       console.log(`   Against ${risks?.length || 0} organizational risks`)
 
       result = await suggestRisksForIncident(incident, risks || [], claudeApiKey)
@@ -284,15 +492,22 @@ serve(async (req) => {
 
     } else if (action === 'assess_controls') {
       // Assess control adequacy for a specific risk
-      console.log(`   Assessing controls for risk: ${risk?.risk_code}`)
+      console.log(`   Assessing controls for risk: ${risk?.risk_code || 'Unknown'}`)
       console.log(`   ${controls?.length || 0} controls to evaluate`)
+
+      validateIncident(incident)
 
       result = await assessControlAdequacy(incident, risk, controls || [], claudeApiKey)
 
       console.log(`   ✅ Assessment: ${result.assessment}`)
 
     } else {
-      throw new Error(`Unknown action: ${action}`)
+      throw new AIAnalysisError(
+        `Unknown action: ${action}`,
+        'INVALID_ACTION',
+        'Invalid analysis request. Please try again.',
+        false
+      )
     }
 
     return new Response(JSON.stringify({ success: true, data: result }), {
@@ -303,14 +518,35 @@ serve(async (req) => {
   } catch (error) {
     console.error('❌ Error:', error.message)
 
+    // Handle AIAnalysisErrors with structured response
+    if (error instanceof AIAnalysisError) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: error.userMessage,
+          error_code: error.code,
+          retryable: error.retryable,
+          technical_details: error.message
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: error.code === 'AUTH_ERROR' || error.code === 'CONFIG_ERROR' ? 401 : 400,
+        }
+      )
+    }
+
+    // Handle generic errors
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message
+        error: 'An unexpected error occurred. Please try again.',
+        error_code: 'UNKNOWN_ERROR',
+        retryable: true,
+        technical_details: error.message
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        status: 500,
       }
     )
   }
