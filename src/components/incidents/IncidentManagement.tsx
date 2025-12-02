@@ -9,10 +9,10 @@ import {
   getIncidents,
   createIncident,
   updateIncident,
-  suggestRisksForIncident,
   linkIncidentToRisk,
   type Incident,
 } from '@/lib/incidents';
+// TODO: suggestRisksForIncident will be added in Phase 3
 import { isUserAdmin } from '@/lib/profiles';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
