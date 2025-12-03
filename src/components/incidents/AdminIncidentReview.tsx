@@ -16,6 +16,7 @@ import {
   analyzeIncidentForRiskMapping
 } from '../../lib/incidents';
 import { MappedIncidentsView } from './MappedIncidentsView';
+import { VoidedIncidentsView } from './VoidedIncidentsView';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -58,7 +59,7 @@ interface AISuggestion {
 
 export function AdminIncidentReview() {
   // Tab state
-  const [activeTab, setActiveTab] = useState<'pending' | 'mapped'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'mapped' | 'voided'>('pending');
 
   const [incidents, setIncidents] = useState<UnclassifiedIncident[]>([]);
   const [selectedIncident, setSelectedIncident] = useState<UnclassifiedIncident | null>(null);
@@ -324,6 +325,16 @@ export function AdminIncidentReview() {
         >
           Mapped Incidents
         </button>
+        <button
+          onClick={() => setActiveTab('voided')}
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeTab === 'voided'
+              ? 'border-b-2 border-primary text-primary'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Voided Incidents (Audit)
+        </button>
       </div>
 
       {/* Success Message */}
@@ -343,6 +354,8 @@ export function AdminIncidentReview() {
       {/* Tab Content */}
       {activeTab === 'mapped' ? (
         <MappedIncidentsView />
+      ) : activeTab === 'voided' ? (
+        <VoidedIncidentsView />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Incident List */}

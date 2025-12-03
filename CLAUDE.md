@@ -267,15 +267,24 @@ This is a **clean rebuild** of the MinRisk platform. Key decisions:
    - Orange badges with AlertCircle icon for visual distinction
    - Parallel loading with KRI counts for performance
 
+3. **VoidedIncidentsView - Admin Audit Interface**
+   - Created comprehensive admin-only audit view for voided incidents
+   - Shows: incident code, title, void reason, voided by (admin), voided at
+   - Real-time search/filter functionality
+   - Lifecycle history dialog with full audit trail
+   - Integrated as third tab in AdminIncidentReview
+
 **Files Modified:**
-- `src/lib/incidents.ts` - Added 3 new functions (voidIncident, getIncidentLifecycleHistory, getIncidentsForRisk)
+- `src/lib/incidents.ts` - Added 4 new functions (voidIncident, getIncidentLifecycleHistory, getIncidentsForRisk, getVoidedIncidents)
 - `src/components/incidents/IncidentDetail.tsx` - Added void functionality
 - `src/components/incidents/IncidentDetailView.tsx` - Added void functionality
 - `src/components/incidents/MappedIncidentsView.tsx` - Filter ACTIVE incidents
 - `src/components/risks/RiskRegister.tsx` - Added incident counts column and dialog
+- `src/components/incidents/VoidedIncidentsView.tsx` - NEW: Admin audit view for voided incidents
+- `src/components/incidents/AdminIncidentReview.tsx` - Added "Voided Incidents (Audit)" tab
 - Database: Deployed `/tmp/DEPLOY-void-incident-REVISED.sql`
 
-**Status:** Production ready. Optional VoidedIncidentsView component pending (admin audit view).
+**Status:** Production ready. All void system features complete.
 
 **Documentation:** See `/tmp/PROJECT-STATUS-2025-12-03.md` for complete details.
 

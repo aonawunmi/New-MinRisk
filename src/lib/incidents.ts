@@ -828,3 +828,32 @@ export async function getIncidentsForRisk(riskId: string) {
     return { data: null, error: error as Error };
   }
 }
+
+/**
+ * Get all voided incidents for admin audit
+ * Admin only - shows incident_status = 'VOIDED'
+ * Includes who voided it, when, and why
+ */
+export async function getVoidedIncidents() {
+  try {
+    const { data, error } = await supabase
+      .from('incidents')
+      .select(`
+        *,
+        voided_by_profile:user_profiles!incidents_voided_by_fkey (
+          id,
+          full_name,
+          email
+        )
+      `)
+      .eq('incident_status', 'VOIDED')
+      .order('voided_at', { ascending: false });
+
+    if (error) throw error;
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error fetching voided incidents:', error);
+    return { data: null, error: error as Error };
+  }
+}
