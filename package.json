@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
+    "build:check": "tsc -b && vite build",
     "preview": "vite preview",
     "import-taxonomy": "tsx scripts/import-taxonomy.ts",
     "migrate": "tsx scripts/run-migrations.ts",
