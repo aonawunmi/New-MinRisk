@@ -1,556 +1,830 @@
 /**
- * Incident Management Library
- *
- * Functions for managing incidents, linking to risks, and tracking
- * incident lifecycle from reporting to resolution.
+ * Incident Management Module - Database Operations
+ * Clean implementation using new auth system and Phase 1 schema
+ * RLS policies automatically enforce access control
  */
 
 import { supabase } from './supabase';
+import type {
+  Incident,
+  IncidentSummary,
+  IncidentComment,
+  IncidentAmendment,
+  IncidentRiskMappingHistory,
+  CreateIncidentInput,
+  UpdateIncidentInput,
+  CreateCommentInput,
+  IncidentFilters,
+  IncidentWithDetails,
+} from '../types/incident';
 
-// =====================================================
-// TYPES
-// =====================================================
-
-export interface Incident {
-  id: string;
-  org_id: string;
-  incident_number: string;
-  title: string;
-  description?: string;
-  incident_type: 'security' | 'operational' | 'compliance' | 'financial' | 'reputational' | 'other';
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  status: 'reported' | 'investigating' | 'contained' | 'resolved' | 'closed';
-  incident_date: string;
-  discovered_date: string;
-  reported_date: string;
-  resolved_date?: string;
-  closed_date?: string;
-  impact_description?: string;
-  financial_impact?: number;
-  affected_systems?: string[];
-  affected_customers?: number;
-  data_breach?: boolean;
-  root_cause_id?: string;
-  root_cause_description?: string;
-  contributing_factors?: string[];
-  reported_by?: string;
-  assigned_to?: string;
-  investigated_by?: string[];
-  resolution_summary?: string;
-  corrective_actions?: string[];
-  preventive_actions?: string[];
-  lessons_learned?: string;
-  regulatory_notification_required?: boolean;
-  regulatory_body?: string;
-  notification_date?: string;
-  regulatory_reference?: string;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-  tags?: string[];
-  attachments?: any[];
-}
-
-export interface IncidentRiskLink {
-  id: string;
-  incident_id: string;
-  risk_id: string;
-  link_type: 'materialized' | 'near_miss' | 'control_failure';
-  notes?: string;
-  linked_at: string;
-  linked_by?: string;
-}
-
-export interface IncidentSummary extends Incident {
-  linked_risks_count: number;
-  linked_risk_ids: string[];
-  linked_risk_titles: string[];
-}
-
-export interface IncidentFormData {
-  title: string;
-  description?: string;
-  incident_type: string;
-  severity: string;
-  status?: string;
-  incident_date: string;
-  discovered_date: string;
-  impact_description?: string;
-  financial_impact?: number;
-  affected_systems?: string[];
-  affected_customers?: number;
-  data_breach?: boolean;
-  root_cause_id?: string;
-  root_cause_description?: string;
-  contributing_factors?: string[];
-  assigned_to?: string;
-  resolution_summary?: string;
-  corrective_actions?: string[];
-  preventive_actions?: string[];
-  lessons_learned?: string;
-  regulatory_notification_required?: boolean;
-  regulatory_body?: string;
-  notification_date?: string;
-  regulatory_reference?: string;
-  tags?: string[];
-}
-
-// =====================================================
+// ============================================================
 // INCIDENT CRUD OPERATIONS
-// =====================================================
+// ============================================================
 
 /**
- * Get all incidents for an organization with risk links
+ * Get all incidents for current user
+ * RLS automatically filters based on user role:
+ * - Users see only their own incidents
+ * - Admins see all org incidents
  */
-export async function getIncidents(orgId: string) {
-  const { data, error } = await supabase
-    .from('incident_summary')
-    .select('*')
-    .eq('org_id', orgId)
-    .order('incident_date', { ascending: false });
+export async function getUserIncidents(filters?: IncidentFilters) {
+  try {
+    let query = supabase
+      .from('incidents')
+      .select('*')
+      .eq('incident_status', 'ACTIVE')  // Filter out VOIDED incidents
+      .order('created_at', { ascending: false });
 
-  return { data: data as IncidentSummary[] | null, error };
+    // Apply filters
+    if (filters) {
+      if (filters.status && filters.status.length > 0) {
+        query = query.in('resolution_status', filters.status);
+      }
+      if (filters.severity && filters.severity.length > 0) {
+        query = query.in('severity', filters.severity);
+      }
+      if (filters.incident_type && filters.incident_type.length > 0) {
+        query = query.in('incident_type', filters.incident_type);
+      }
+      if (filters.search) {
+        query = query.or(`title.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
+      }
+      if (filters.date_from) {
+        query = query.gte('incident_date', filters.date_from);
+      }
+      if (filters.date_to) {
+        query = query.lte('incident_date', filters.date_to);
+      }
+      if (filters.reported_by) {
+        query = query.eq('created_by', filters.reported_by);
+      }
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    return { data: data as Incident[], error: null };
+  } catch (error) {
+    console.error('Error fetching incidents:', error);
+    return { data: null, error: error as Error };
+  }
 }
 
 /**
- * Get a single incident by ID with full details
+ * Get single incident by ID with full details
+ * Works with actual database schema (incident_summary view)
  */
 export async function getIncidentById(incidentId: string) {
-  const { data, error } = await supabase
-    .from('incidents')
-    .select('*')
-    .eq('id', incidentId)
-    .single();
+  try {
+    // Get incident from summary view (already has linked risk info)
+    const { data: incident, error: incidentError } = await supabase
+      .from('incident_summary')
+      .select('*')
+      .eq('id', incidentId)
+      .single();
 
-  return { data: data as Incident | null, error };
-}
+    if (incidentError) throw incidentError;
+    if (!incident) throw new Error('Incident not found');
 
-/**
- * Get incidents by status
- */
-export async function getIncidentsByStatus(
-  orgId: string,
-  status: string
-) {
-  const { data, error } = await supabase
-    .from('incident_summary')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('status', status)
-    .order('incident_date', { ascending: false });
-
-  return { data: data as IncidentSummary[] | null, error };
-}
-
-/**
- * Get incidents by severity
- */
-export async function getIncidentsBySeverity(
-  orgId: string,
-  severity: string
-) {
-  const { data, error } = await supabase
-    .from('incident_summary')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('severity', severity)
-    .order('incident_date', { ascending: false });
-
-  return { data: data as IncidentSummary[] | null, error };
-}
-
-/**
- * Get incidents linked to a specific risk
- */
-export async function getIncidentsByRisk(riskId: string) {
-  // First get incident IDs linked to this risk
-  const { data: links, error: linksError } = await supabase
-    .from('incident_risk_links')
-    .select('incident_id')
-    .eq('risk_id', riskId);
-
-  if (linksError || !links || links.length === 0) {
-    return { data: [] as IncidentSummary[], error: linksError };
+    // incident_summary already has linked_risk_ids and linked_risk_titles
+    // No need for additional join
+    return { data: incident, error: null };
+  } catch (error) {
+    console.error('Error fetching incident details:', error);
+    return { data: null, error: error as Error };
   }
-
-  const incidentIds = links.map((link) => link.incident_id);
-
-  // Get incident details
-  const { data, error } = await supabase
-    .from('incident_summary')
-    .select('*')
-    .in('id', incidentIds)
-    .order('incident_date', { ascending: false });
-
-  return { data: data as IncidentSummary[] | null, error };
 }
 
 /**
- * Create a new incident
+ * Create new incident
+ * WORKAROUND: Uses RPC function to bypass PostgREST schema cache
+ * Auto-generates incident_code and sets reported_by to current user
  */
-export async function createIncident(
-  orgId: string,
-  userId: string,
-  incidentData: IncidentFormData
-) {
-  // First, generate incident number
-  const { data: numberData, error: numberError } = await supabase.rpc(
-    'generate_incident_number',
-    { p_org_id: orgId }
-  );
+export async function createIncident(input: CreateIncidentInput) {
+  try {
+    // Get current user (needed for authentication check)
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
 
-  if (numberError) {
-    return { data: null, error: numberError };
+    // Call PostgreSQL function that bypasses PostgREST cache
+    const { data, error } = await supabase
+      .rpc('create_incident_bypass_cache', {
+        p_title: input.title,
+        p_description: input.description,
+        p_incident_type: input.incident_type,
+        p_severity: input.severity,
+        p_occurred_at: input.occurred_at,
+        p_visibility_scope: input.visibility_scope || 'REPORTER_ONLY',
+        p_linked_risk_codes: input.linked_risk_codes || [],
+        p_financial_impact: input.financial_impact ? parseFloat(input.financial_impact) : null
+      })
+      .single();
+
+    if (error) throw error;
+    return { data: data as Incident, error: null };
+  } catch (error) {
+    console.error('Error creating incident:', error);
+    return { data: null, error: error as Error };
   }
-
-  const incident_number = numberData as string;
-
-  // Create incident
-  const { data, error } = await supabase
-    .from('incidents')
-    .insert({
-      org_id: orgId,
-      incident_number,
-      ...incidentData,
-      reported_by: userId,
-      created_by: userId,
-      status: incidentData.status || 'reported',
-    })
-    .select()
-    .single();
-
-  return { data: data as Incident | null, error };
 }
 
 /**
- * Update an incident
+ * Update incident
+ * Users can only update their own OPEN incidents
+ * Admins can update any incident
+ * Status changes are admin-only (enforced by trigger)
  */
-export async function updateIncident(
+export async function updateIncident(incidentId: string, input: UpdateIncidentInput) {
+  try {
+    const { data, error } = await supabase
+      .from('incidents')
+      .update({
+        ...input,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', incidentId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { data: data as Incident, error: null };
+  } catch (error) {
+    console.error('Error updating incident:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+/**
+ * Update incident description (creates amendment record)
+ * Only for admins
+ */
+export async function updateIncidentDescription(
   incidentId: string,
-  updates: Partial<IncidentFormData>
+  newDescription: string,
+  reason: string
 ) {
-  const { data, error } = await supabase
-    .from('incidents')
-    .update(updates)
-    .eq('id', incidentId)
-    .select()
-    .single();
+  try {
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
 
-  return { data: data as Incident | null, error };
+    // Get current incident
+    const { data: incident, error: fetchError } = await supabase
+      .from('incidents')
+      .select('description, original_description, organization_id')
+      .eq('id', incidentId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // Update incident
+    const { error: updateError } = await supabase
+      .from('incidents')
+      .update({
+        description: newDescription,
+        is_description_amended: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', incidentId);
+
+    if (updateError) throw updateError;
+
+    // Create amendment record
+    const { error: amendmentError } = await supabase
+      .from('incident_amendments')
+      .insert({
+        incident_id: incidentId,
+        organization_id: incident.organization_id,
+        amended_by: user.id,
+        field_name: 'description',
+        old_value: incident.description,
+        new_value: newDescription,
+        reason,
+      });
+
+    if (amendmentError) throw amendmentError;
+
+    return { data: true, error: null };
+  } catch (error) {
+    console.error('Error updating incident description:', error);
+    return { data: null, error: error as Error };
+  }
 }
 
 /**
- * Delete an incident
+ * Update incident status (Admin only - enforced by trigger)
+ */
+export async function updateIncidentStatus(
+  incidentId: string,
+  newStatus: string
+) {
+  try {
+    const { data, error } = await supabase
+      .from('incidents')
+      .update({
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', incidentId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { data: data as Incident, error: null };
+  } catch (error) {
+    console.error('Error updating incident status:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+/**
+ * Delete incident (Admin only - enforced by RLS)
  */
 export async function deleteIncident(incidentId: string) {
-  const { error } = await supabase
-    .from('incidents')
-    .delete()
-    .eq('id', incidentId);
+  try {
+    const { error } = await supabase
+      .from('incidents')
+      .delete()
+      .eq('id', incidentId);
 
-  return { error };
+    if (error) throw error;
+    return { data: true, error: null };
+  } catch (error) {
+    console.error('Error deleting incident:', error);
+    return { data: null, error: error as Error };
+  }
 }
 
-/**
- * Close an incident
- */
-export async function closeIncident(
-  incidentId: string,
-  resolutionSummary: string,
-  lessonsLearned?: string
-) {
-  const { data, error } = await supabase
-    .from('incidents')
-    .update({
-      status: 'closed',
-      closed_date: new Date().toISOString(),
-      resolution_summary: resolutionSummary,
-      lessons_learned: lessonsLearned,
-    })
-    .eq('id', incidentId)
-    .select()
-    .single();
+// ============================================================
+// INCIDENT COMMENTS
+// ============================================================
+// Note: Comments functionality not available in current schema
+// Tables incident_comments, incident_amendments, incident_risk_mapping_history don't exist
 
-  return { data: data as Incident | null, error };
-}
-
-// =====================================================
-// INCIDENT-RISK LINKS
-// =====================================================
+// ============================================================
+// INCIDENT-RISK LINKING
+// ============================================================
 
 /**
- * Get all risk links for an incident
- */
-export async function getIncidentRiskLinks(incidentId: string) {
-  const { data, error } = await supabase
-    .from('incident_risk_links')
-    .select(`
-      *,
-      risks:risk_id (
-        id,
-        title,
-        risk_id,
-        category
-      )
-    `)
-    .eq('incident_id', incidentId);
-
-  return { data, error };
-}
-
-/**
- * Link an incident to a risk
+ * Link incident to risk
+ * Creates mapping history record for audit trail
  */
 export async function linkIncidentToRisk(
   incidentId: string,
   riskId: string,
-  userId: string,
-  linkType: 'materialized' | 'near_miss' | 'control_failure' = 'materialized',
-  notes?: string
+  mappingSource: 'USER_MANUAL' | 'ADMIN_MANUAL' | 'AI_SUGGESTION_ACCEPTED',
+  reason?: string,
+  confidenceScore?: number
 ) {
-  const { data, error } = await supabase
-    .from('incident_risk_links')
-    .insert({
-      incident_id: incidentId,
-      risk_id: riskId,
-      link_type: linkType,
-      notes,
-      linked_by: userId,
-    })
-    .select()
-    .single();
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
 
-  return { data: data as IncidentRiskLink | null, error };
-}
+    // Get incident's organization
+    const { data: incident, error: incidentError } = await supabase
+      .from('incidents')
+      .select('organization_id')
+      .eq('id', incidentId)
+      .single();
 
-/**
- * Unlink an incident from a risk
- */
-export async function unlinkIncidentFromRisk(linkId: string) {
-  const { error } = await supabase
-    .from('incident_risk_links')
-    .delete()
-    .eq('id', linkId);
+    if (incidentError) throw incidentError;
 
-  return { error };
-}
+    // Check if link already exists
+    const { data: existingLink } = await supabase
+      .from('incident_risk_links')
+      .select('risk_id')
+      .eq('incident_id', incidentId)
+      .single();
 
-/**
- * Update a risk link
- */
-export async function updateIncidentRiskLink(
-  linkId: string,
-  updates: { link_type?: string; notes?: string }
-) {
-  const { data, error } = await supabase
-    .from('incident_risk_links')
-    .update(updates)
-    .eq('id', linkId)
-    .select()
-    .single();
+    // Create or update link
+    if (existingLink) {
+      // Update existing link
+      const { error: updateError } = await supabase
+        .from('incident_risk_links')
+        .update({
+          risk_id: riskId,
+          linked_by: user.id,
+          linked_at: new Date().toISOString(),
+        })
+        .eq('incident_id', incidentId);
 
-  return { data: data as IncidentRiskLink | null, error };
-}
+      if (updateError) throw updateError;
 
-// =====================================================
-// ANALYTICS & REPORTING
-// =====================================================
-
-/**
- * Get incident statistics for an organization
- */
-export async function getIncidentStats(orgId: string) {
-  const { data: incidents, error } = await supabase
-    .from('incidents')
-    .select('severity, status, incident_type, financial_impact, incident_date, resolved_date')
-    .eq('org_id', orgId);
-
-  if (error || !incidents) {
-    return {
-      data: null,
-      error,
-    };
-  }
-
-  // Calculate statistics
-  const stats = {
-    total_incidents: incidents.length,
-    by_severity: {} as Record<string, number>,
-    by_status: {} as Record<string, number>,
-    by_type: {} as Record<string, number>,
-    total_financial_impact: 0,
-    open_incidents: 0,
-    closed_incidents: 0,
-    avg_time_to_resolution: 0,
-  };
-
-  let resolutionTimes: number[] = [];
-
-  incidents.forEach((incident) => {
-    // By severity
-    stats.by_severity[incident.severity] =
-      (stats.by_severity[incident.severity] || 0) + 1;
-
-    // By status
-    stats.by_status[incident.status] =
-      (stats.by_status[incident.status] || 0) + 1;
-
-    // By type
-    stats.by_type[incident.incident_type] =
-      (stats.by_type[incident.incident_type] || 0) + 1;
-
-    // Financial impact
-    if (incident.financial_impact) {
-      stats.total_financial_impact += incident.financial_impact;
-    }
-
-    // Open vs closed
-    if (['reported', 'investigating', 'contained'].includes(incident.status)) {
-      stats.open_incidents++;
+      // Record mapping history
+      await supabase
+        .from('incident_risk_mapping_history')
+        .insert({
+          organization_id: incident.organization_id,
+          incident_id: incidentId,
+          modified_by: user.id,
+          old_risk_id: existingLink.risk_id,
+          new_risk_id: riskId,
+          mapping_source: mappingSource,
+          reason,
+          confidence_score: confidenceScore,
+        });
     } else {
-      stats.closed_incidents++;
+      // Create new link
+      const { error: insertError } = await supabase
+        .from('incident_risk_links')
+        .insert({
+          incident_id: incidentId,
+          risk_id: riskId,
+          linked_by: user.id,
+        });
+
+      if (insertError) throw insertError;
+
+      // Record mapping history
+      await supabase
+        .from('incident_risk_mapping_history')
+        .insert({
+          organization_id: incident.organization_id,
+          incident_id: incidentId,
+          modified_by: user.id,
+          old_risk_id: null,
+          new_risk_id: riskId,
+          mapping_source: mappingSource,
+          reason,
+          confidence_score: confidenceScore,
+        });
     }
 
-    // Resolution time
-    if (incident.resolved_date) {
-      const incidentDate = new Date(incident.incident_date).getTime();
-      const resolvedDate = new Date(incident.resolved_date).getTime();
-      const days = Math.floor((resolvedDate - incidentDate) / (1000 * 60 * 60 * 24));
-      resolutionTimes.push(days);
-    }
-  });
+    return { data: true, error: null };
+  } catch (error) {
+    console.error('Error linking incident to risk:', error);
+    return { data: null, error: error as Error };
+  }
+}
 
-  if (resolutionTimes.length > 0) {
-    stats.avg_time_to_resolution = Math.round(
-      resolutionTimes.reduce((a, b) => a + b, 0) / resolutionTimes.length
+/**
+ * Unlink incident from risk
+ */
+export async function unlinkIncidentFromRisk(incidentId: string, reason?: string) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Get current link and incident org
+    const { data: currentLink } = await supabase
+      .from('incident_risk_links')
+      .select('risk_id')
+      .eq('incident_id', incidentId)
+      .single();
+
+    const { data: incident } = await supabase
+      .from('incidents')
+      .select('organization_id')
+      .eq('id', incidentId)
+      .single();
+
+    if (!currentLink || !incident) {
+      throw new Error('Link or incident not found');
+    }
+
+    // Delete link
+    const { error: deleteError } = await supabase
+      .from('incident_risk_links')
+      .delete()
+      .eq('incident_id', incidentId);
+
+    if (deleteError) throw deleteError;
+
+    // Record mapping history
+    await supabase
+      .from('incident_risk_mapping_history')
+      .insert({
+        organization_id: incident.organization_id,
+        incident_id: incidentId,
+        modified_by: user.id,
+        old_risk_id: currentLink.risk_id,
+        new_risk_id: null,
+        mapping_source: 'USER_MANUAL',
+        reason: reason || 'Link removed',
+      });
+
+    return { data: true, error: null };
+  } catch (error) {
+    console.error('Error unlinking incident from risk:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+// ============================================================
+// UTILITY FUNCTIONS
+// ============================================================
+
+/**
+ * Get incident statistics for dashboard
+ */
+export async function getIncidentStats() {
+  try {
+    const { data: incidents, error } = await supabase
+      .from('incident_summary')
+      .select('status, severity');
+
+    if (error) throw error;
+
+    const stats = {
+      total: incidents?.length || 0,
+      open: incidents?.filter(i => i.status === 'OPEN').length || 0,
+      under_review: incidents?.filter(i => i.status === 'UNDER_REVIEW').length || 0,
+      resolved: incidents?.filter(i => i.status === 'RESOLVED').length || 0,
+      closed: incidents?.filter(i => i.status === 'CLOSED').length || 0,
+      critical: incidents?.filter(i => i.severity === 'CRITICAL').length || 0,
+      high: incidents?.filter(i => i.severity === 'HIGH').length || 0,
+    };
+
+    return { data: stats, error: null };
+  } catch (error) {
+    console.error('Error fetching incident stats:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+/**
+ * Get available incident types from existing incidents
+ */
+export async function getIncidentTypes() {
+  try {
+    const { data, error } = await supabase
+      .from('incidents')
+      .select('incident_type')
+      .not('incident_type', 'is', null);
+
+    if (error) throw error;
+
+    const types = [...new Set(data?.map(i => i.incident_type))].sort();
+    return { data: types, error: null };
+  } catch (error) {
+    console.error('Error fetching incident types:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+// ============================================================
+// AI RISK MAPPING ANALYSIS (Phase 4+5)
+// ============================================================
+
+/**
+ * Trigger AI analysis for incident-to-risk mapping
+ * Calls Edge Function that uses Claude AI to suggest risk mappings
+ *
+ * @param incidentId - UUID of incident to analyze
+ * @returns AI suggestions with confidence scores, keywords, and reasoning
+ */
+export async function analyzeIncidentForRiskMapping(incidentId: string) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Not authenticated');
+
+    console.log(`🧠 Triggering AI analysis for incident: ${incidentId}`);
+
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-incident-for-risk-mapping`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ incident_id: incidentId })
+      }
     );
-  }
 
-  return { data: stats, error: null };
-}
-
-/**
- * Get recent incidents (last 30 days)
- */
-export async function getRecentIncidents(orgId: string, days: number = 30) {
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - days);
-
-  const { data, error } = await supabase
-    .from('incident_summary')
-    .select('*')
-    .eq('org_id', orgId)
-    .gte('incident_date', cutoffDate.toISOString())
-    .order('incident_date', { ascending: false });
-
-  return { data: data as IncidentSummary[] | null, error };
-}
-
-/**
- * Get critical incidents (critical severity or unresolved for >30 days)
- */
-export async function getCriticalIncidents(orgId: string) {
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-  const { data, error } = await supabase
-    .from('incident_summary')
-    .select('*')
-    .eq('org_id', orgId)
-    .or(`severity.eq.critical,and(status.in.(reported,investigating),incident_date.lt.${thirtyDaysAgo.toISOString()})`)
-    .order('incident_date', { ascending: false });
-
-  return { data: data as IncidentSummary[] | null, error };
-}
-
-/**
- * Search incidents by keyword
- */
-export async function searchIncidents(orgId: string, searchTerm: string) {
-  const { data, error } = await supabase
-    .from('incident_summary')
-    .select('*')
-    .eq('org_id', orgId)
-    .or(
-      `title.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,incident_number.ilike.%${searchTerm}%`
-    )
-    .order('incident_date', { ascending: false });
-
-  return { data: data as IncidentSummary[] | null, error };
-}
-
-// =====================================================
-// HELPERS
-// =====================================================
-
-/**
- * Get severity color class
- */
-export function getSeverityColor(severity: string): string {
-  const colors: Record<string, string> = {
-    critical: 'text-red-700 bg-red-100 border-red-300',
-    high: 'text-orange-700 bg-orange-100 border-orange-300',
-    medium: 'text-yellow-700 bg-yellow-100 border-yellow-300',
-    low: 'text-blue-700 bg-blue-100 border-blue-300',
-  };
-  return colors[severity.toLowerCase()] || 'text-gray-700 bg-gray-100 border-gray-300';
-}
-
-/**
- * Get status color class
- */
-export function getStatusColor(status: string): string {
-  const colors: Record<string, string> = {
-    reported: 'text-blue-700 bg-blue-100 border-blue-300',
-    investigating: 'text-yellow-700 bg-yellow-100 border-yellow-300',
-    contained: 'text-orange-700 bg-orange-100 border-orange-300',
-    resolved: 'text-green-700 bg-green-100 border-green-300',
-    closed: 'text-gray-700 bg-gray-100 border-gray-300',
-  };
-  return colors[status.toLowerCase()] || 'text-gray-700 bg-gray-100 border-gray-300';
-}
-
-/**
- * Format incident number for display
- */
-export function formatIncidentNumber(incidentNumber: string): string {
-  return incidentNumber; // Already formatted as INC-2025-001
-}
-
-/**
- * Validate incident data
- */
-export function validateIncidentData(data: IncidentFormData): string[] {
-  const errors: string[] = [];
-
-  if (!data.title || data.title.trim().length === 0) {
-    errors.push('Title is required');
-  }
-
-  if (!data.incident_type) {
-    errors.push('Incident type is required');
-  }
-
-  if (!data.severity) {
-    errors.push('Severity is required');
-  }
-
-  if (!data.incident_date) {
-    errors.push('Incident date is required');
-  }
-
-  if (!data.discovered_date) {
-    errors.push('Discovery date is required');
-  }
-
-  // Validate that incident_date <= discovered_date
-  if (data.incident_date && data.discovered_date) {
-    const incidentDate = new Date(data.incident_date);
-    const discoveredDate = new Date(data.discovered_date);
-    if (incidentDate > discoveredDate) {
-      errors.push('Incident date cannot be after discovery date');
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'AI analysis failed');
     }
-  }
 
-  return errors;
+    const result = await response.json();
+
+    console.log(`✅ AI analysis complete:`, {
+      suggestions_count: result.suggestions_count,
+      suggestions: result.suggestions
+    });
+
+    return { data: result, error: null };
+  } catch (error) {
+    console.error('Error triggering AI analysis:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+/**
+ * Get AI suggestions for an incident
+ * Fetches suggestions from incident_risk_ai_suggestions table
+ *
+ * @param incidentId - UUID of incident
+ * @param status - Filter by status (optional): 'pending', 'accepted', 'rejected', 'superseded'
+ */
+export async function getAISuggestionsForIncident(
+  incidentId: string,
+  status?: string
+) {
+  try {
+    let query = supabase
+      .from('incident_risk_ai_suggestions')
+      .select(`
+        *,
+        risks!risk_id (
+          id,
+          risk_code,
+          risk_title,
+          category,
+          status
+        )
+      `)
+      .eq('incident_id', incidentId)
+      .order('confidence_score', { ascending: false });
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Supabase error details:', error);
+      throw error;
+    }
+
+    return { data: data || [], error: null };
+  } catch (error) {
+    console.error('Error fetching AI suggestions:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+/**
+ * Accept an AI risk suggestion
+ * Calls the database function that creates the risk link and updates statuses
+ *
+ * @param suggestionId - UUID of AI suggestion to accept
+ * @param adminNotes - Optional notes from admin reviewer
+ * @param classificationConfidence - Admin confidence level (0-100)
+ */
+export async function acceptAISuggestion(
+  suggestionId: string,
+  linkType: string,  // NEW: Admin selects link type
+  adminNotes?: string,
+  classificationConfidence?: number
+) {
+  try {
+    const { data, error } = await supabase.rpc('accept_ai_risk_suggestion', {
+      p_suggestion_id: suggestionId,
+      p_link_type: linkType,  // NEW: Pass link type to database function
+      p_admin_notes: adminNotes || null,
+      p_classification_confidence: classificationConfidence || 100
+    });
+
+    if (error) throw error;
+
+    console.log('✅ AI suggestion accepted successfully');
+
+    return { data: true, error: null };
+  } catch (error) {
+    console.error('Error accepting AI suggestion:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+/**
+ * Reject an AI risk suggestion
+ * Calls the secure database function with full audit trail
+ */
+export async function rejectAISuggestion(
+  suggestionId: string,
+  adminNotes?: string
+) {
+  try {
+    const { data, error } = await supabase.rpc('reject_ai_risk_suggestion', {
+      p_suggestion_id: suggestionId,
+      p_admin_notes: adminNotes || null
+    });
+
+    if (error) throw error;
+
+    console.log('✅ AI suggestion rejected successfully');
+
+    return { data: true, error: null };
+  } catch (error) {
+    console.error('Error rejecting AI suggestion:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+// ============================================================
+// MANUAL INCIDENT-RISK LINKING
+// ============================================================
+
+/**
+ * Manually create incident-to-risk link
+ * Allows admins to map incidents to risks without AI suggestions
+ */
+export async function createIncidentRiskLink(
+  incidentId: string,
+  riskId: string,
+  linkType: string,
+  adminNotes?: string,
+  classificationConfidence?: number
+) {
+  try {
+    const { data, error } = await supabase.rpc('create_incident_risk_link', {
+      p_incident_id: incidentId,
+      p_risk_id: riskId,
+      p_link_type: linkType,
+      p_admin_notes: adminNotes || null,
+      p_classification_confidence: classificationConfidence || 100
+    });
+
+    if (error) throw error;
+
+    console.log('✅ Incident-risk link created successfully');
+
+    return { data: true, error: null };
+  } catch (error) {
+    console.error('Error creating incident-risk link:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+/**
+ * Delete incident-to-risk link
+ * Allows admins to remove existing mappings
+ */
+export async function deleteIncidentRiskLink(
+  incidentId: string,
+  riskId: string,
+  adminNotes?: string
+) {
+  try {
+    const { data, error } = await supabase.rpc('delete_incident_risk_link', {
+      p_incident_id: incidentId,
+      p_risk_id: riskId,
+      p_admin_notes: adminNotes || null
+    });
+
+    if (error) throw error;
+
+    console.log('✅ Incident-risk link deleted successfully');
+
+    return { data: true, error: null };
+  } catch (error) {
+    console.error('Error deleting incident-risk link:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+/**
+ * Get all risk links for an incident
+ * Shows all risks mapped to this incident
+ */
+export async function getIncidentRiskLinks(incidentId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('incident_risk_links')
+      .select(`
+        *,
+        risks (
+          id,
+          risk_code,
+          risk_title,
+          category,
+          status
+        )
+      `)
+      .eq('incident_id', incidentId)
+      .order('linked_at', { ascending: false });
+
+    if (error) throw error;
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error fetching incident risk links:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+/**
+ * Get mapping audit history for an incident
+ * Shows full history of risk mapping changes
+ */
+export async function getIncidentMappingHistory(incidentId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('incident_risk_mapping_history')
+      .select(`
+        *,
+        risks (
+          risk_code,
+          risk_title
+        )
+      `)
+      .eq('incident_id', incidentId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error fetching incident mapping history:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+// ============================================================
+// INCIDENT LIFECYCLE MANAGEMENT
+// ============================================================
+
+/**
+ * Void/withdraw an incident (soft delete)
+ * Admin only - marks incident as invalid/poorly captured
+ * Maintains full audit trail - never hard deletes
+ */
+export async function voidIncident(
+  incidentId: string,
+  reason: string
+) {
+  try {
+    const { error } = await supabase.rpc('void_incident', {
+      p_incident_id: incidentId,
+      p_reason: reason
+    });
+
+    if (error) throw error;
+
+    return { data: true, error: null };
+  } catch (error) {
+    console.error('Error voiding incident:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+/**
+ * Get lifecycle history for an incident
+ * Shows all status changes (CREATED, VOIDED, REOPENED, etc.)
+ */
+export async function getIncidentLifecycleHistory(incidentId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('incident_lifecycle_history')
+      .select('*')
+      .eq('incident_id', incidentId)
+      .order('performed_at', { ascending: false });
+
+    if (error) throw error;
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error fetching incident lifecycle history:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+/**
+ * Get all incidents linked to a specific risk
+ * Returns incident details with link metadata
+ */
+export async function getIncidentsForRisk(riskId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('incident_risk_links')
+      .select(`
+        id,
+        link_type,
+        classification_confidence,
+        mapping_source,
+        linked_at,
+        notes,
+        incidents (
+          id,
+          incident_code,
+          title,
+          description,
+          incident_type,
+          severity,
+          incident_date,
+          resolution_status,
+          incident_status,
+          financial_impact,
+          created_at
+        )
+      `)
+      .eq('risk_id', riskId)
+      .order('linked_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Filter out incidents that are voided
+    const filteredData = data?.filter(link =>
+      link.incidents && (link.incidents as any).incident_status === 'ACTIVE'
+    );
+
+    return { data: filteredData, error: null };
+  } catch (error) {
+    console.error('Error fetching incidents for risk:', error);
+    return { data: null, error: error as Error };
+  }
 }
