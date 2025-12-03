@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test AI Risk Mapping</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    h1 {
+      margin-top: 0;
+      color: #333;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #555;
+    }
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 16px;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #2563eb;
+    }
+    button:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+    }
+    #result {
+      margin-top: 20px;
+    }
+    pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .success {
+      color: #10b981;
+      font-weight: 600;
+    }
+    .error {
+      color: #ef4444;
+      font-weight: 600;
+    }
+    .info {
+      background: #dbeafe;
+      border-left: 4px solid #3b82f6;
+      padding: 12px;
+      margin-bottom: 20px;
+      border-radius: 4px;
+    }
+    .loading {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      border-top-color: transparent;
+      animation: spin 0.8s linear infinite;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🧠 AI Risk Mapping - Test Tool</h1>
+
+    <div class="info">
+      <strong>Prerequisites:</strong>
+      <ol style="margin: 8px 0 0 20px;">
+        <li>Deploy Edge Function to Supabase</li>
+        <li>Set ANTHROPIC_API_KEY secret</li>
+        <li>Create at least one incident</li>
+        <li>Have active risks in your organization</li>
+      </ol>
+    </div>
+
+    <div>
+      <label for="incidentId">Incident ID (UUID):</label>
+      <input
+        type="text"
+        id="incidentId"
+        placeholder="e.g., 123e4567-e89b-12d3-a456-426614174000"
+        value=""
+      />
+    </div>
+
+    <button id="analyzeBtn" onclick="analyzeIncident()">
+      🚀 Trigger AI Analysis
+    </button>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://qrxwgjjgaekalvaqzpuf.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyeHdnampnYWVrYWx2YXF6cHVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM0NTQ4OTUsImV4cCI6MjA3OTAzMDg5NX0.VHfgfzbzyGEHnpaDrmOEitJyMD882LCCZhzNGZYGG7I';
+
+    async function analyzeIncident() {
+      const incidentId = document.getElementById('incidentId').value.trim();
+      const resultDiv = document.getElementById('result');
+      const btn = document.getElementById('analyzeBtn');
+
+      if (!incidentId) {
+        resultDiv.innerHTML = `<p class="error">⚠️ Please enter an incident ID</p>`;
+        return;
+      }
+
+      // Show loading state
+      btn.disabled = true;
+      btn.innerHTML = '🔄 Analyzing<span class="loading"></span>';
+      resultDiv.innerHTML = `<p>🧠 Calling AI Edge Function...</p>`;
+
+      try {
+        const response = await fetch(
+          `${SUPABASE_URL}/functions/v1/analyze-incident-for-risk-mapping`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ incident_id: incidentId })
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Analysis failed');
+        }
+
+        // Display success result
+        resultDiv.innerHTML = `
+          <p class="success">✅ AI Analysis Complete!</p>
+          <p><strong>Suggestions Found:</strong> ${data.suggestions_count}</p>
+          ${data.historical_context ? `
+            <p><strong>Historical Context:</strong></p>
+            <ul>
+              <li>Similar incidents: ${data.historical_context.similar_count}</li>
+              <li>Most common risk: ${data.historical_context.most_common_risk || 'N/A'}</li>
+              <li>Historical confidence: ${data.historical_context.confidence || 0}%</li>
+            </ul>
+          ` : ''}
+          <p><strong>Full Response:</strong></p>
+          <pre>${JSON.stringify(data, null, 2)}</pre>
+        `;
+
+      } catch (error) {
+        resultDiv.innerHTML = `
+          <p class="error">❌ Error: ${error.message}</p>
+          <p>Check browser console for details.</p>
+        `;
+        console.error('Full error:', error);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '🚀 Trigger AI Analysis';
+      }
+    }
+
+    // Allow Enter key to submit
+    document.getElementById('incidentId').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        analyzeIncident();
+      }
+    });
+  </script>
+</body>
+</html>

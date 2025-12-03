@@ -3,7 +3,7 @@
 **Project:** MinRisk Risk Management Platform (Clean Rebuild)
 **Location:** NEW-MINRISK/
 **Status:** Active Development
-**Last Updated:** 2025-11-25
+**Last Updated:** 2025-12-03
 
 ---
 
@@ -245,4 +245,42 @@ This is a **clean rebuild** of the MinRisk platform. Key decisions:
 
 ---
 
-**Last Session:** 2025-11-25 - Completed Phase 1 implementation, created diagnostic scripts, documented Edge Function secret configuration
+## Recent Development Sessions
+
+### 2025-12-03 - Incident Void System & Risk Register Incident Counts
+
+**Completed:**
+1. **Incident Void System (Soft Delete Pattern)**
+   - Deployed database migration with 7 security fixes
+   - Added `incident_status` column (ACTIVE/VOIDED/DRAFT/MERGED)
+   - Created `incident_lifecycle_history` audit table with ON DELETE RESTRICT
+   - Implemented `void_incident()` function with admin-only access
+   - Added void button to both IncidentDetail and IncidentDetailView
+   - Updated all queries to filter ACTIVE incidents only
+   - Full audit trail for compliance (who, when, why)
+
+2. **Risk Register Incident Counts**
+   - Added `getIncidentsForRisk()` helper function
+   - Implemented incident counts column in Risk Register (next to KRIs)
+   - Created comprehensive incidents dialog with click-through
+   - Shows: incident code, title, severity, link type, financial impact, confidence
+   - Orange badges with AlertCircle icon for visual distinction
+   - Parallel loading with KRI counts for performance
+
+**Files Modified:**
+- `src/lib/incidents.ts` - Added 3 new functions (voidIncident, getIncidentLifecycleHistory, getIncidentsForRisk)
+- `src/components/incidents/IncidentDetail.tsx` - Added void functionality
+- `src/components/incidents/IncidentDetailView.tsx` - Added void functionality
+- `src/components/incidents/MappedIncidentsView.tsx` - Filter ACTIVE incidents
+- `src/components/risks/RiskRegister.tsx` - Added incident counts column and dialog
+- Database: Deployed `/tmp/DEPLOY-void-incident-REVISED.sql`
+
+**Status:** Production ready. Optional VoidedIncidentsView component pending (admin audit view).
+
+**Documentation:** See `/tmp/PROJECT-STATUS-2025-12-03.md` for complete details.
+
+---
+
+### 2025-11-25 - Risk Intelligence Phase 1
+
+**Last Session:** Completed Phase 1 implementation, created diagnostic scripts, documented Edge Function secret configuration

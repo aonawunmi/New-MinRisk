@@ -19,6 +19,7 @@ import ControlRegister from '@/components/controls/ControlRegister';
 import KRIManagement from '@/components/kri/KRIManagement';
 import RiskIntelligenceManagement from '@/components/riskIntelligence/RiskIntelligenceManagement';
 import IncidentManagement from '@/components/incidents/IncidentManagement';
+import { AdminIncidentReview } from '@/components/incidents/AdminIncidentReview';
 import ImportExportManager from '@/components/importExport/ImportExportManager';
 import AIAssistant from '@/components/ai/AIAssistant';
 import AdminPanel from '@/components/admin/AdminPanel';
@@ -191,7 +192,22 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="incidents">
-            <IncidentManagement />
+            <Tabs defaultValue="management" className="w-full">
+              <TabsList>
+                <TabsTrigger value="management">📝 Incident Management</TabsTrigger>
+                {authState.isAdmin && (
+                  <TabsTrigger value="ai-review">🧠 AI Review (ADMIN)</TabsTrigger>
+                )}
+              </TabsList>
+              <TabsContent value="management">
+                <IncidentManagement />
+              </TabsContent>
+              {authState.isAdmin && (
+                <TabsContent value="ai-review">
+                  <AdminIncidentReview />
+                </TabsContent>
+              )}
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="ai">

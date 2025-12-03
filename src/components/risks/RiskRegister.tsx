@@ -11,6 +11,7 @@ import { getRisks, deleteRisk, updateRisk } from '@/lib/risks';
 import { calculateResidualRisk } from '@/lib/controls';
 import { getActivePeriod as getActivePeriodV2, formatPeriod, type Period } from '@/lib/periods-v2';
 import { getKRIsForRisk, type KRIDefinition } from '@/lib/kri';
+import { getIncidentsForRisk } from '@/lib/incidents';
 import { getOrganizationConfig, getLikelihoodLabel, getImpactLabel, type OrganizationConfig } from '@/lib/config';
 import { supabase } from '@/lib/supabase';
 import type { Risk } from '@/types/risk';
@@ -53,6 +54,9 @@ export default function RiskRegister() {
   const [kriCounts, setKriCounts] = useState<Map<string, number>>(new Map());
   const [showKRIDialog, setShowKRIDialog] = useState(false);
   const [selectedRiskKRIs, setSelectedRiskKRIs] = useState<{ risk: Risk; kris: any[] } | null>(null);
+  const [incidentCounts, setIncidentCounts] = useState<Map<string, number>>(new Map());
+  const [showIncidentsDialog, setShowIncidentsDialog] = useState(false);
+  const [selectedRiskIncidents, setSelectedRiskIncidents] = useState<{ risk: Risk; incidents: any[] } | null>(null);
   const [orgConfig, setOrgConfig] = useState<OrganizationConfig | null>(null);
 
   // Bulk delete state
@@ -91,37 +95,42 @@ export default function RiskRegister() {
   const loadRiskMetadata = async (risks: Risk[]) => {
     const residualMap = new Map<string, ResidualRisk>();
     const kriCountMap = new Map<string, number>();
+    const incidentCountMap = new Map<string, number>();
 
-    // Fetch all residual risks and KRI counts in parallel
+    // Fetch all residual risks, KRI counts, and incident counts in parallel
     const promises = risks.map(async (risk) => {
-      const [residualResult, krisResult] = await Promise.all([
+      const [residualResult, krisResult, incidentsResult] = await Promise.all([
         calculateResidualRisk(
           risk.id,
           risk.likelihood_inherent,
           risk.impact_inherent
         ),
         getKRIsForRisk(risk.risk_code),
+        getIncidentsForRisk(risk.id),
       ]);
 
       return {
         riskId: risk.id,
         residual: residualResult.data,
         kriCount: krisResult.data?.length || 0,
+        incidentCount: incidentsResult.data?.length || 0,
       };
     });
 
     const results = await Promise.all(promises);
 
     // Populate maps
-    results.forEach(({ riskId, residual, kriCount }) => {
+    results.forEach(({ riskId, residual, kriCount, incidentCount }) => {
       if (residual) {
         residualMap.set(riskId, residual);
       }
       kriCountMap.set(riskId, kriCount);
+      incidentCountMap.set(riskId, incidentCount);
     });
 
     setResidualRisks(residualMap);
     setKriCounts(kriCountMap);
+    setIncidentCounts(incidentCountMap);
   };
 
   useEffect(() => {
@@ -381,6 +390,23 @@ export default function RiskRegister() {
     }
   };
 
+  const handleIncidentClick = async (risk: Risk) => {
+    try {
+      const { data: incidentsData, error } = await getIncidentsForRisk(risk.id);
+
+      if (error) {
+        alert('Failed to load incidents: ' + error.message);
+        return;
+      }
+
+      setSelectedRiskIncidents({ risk, incidents: incidentsData || [] });
+      setShowIncidentsDialog(true);
+    } catch (err) {
+      console.error('Error loading incidents:', err);
+      alert('An unexpected error occurred');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -599,6 +625,7 @@ export default function RiskRegister() {
                     <TableHead className="text-center" colSpan={3}>Inherent</TableHead>
                     <TableHead className="text-center" colSpan={3}>Residual</TableHead>
                     <TableHead className="text-center">KRIs</TableHead>
+                    <TableHead className="text-center">Incidents</TableHead>
                     <TableHead>
                       <button
                         onClick={() => handleSort('status')}
@@ -631,6 +658,7 @@ export default function RiskRegister() {
                         L×I {getSortIcon('residual')}
                       </button>
                     </TableHead>
+                    <TableHead className="text-center text-xs w-16">Count</TableHead>
                     <TableHead className="text-center text-xs w-16">Count</TableHead>
                     <TableHead colSpan={2}></TableHead>
                   </TableRow>
@@ -720,6 +748,23 @@ export default function RiskRegister() {
                               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
                                 <Activity className="h-3 w-3 mr-1" />
                                 {kriCounts.get(risk.id)}
+                              </Badge>
+                            </Button>
+                          ) : (
+                            <span className="text-gray-400 text-sm">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {incidentCounts.get(risk.id) ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleIncidentClick(risk)}
+                              className="h-8 px-2 hover:bg-orange-50"
+                            >
+                              <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                                <AlertCircle className="h-3 w-3 mr-1" />
+                                {incidentCounts.get(risk.id)}
                               </Badge>
                             </Button>
                           ) : (
@@ -872,6 +917,141 @@ export default function RiskRegister() {
 
           <div className="flex justify-end mt-4">
             <Button onClick={() => setShowKRIDialog(false)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Incidents Details Dialog */}
+      <Dialog open={showIncidentsDialog} onOpenChange={setShowIncidentsDialog}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Incidents for Risk: {selectedRiskIncidents?.risk.risk_code} - {selectedRiskIncidents?.risk.risk_title}
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedRiskIncidents && selectedRiskIncidents.incidents.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              No incidents linked to this risk
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {selectedRiskIncidents?.incidents.map((link: any) => {
+                const incident = link.incidents;
+                const getSeverityColor = (sev: number) => {
+                  switch (sev) {
+                    case 1: return 'bg-blue-100 text-blue-800';
+                    case 2: return 'bg-yellow-100 text-yellow-800';
+                    case 3: return 'bg-orange-100 text-orange-800';
+                    case 4: return 'bg-red-100 text-red-800';
+                    default: return 'bg-gray-100 text-gray-800';
+                  }
+                };
+                const getSeverityText = (sev: number) => {
+                  switch (sev) {
+                    case 1: return 'LOW';
+                    case 2: return 'MEDIUM';
+                    case 3: return 'HIGH';
+                    case 4: return 'CRITICAL';
+                    default: return 'UNKNOWN';
+                  }
+                };
+                const getLinkTypeColor = (linkType: string) => {
+                  switch (linkType) {
+                    case 'PRIMARY': return 'bg-red-100 text-red-800';
+                    case 'SECONDARY': return 'bg-yellow-100 text-yellow-800';
+                    case 'CONTRIBUTORY': return 'bg-orange-100 text-orange-800';
+                    case 'ASSOCIATED': return 'bg-blue-100 text-blue-800';
+                    default: return 'bg-gray-100 text-gray-800';
+                  }
+                };
+
+                return (
+                  <Card key={link.id}>
+                    <CardContent className="pt-6">
+                      <div className="space-y-4">
+                        {/* Header with incident code and severity */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono font-bold text-lg">{incident.incident_code}</span>
+                            <Badge className={getSeverityColor(incident.severity)}>
+                              {getSeverityText(incident.severity)}
+                            </Badge>
+                            <Badge className={getLinkTypeColor(link.link_type)}>
+                              {link.link_type}
+                            </Badge>
+                          </div>
+                          <Badge variant="outline">{incident.resolution_status}</Badge>
+                        </div>
+
+                        {/* Title */}
+                        <div>
+                          <h4 className="font-semibold text-lg">{incident.title}</h4>
+                        </div>
+
+                        {/* Grid of details */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Incident Type</p>
+                            <p className="text-sm">{incident.incident_type || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Incident Date</p>
+                            <p className="text-sm">
+                              {incident.incident_date
+                                ? new Date(incident.incident_date).toLocaleDateString()
+                                : '-'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Financial Impact</p>
+                            <p className="text-sm">
+                              {incident.financial_impact
+                                ? `₦${Number(incident.financial_impact).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`
+                                : '-'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Mapping Source</p>
+                            <p className="text-sm">{link.mapping_source || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Classification Confidence</p>
+                            <p className="text-sm">{link.classification_confidence}%</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Linked At</p>
+                            <p className="text-sm">
+                              {link.linked_at
+                                ? new Date(link.linked_at).toLocaleDateString()
+                                : '-'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Description */}
+                        <div>
+                          <p className="text-sm font-medium text-gray-500">Description</p>
+                          <p className="text-sm text-gray-700 mt-1">{incident.description || 'No description'}</p>
+                        </div>
+
+                        {/* Notes if available */}
+                        {link.notes && (
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Mapping Notes</p>
+                            <p className="text-sm text-gray-700 italic mt-1">"{link.notes}"</p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex justify-end mt-4">
+            <Button onClick={() => setShowIncidentsDialog(false)}>Close</Button>
           </div>
         </DialogContent>
       </Dialog>
