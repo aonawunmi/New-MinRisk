@@ -38,6 +38,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Edit, Trash2, AlertCircle, RefreshCw, Star, Archive, ArrowUpDown, ArrowUp, ArrowDown, Activity, Calendar } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function RiskRegister() {
   const [risks, setRisks] = useState<Risk[]>([]);
@@ -46,6 +47,7 @@ export default function RiskRegister() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingRisk, setEditingRisk] = useState<Risk | null>(null);
   const [showPriorityOnly, setShowPriorityOnly] = useState(false);
+  const [selectedOwner, setSelectedOwner] = useState<string>('all');
   const [residualRisks, setResidualRisks] = useState<Map<string, ResidualRisk>>(new Map());
   const [activePeriod, setActivePeriod] = useState<Period | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -418,11 +420,19 @@ export default function RiskRegister() {
     );
   }
 
+  // Get unique owners for filter dropdown
+  const uniqueOwners = Array.from(new Set(risks.map(r => r.owner).filter(Boolean))).sort();
+
   // Filter and sort risks
   const filteredRisks = risks
     .filter((risk) => {
       // Priority filter
       if (showPriorityOnly && !risk.is_priority) {
+        return false;
+      }
+
+      // Owner filter (admin only)
+      if (selectedOwner !== 'all' && risk.owner !== selectedOwner) {
         return false;
       }
 
@@ -538,6 +548,26 @@ export default function RiskRegister() {
               >
                 {showPriorityOnly ? 'Show All Risks' : 'Priority Only'}
               </Button>
+
+              {/* Owner Filter (Admin only) */}
+              {isAdmin && uniqueOwners.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">Owner:</label>
+                  <Select value={selectedOwner} onValueChange={setSelectedOwner}>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="All Owners" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Owners</SelectItem>
+                      {uniqueOwners.map((owner) => (
+                        <SelectItem key={owner} value={owner}>
+                          {owner}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="text-sm text-gray-600 ml-auto">
                 Showing {filteredRisks.length} of {risks.length} risks
@@ -700,41 +730,41 @@ export default function RiskRegister() {
                             title="Mark as priority risk"
                           />
                         </TableCell>
-                        <TableCell className="font-medium">
+                        <TableCell className="font-medium text-xs">
                           {risk.risk_code}
                         </TableCell>
-                        <TableCell className="max-w-xs whitespace-normal break-words">
+                        <TableCell className="max-w-xs whitespace-normal break-words text-xs">
                           {risk.risk_title}
                         </TableCell>
-                        <TableCell className="whitespace-normal break-words">{risk.category}</TableCell>
-                        <TableCell className="max-w-[150px] whitespace-normal break-words">{risk.owner}</TableCell>
-                        <TableCell className="text-center text-sm text-gray-600">
+                        <TableCell className="whitespace-normal break-words text-xs">{risk.category}</TableCell>
+                        <TableCell className="max-w-[150px] whitespace-normal break-words text-xs">{risk.owner}</TableCell>
+                        <TableCell className="text-center text-xs text-gray-600">
                           {risk.created_period_year && risk.created_period_quarter
                             ? `Q${risk.created_period_quarter} ${risk.created_period_year}`
                             : '-'}
                         </TableCell>
                         {/* Inherent Likelihood - Show number with label in tooltip */}
-                        <TableCell className="text-center text-sm font-medium" title={getLikelihoodLabel(orgConfig, risk.likelihood_inherent)}>
+                        <TableCell className="text-center text-xs font-medium" title={getLikelihoodLabel(orgConfig, risk.likelihood_inherent)}>
                           {risk.likelihood_inherent}
                         </TableCell>
                         {/* Inherent Impact - Show number with label in tooltip */}
-                        <TableCell className="text-center text-sm font-medium" title={getImpactLabel(orgConfig, risk.impact_inherent)}>
+                        <TableCell className="text-center text-xs font-medium" title={getImpactLabel(orgConfig, risk.impact_inherent)}>
                           {risk.impact_inherent}
                         </TableCell>
                         {/* Inherent Score with Level color */}
-                        <TableCell className={`text-center font-semibold ${inherentLevelColor}`} title={`${inherentLevel} Risk`}>
+                        <TableCell className={`text-center text-xs font-semibold ${inherentLevelColor}`} title={`${inherentLevel} Risk`}>
                           {inherentScore}
                         </TableCell>
                         {/* Residual Likelihood - Show number with label in tooltip */}
-                        <TableCell className="text-center text-sm font-medium" title={residual ? getLikelihoodLabel(orgConfig, residual.residual_likelihood) : 'No controls applied'}>
+                        <TableCell className="text-center text-xs font-medium" title={residual ? getLikelihoodLabel(orgConfig, residual.residual_likelihood) : 'No controls applied'}>
                           {residual ? residual.residual_likelihood : '-'}
                         </TableCell>
                         {/* Residual Impact - Show number with label in tooltip */}
-                        <TableCell className="text-center text-sm font-medium" title={residual ? getImpactLabel(orgConfig, residual.residual_impact) : 'No controls applied'}>
+                        <TableCell className="text-center text-xs font-medium" title={residual ? getImpactLabel(orgConfig, residual.residual_impact) : 'No controls applied'}>
                           {residual ? residual.residual_impact : '-'}
                         </TableCell>
                         {/* Residual Score with Level color */}
-                        <TableCell className={`text-center font-semibold ${residualLevelColor}`} title={`${residualLevel} Risk`}>
+                        <TableCell className={`text-center text-xs font-semibold ${residualLevelColor}`} title={`${residualLevel} Risk`}>
                           {residualScore}
                         </TableCell>
                         <TableCell className="text-center">
@@ -743,15 +773,15 @@ export default function RiskRegister() {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleKRIClick(risk)}
-                              className="h-8 px-2 hover:bg-blue-50"
+                              className="h-7 px-2 hover:bg-blue-50"
                             >
-                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
                                 <Activity className="h-3 w-3 mr-1" />
                                 {kriCounts.get(risk.id)}
                               </Badge>
                             </Button>
                           ) : (
-                            <span className="text-gray-400 text-sm">-</span>
+                            <span className="text-gray-400 text-xs">-</span>
                           )}
                         </TableCell>
                         <TableCell className="text-center">
@@ -760,15 +790,15 @@ export default function RiskRegister() {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleIncidentClick(risk)}
-                              className="h-8 px-2 hover:bg-orange-50"
+                              className="h-7 px-2 hover:bg-orange-50"
                             >
-                              <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                              <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">
                                 <AlertCircle className="h-3 w-3 mr-1" />
                                 {incidentCounts.get(risk.id)}
                               </Badge>
                             </Button>
                           ) : (
-                            <span className="text-gray-400 text-sm">-</span>
+                            <span className="text-gray-400 text-xs">-</span>
                           )}
                         </TableCell>
                         <TableCell>
