@@ -842,8 +842,7 @@ export async function getVoidedIncidents() {
         *,
         voided_by_profile:user_profiles!incidents_voided_by_fkey (
           id,
-          full_name,
-          email
+          full_name
         )
       `)
       .eq('incident_status', 'VOIDED')

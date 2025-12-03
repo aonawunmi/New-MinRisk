@@ -124,8 +124,7 @@ export function VoidedIncidentsView() {
       incident.incident_code.toLowerCase().includes(term) ||
       incident.title.toLowerCase().includes(term) ||
       incident.void_reason?.toLowerCase().includes(term) ||
-      incident.voided_by_profile?.full_name?.toLowerCase().includes(term) ||
-      incident.voided_by_profile?.email?.toLowerCase().includes(term)
+      incident.voided_by_profile?.full_name?.toLowerCase().includes(term)
     );
 
     setFilteredIncidents(filtered);
@@ -262,11 +261,6 @@ export function VoidedIncidentsView() {
                         <div className="text-sm">
                           {incident.voided_by_profile?.full_name || 'Unknown Admin'}
                         </div>
-                        {incident.voided_by_profile?.email && (
-                          <div className="text-xs text-gray-500">
-                            {incident.voided_by_profile.email}
-                          </div>
-                        )}
                       </TableCell>
                       <TableCell className="text-sm">
                         {formatDate(incident.voided_at)}
