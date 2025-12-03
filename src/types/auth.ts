@@ -17,7 +17,7 @@ export type UserStatus = 'pending' | 'approved' | 'suspended';
 
 export interface UserProfile {
   id: string;
-  organization_id: string;
+  organization_id: string | null;
   full_name: string;
   role: UserRole;
   status: UserStatus;
@@ -62,7 +62,7 @@ export interface HeatmapConfig {
 
 export interface AuthUser {
   id: string;
-  email: string;
+  email: string | undefined;
 }
 
 export interface AuthState {
