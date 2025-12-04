@@ -44,33 +44,33 @@ export default function AdminPanel() {
       </div>
 
       <Tabs defaultValue="taxonomy" className="w-full">
-        <TabsList className="w-full flex flex-wrap gap-1 h-auto">
-          <TabsTrigger value="taxonomy" className="flex items-center gap-1.5 text-sm">
-            <BookOpen className="h-3.5 w-3.5" />
+        <TabsList className="w-full !flex !flex-row !flex-wrap !justify-start !items-start gap-1 h-auto p-2">
+          <TabsTrigger value="taxonomy" className="flex-none">
+            <BookOpen className="h-4 w-4 mr-1.5" />
             Taxonomy
           </TabsTrigger>
-          <TabsTrigger value="configuration" className="flex items-center gap-1.5 text-sm">
-            <Sliders className="h-3.5 w-3.5" />
+          <TabsTrigger value="configuration" className="flex-none">
+            <Sliders className="h-4 w-4 mr-1.5" />
             Configuration
           </TabsTrigger>
-          <TabsTrigger value="users" className="flex items-center gap-1.5 text-sm">
-            <Users className="h-3.5 w-3.5" />
+          <TabsTrigger value="users" className="flex-none">
+            <Users className="h-4 w-4 mr-1.5" />
             Users
           </TabsTrigger>
-          <TabsTrigger value="periods" className="flex items-center gap-1.5 text-sm">
-            <Calendar className="h-3.5 w-3.5" />
+          <TabsTrigger value="periods" className="flex-none">
+            <Calendar className="h-4 w-4 mr-1.5" />
             Periods
           </TabsTrigger>
-          <TabsTrigger value="audit" className="flex items-center gap-1.5 text-sm">
-            <ScrollText className="h-3.5 w-3.5" />
+          <TabsTrigger value="audit" className="flex-none">
+            <ScrollText className="h-4 w-4 mr-1.5" />
             Audit Trail
           </TabsTrigger>
-          <TabsTrigger value="help" className="flex items-center gap-1.5 text-sm">
-            <HelpCircle className="h-3.5 w-3.5" />
+          <TabsTrigger value="help" className="flex-none">
+            <HelpCircle className="h-4 w-4 mr-1.5" />
             Help
           </TabsTrigger>
-          <TabsTrigger value="settings" className="flex items-center gap-1.5 text-sm">
-            <Settings className="h-3.5 w-3.5" />
+          <TabsTrigger value="settings" className="flex-none">
+            <Settings className="h-4 w-4 mr-1.5" />
             Settings
           </TabsTrigger>
         </TabsList>
