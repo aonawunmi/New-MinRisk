@@ -3,7 +3,92 @@
 **Project:** MinRisk Risk Management Platform (Clean Rebuild)
 **Location:** NEW-MINRISK/
 **Status:** Active Development
-**Last Updated:** 2025-12-03
+**Last Updated:** 2025-12-04
+
+---
+
+## 🏛️ Development Principles
+
+### World-Class Solutions Architecture Approach
+
+**CRITICAL:** When working on this project, always apply these principles:
+
+#### 1. Ultra-Thinking Before Coding
+- **Deep Analysis First:** Never jump to implementation. Study existing code thoroughly.
+- **Architecture Review:** Understand how components interact before making changes.
+- **Impact Assessment:** Consider ripple effects across the entire system.
+- **Trade-off Analysis:** Identify what might break, what needs to change, what should be preserved.
+
+#### 2. Stability Over Speed
+- **Preserve What Works:** Don't refactor working code unless absolutely necessary.
+- **Incremental Changes:** Make small, testable changes rather than large rewrites.
+- **Backward Compatibility:** Ensure new features don't break existing functionality.
+- **Database Safety:** Schema changes must be carefully planned with migration strategies.
+
+#### 3. Interdependency Mapping
+- **Feature Interactions:** Document how new features interact with existing ones.
+- **Data Flow Analysis:** Trace data from database through backend to UI.
+- **State Management:** Understand state dependencies and update patterns.
+- **API Contracts:** Maintain consistent interfaces between layers.
+
+#### 4. Risk Mitigation
+- **What Could Go Wrong:** List potential failure modes before implementing.
+- **Rollback Plan:** Always have a way to revert changes.
+- **Testing Strategy:** Define how to validate the feature works correctly.
+- **Performance Impact:** Consider database queries, API calls, rendering performance.
+
+#### 5. Documentation-Driven Development
+- **Architecture Decisions:** Document WHY, not just WHAT.
+- **Implementation Notes:** Record assumptions, constraints, trade-offs.
+- **Migration Guides:** If schema changes, document upgrade path.
+- **Code Comments:** Explain complex logic, especially where it differs from expected patterns.
+
+### Feature Porting Process
+
+When porting features from minrisk-starter:
+
+1. **Study Phase (30-40% of time)**
+   - Read old implementation completely
+   - Understand data model and relationships
+   - Map component hierarchy and state flow
+   - Identify external dependencies (libraries, APIs)
+   - Document integration points
+
+2. **Analysis Phase (20-30% of time)**
+   - Compare old vs new architecture
+   - Identify alignment issues
+   - List required database changes
+   - Plan component structure
+   - Define test cases
+
+3. **Design Phase (10-20% of time)**
+   - Create implementation plan
+   - Design database schema changes
+   - Plan component integration
+   - Define API contracts
+   - Outline error handling
+
+4. **Implementation Phase (20-30% of time)**
+   - Build database migrations first
+   - Implement backend logic
+   - Build UI components
+   - Integrate with existing system
+   - Add error handling and edge cases
+
+5. **Validation Phase (10-20% of time)**
+   - Test happy paths
+   - Test error conditions
+   - Test integration with existing features
+   - Performance testing
+   - User acceptance testing
+
+### Red Flags to Watch For
+
+- ❌ **Rushing to code** - If you're writing code in first 30 minutes, stop and think more
+- ❌ **Ignoring existing patterns** - Follow established conventions in NEW-MINRISK
+- ❌ **Large pull requests** - Break work into smaller, reviewable chunks
+- ❌ **Skipping tests** - If it's not tested, it will break
+- ❌ **Copy-paste code** - Understand before porting, adapt to new patterns
 
 ---
 
