@@ -48,38 +48,31 @@ interface FormData {
   evaluation_score: DIMEScore | null;
 }
 
-const DIME_LABELS = {
-  0: 'Not Implemented',
-  1: 'Weak',
-  2: 'Adequate',
-  3: 'Strong',
-} as const;
-
 const DIME_DESCRIPTIONS = {
   design: {
-    0: 'No control design exists',
-    1: 'Control design is weak or inadequate',
-    2: 'Control design is adequate and appropriate',
-    3: 'Control design is strong and comprehensive',
+    3: { label: "Well designed", description: "Control specifically addresses the risk" },
+    2: { label: "Partially designed", description: "Control partially addresses the risk" },
+    1: { label: "Poorly designed", description: "Control minimally addresses the risk" },
+    0: { label: "Not designed", description: "Control does not address the risk" }
   },
   implementation: {
-    0: 'Control not implemented',
-    1: 'Control poorly or inconsistently implemented',
-    2: 'Control adequately implemented across key areas',
-    3: 'Control fully and consistently implemented',
+    3: { label: "Always applied", description: "Control is always applied as intended" },
+    2: { label: "Generally operational", description: "Control is usually applied correctly" },
+    1: { label: "Sometimes applied", description: "Control is applied inconsistently" },
+    0: { label: "Not applied", description: "Control is not applied or applied incorrectly" }
   },
   monitoring: {
-    0: 'No monitoring of control performance',
-    1: 'Weak or sporadic monitoring',
-    2: 'Regular monitoring with documented reviews',
-    3: 'Continuous monitoring with automated alerts',
+    3: { label: "Always monitored", description: "Control is continuously monitored" },
+    2: { label: "Usually monitored", description: "Control is regularly monitored" },
+    1: { label: "Ad-hoc monitoring", description: "Control is monitored on an ad-hoc basis" },
+    0: { label: "Not monitored", description: "Control is not monitored at all" }
   },
-  evaluation: {
-    0: 'No effectiveness evaluation performed',
-    1: 'Informal or infrequent effectiveness reviews',
-    2: 'Periodic formal effectiveness assessments',
-    3: 'Comprehensive ongoing effectiveness testing',
-  },
+  effectiveness: {
+    3: { label: "Regularly evaluated", description: "Control effectiveness is regularly evaluated" },
+    2: { label: "Occasionally evaluated", description: "Control effectiveness is occasionally evaluated" },
+    1: { label: "Infrequently evaluated", description: "Control effectiveness is rarely evaluated" },
+    0: { label: "Never evaluated", description: "Control effectiveness is never evaluated" }
+  }
 } as const;
 
 export default function ControlForm({
@@ -181,7 +174,7 @@ export default function ControlForm({
       <div className="space-y-2">
         <Label className="font-semibold">{label}</Label>
         <div className="grid grid-cols-4 gap-2">
-          {([0, 1, 2, 3] as DIMEScore[]).map((score) => (
+          {([3, 2, 1, 0] as DIMEScore[]).map((score) => (
             <button
               key={score}
               type="button"
@@ -196,13 +189,13 @@ export default function ControlForm({
               `}
             >
               <div className="font-bold text-lg">{score}</div>
-              <div className="text-xs text-gray-600 mt-1">{DIME_LABELS[score]}</div>
+              <div className="text-xs text-gray-600 mt-1">{descriptions[score].label}</div>
             </button>
           ))}
         </div>
         {value !== null && (
           <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
-            {descriptions[value]}
+            {descriptions[value].description}
           </p>
         )}
       </div>
