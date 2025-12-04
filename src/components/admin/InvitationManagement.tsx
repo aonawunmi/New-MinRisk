@@ -448,6 +448,9 @@ export default function InvitationManagement() {
                     <SelectItem value="primary_admin">
                       Primary Admin (Full Access)
                     </SelectItem>
+                    <SelectItem value="super_user">
+                      Super User (System Admin)
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
