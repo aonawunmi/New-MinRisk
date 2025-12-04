@@ -44,7 +44,7 @@ export default function AdminPanel() {
       </div>
 
       <Tabs defaultValue="taxonomy" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 gap-2 h-auto p-2">
+        <TabsList className="grid w-full grid-cols-4 gap-2 h-auto">
           <TabsTrigger value="taxonomy" className="flex items-center gap-2">
             <BookOpen className="h-4 w-4" />
             Risk Taxonomy
