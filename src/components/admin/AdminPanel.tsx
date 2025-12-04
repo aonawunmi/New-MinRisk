@@ -1,11 +1,13 @@
 /**
  * Admin Panel Component
  *
- * Main admin interface with four sections:
+ * Main admin interface with six sections:
  * 1. Risk Taxonomy Management
  * 2. Risk Configuration (Divisions, Departments, Labels)
  * 3. User Management
- * 4. Organization Settings
+ * 4. Period Management
+ * 5. Audit Trail (NEW - complete activity logging)
+ * 6. Organization Settings
  */
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -14,7 +16,8 @@ import UserManagement from './UserManagement';
 import OrganizationSettings from './OrganizationSettings';
 import RiskConfiguration from './RiskConfiguration';
 import PeriodManagement from './PeriodManagement';
-import { Shield, Users, Settings, BookOpen, Sliders, Calendar } from 'lucide-react';
+import AuditTrail from './AuditTrail';
+import { Shield, Users, Settings, BookOpen, Sliders, Calendar, ScrollText } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 
 export default function AdminPanel() {
@@ -39,7 +42,7 @@ export default function AdminPanel() {
       </div>
 
       <Tabs defaultValue="taxonomy" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="taxonomy" className="flex items-center gap-2">
             <BookOpen className="h-4 w-4" />
             Risk Taxonomy
@@ -55,6 +58,10 @@ export default function AdminPanel() {
           <TabsTrigger value="periods" className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             Period Management
+          </TabsTrigger>
+          <TabsTrigger value="audit" className="flex items-center gap-2">
+            <ScrollText className="h-4 w-4" />
+            Audit Trail
           </TabsTrigger>
           <TabsTrigger value="settings" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
@@ -81,6 +88,10 @@ export default function AdminPanel() {
               userId={user.id}
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="audit" className="mt-6">
+          <AuditTrail />
         </TabsContent>
 
         <TabsContent value="settings" className="mt-6">
