@@ -6,6 +6,7 @@
  * - Approve/reject pending users
  * - Change user roles
  * - Suspend/unsuspend users
+ * - Create and manage user invitations
  */
 
 import { useState, useEffect } from 'react';
@@ -44,6 +45,8 @@ import {
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import InvitationManagement from './InvitationManagement';
 import {
   CheckCircle,
   XCircle,
@@ -53,6 +56,8 @@ import {
   Shield,
   User,
   Eye,
+  Users,
+  Mail,
 } from 'lucide-react';
 
 export default function UserManagement() {
@@ -223,24 +228,36 @@ export default function UserManagement() {
   }
 
   return (
-    <div className="space-y-4">
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+    <Tabs defaultValue="users" className="w-full">
+      <TabsList className="grid w-full grid-cols-2">
+        <TabsTrigger value="users" className="flex items-center gap-2">
+          <Users className="h-4 w-4" />
+          User Management
+        </TabsTrigger>
+        <TabsTrigger value="invitations" className="flex items-center gap-2">
+          <Mail className="h-4 w-4" />
+          Invitations
+        </TabsTrigger>
+      </TabsList>
 
-      {success && (
-        <Alert className="bg-green-50 border-green-200">
-          <CheckCircle className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-800">
-            {success}
-          </AlertDescription>
-        </Alert>
-      )}
+      <TabsContent value="users" className="mt-6 space-y-4">
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-      {/* Pending Users */}
+        {success && (
+          <Alert className="bg-green-50 border-green-200">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <AlertDescription className="text-green-800">
+              {success}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Pending Users */}
       {pendingUsers.length > 0 && (
         <Card>
           <CardHeader>
@@ -386,6 +403,11 @@ export default function UserManagement() {
           </Table>
         </CardContent>
       </Card>
-    </div>
+      </TabsContent>
+
+      <TabsContent value="invitations" className="mt-6">
+        <InvitationManagement />
+      </TabsContent>
+    </Tabs>
   );
 }
