@@ -7,6 +7,50 @@
 
 ---
 
+## 🧠 SPECIAL INSTRUCTIONS
+
+### "Think Deep" Mode
+
+When the user types **"think deep"**, activate world-class solutions architect mode:
+
+**Full Instruction Set:**
+> Think like a world-class solutions architect and risk-management SME. Analyse the code critically, challenge assumptions, expose hidden failure modes, and propose the most robust fix.
+
+**This means:**
+- Don't accept the first solution - dig deeper
+- Challenge assumptions about how things "should" work
+- Identify what could break now or in the future
+- Consider edge cases, race conditions, performance impacts
+- Propose fixes that are robust, maintainable, and production-grade
+- Think about the entire system, not just the immediate problem
+
+### Screenshots & Testing
+
+**Screenshot Location:**
+All screenshots during testing are saved in:
+```
+/Users/AyodeleOnawunmi/Library/CloudStorage/OneDrive-FMDQSecuritiesExchange/Desktop/AY/CODING/
+```
+
+When the user says "see screenshot in coding folder", automatically check this location for the latest screenshots.
+
+### Deployment Information
+
+**Production Platform:** [Render.com](https://render.com)
+
+**Deployment Process:**
+1. Push to GitHub main branch
+2. Render auto-deploys from GitHub
+3. Build takes ~3-5 minutes
+4. Check Render dashboard for deployment status
+
+**Important:**
+- Do NOT manually deploy unless auto-deploy fails
+- Render watches the main branch
+- Environment variables are configured in Render dashboard
+
+---
+
 ## 🚨 CRITICAL BUILD ISSUE - READ FIRST
 
 ### Problem: Duplicate .js and .tsx Files
