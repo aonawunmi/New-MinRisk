@@ -47,3 +47,4 @@ Screenshot*.png
 # Temporary files
 *.tmp
 *.temp
+.env.development

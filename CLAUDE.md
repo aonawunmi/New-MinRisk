@@ -192,10 +192,19 @@ When porting features from minrisk-starter:
 
 ```bash
 VITE_SUPABASE_URL=https://qrxwgjjgaekalvaqzpuf.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyeHdnampnYWVrYWx2YXF6cHVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM0NTQ4OTUsImV4cCI6MjA3OTAzMDg5NX0.VHfgfzbzyGEHnpaDrmOEitJyMD882LCCZhzNGZYGG7I
-VITE_SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyeHdnampnYWVrYWx2YXF6cHVmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzQ1NDg5NSwiZXhwIjoyMDc5MDMwODk1fQ.Sh8f9nmI1g1QzdyrwOoVsQ0jfxhT5I0Cfb-3xV0Q2fE
-VITE_ANTHROPIC_API_KEY=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
+VITE_SUPABASE_ANON_KEY=<see-supabase-dashboard-or-env-file>
+VITE_SUPABASE_SERVICE_ROLE_KEY=<see-supabase-dashboard-or-env-file>
+VITE_ANTHROPIC_API_KEY=<see-anthropic-platform-or-env-file>
 ```
+
+**⚠️ SECURITY WARNING:**
+- **NEVER commit API keys to Git** - even in documentation!
+- Never hardcode secrets in shell scripts
+- Actual keys are stored in `.env.development` (which is gitignored)
+- To get the keys:
+  - Supabase keys: https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/settings/api
+  - Anthropic key: https://platform.claude.com/settings/keys
+- If a key is exposed on GitHub, it will be automatically revoked by GitHub's secret scanning
 
 ---
 
@@ -213,12 +222,13 @@ Edge Functions run on Supabase's cloud servers and **DO NOT** have access to you
 3. Click **"Add Secret"**
 4. Enter:
    - Name: `ANTHROPIC_API_KEY`
-   - Value: `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`
+   - Value: `<your-anthropic-api-key-from-.env.development>`
 5. Click **"Save"**
 
 #### Option 2: Via Supabase CLI
 ```bash
-npx supabase secrets set ANTHROPIC_API_KEY="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" --project-ref qrxwgjjgaekalvaqzpuf
+# Get key from .env.development first, then run:
+npx supabase secrets set ANTHROPIC_API_KEY="your-key-here" --project-ref qrxwgjjgaekalvaqzpuf
 ```
 
 #### Option 3: Use Helper Script

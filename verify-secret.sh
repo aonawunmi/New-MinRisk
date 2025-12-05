@@ -37,5 +37,6 @@ else
   echo "Manual setup:"
   echo "1. Go to: https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/settings/functions"
   echo "2. Click 'Secrets' tab"
-  echo "3. Add secret: ANTHROPIC_API_KEY = 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"
+  echo "3. Add secret: ANTHROPIC_API_KEY = <your-api-key-from-.env.development>"
+  echo "   (Find the key in .env.development file)"
 fi
