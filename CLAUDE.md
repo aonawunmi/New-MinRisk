@@ -144,6 +144,72 @@ find src/components -name "*.js" -type f
 
 ---
 
+### Problem: Production Shows Old Code Despite Correct GitHub Source
+
+**Date Discovered:** 2025-12-05
+
+**Symptom:**
+- Local dev shows updated code correctly
+- GitHub repository has correct source code
+- Fresh Render deployments complete successfully
+- **But production still serves old/outdated code**
+- Hard refresh, incognito mode, and new browser don't help
+
+**Root Cause:**
+Compiled `.js` files were **committed to git** alongside `.tsx` source files. When these files exist in the repository:
+1. Local: We deleted .js files locally, so Vite builds from .tsx (correct code)
+2. Production: Render checks out from git, finds the old .js files, and serves them (old code)
+
+**Critical Learning:**
+When local and production differ, **CHECK GIT-TRACKED FILES FIRST** before investigating caching, CDN, or deployment issues.
+
+**Diagnostic Process:**
+```bash
+# 1. Check if compiled files are tracked in git
+cd NEW-MINRISK
+git ls-files | grep "src/.*\.js$"
+
+# If this returns files, they're in git and will deploy to production!
+
+# 2. Check if they exist locally
+find src -name "*.js" -type f | grep -v node_modules
+
+# If step 1 returns files but step 2 doesn't, that's the problem!
+```
+
+**Fix:**
+```bash
+# Remove all src/**/*.js files from git tracking
+git ls-files | grep "src/.*\.js$" | xargs git rm --cached
+
+# Update .gitignore to prevent re-adding them
+echo -e "\n# Compiled JavaScript files (TypeScript output)\nsrc/**/*.js\nsrc/**/*.jsx\n!*.config.js\n!scripts/*.js" >> .gitignore
+
+# Commit and push
+git add .gitignore
+git commit -m "Remove compiled .js files from git tracking"
+git push origin main
+
+# Render will auto-deploy and build from .tsx source files only
+```
+
+**Prevention Checklist:**
+- ✅ Ensure `src/**/*.js` is in `.gitignore`
+- ✅ Never commit compiled files to source control
+- ✅ When debugging prod vs local differences, check `git ls-files` first
+- ✅ Verify tsconfig.json outputs to `dist/` not `src/`
+
+**Lesson:**
+This is a systematic debugging failure. When local works but production doesn't, the first check should be "what files are in git that shouldn't be?" not "is there a caching issue?"
+
+This cost multiple deployment attempts and created user frustration. The systematic approach should be:
+1. **Check git-tracked files** - `git ls-files`
+2. Check build output
+3. Check deployment logs
+4. Then consider caching/CDN issues
+
+---
+
 ## 🏛️ Development Principles
 
 ### World-Class Solutions Architecture Approach
