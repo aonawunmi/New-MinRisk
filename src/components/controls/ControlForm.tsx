@@ -67,7 +67,7 @@ const DIME_DESCRIPTIONS = {
     1: { label: "Ad-hoc monitoring", description: "Control is monitored on an ad-hoc basis" },
     0: { label: "Not monitored", description: "Control is not monitored at all" }
   },
-  effectiveness: {
+  evaluation: {
     3: { label: "Regularly evaluated", description: "Control effectiveness is regularly evaluated" },
     2: { label: "Occasionally evaluated", description: "Control effectiveness is occasionally evaluated" },
     1: { label: "Infrequently evaluated", description: "Control effectiveness is rarely evaluated" },
