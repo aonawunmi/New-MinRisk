@@ -373,7 +373,7 @@ export default function ControlForm({
             <div>
               <h3 className="text-lg font-semibold mb-1">DIME Framework Assessment</h3>
               <p className="text-sm text-gray-600">
-                Rate each dimension from 0 (Not Implemented) to 3 (Strong)
+                Rate each dimension on a 0-3 scale (dimension-specific criteria)
               </p>
             </div>
 

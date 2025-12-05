@@ -225,10 +225,10 @@ Recommend 3-5 specific, actionable controls to mitigate this risk. For each cont
 3. **Control Type**: One of: "preventive", "detective", or "corrective"
 4. **Target**: Either "Likelihood" or "Impact" - which dimension this control primarily reduces
 5. **DIME Scores** (0-3 scale):
-   - Design (D): How well-designed is this control? (0=Not implemented, 1=Weak, 2=Adequate, 3=Strong)
-   - Implementation (I): How well could this be implemented? (0=Not implemented, 1=Weak, 2=Adequate, 3=Strong)
-   - Monitoring (M): How well can this control be monitored? (0=No monitoring, 1=Weak, 2=Adequate, 3=Strong)
-   - Evaluation (E): How well can effectiveness be evaluated? (0=No evaluation, 1=Weak, 2=Adequate, 3=Strong)
+   - Design (D): How well-designed is this control? (0=Not designed, 1=Poorly designed, 2=Partially designed, 3=Well designed)
+   - Implementation (I): How well could this be implemented? (0=Not applied, 1=Sometimes applied, 2=Generally operational, 3=Always applied)
+   - Monitoring (M): How well can this control be monitored? (0=Not monitored, 1=Ad-hoc monitoring, 2=Usually monitored, 3=Always monitored)
+   - Evaluation (E): How well can effectiveness be evaluated? (0=Never evaluated, 1=Infrequently evaluated, 2=Occasionally evaluated, 3=Regularly evaluated)
 6. **Rationale**: Why this control is recommended for this specific risk (1-2 sentences)
 
 IMPORTANT GUIDELINES:

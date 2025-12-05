@@ -2561,7 +2561,7 @@ export default function RiskForm({
                                   DIME Average: <span className="font-semibold text-gray-700">{avgDIME}</span> / 3.0
                                   <span className="ml-2 text-gray-400">•</span>
                                   <span className="ml-2">
-                                    Scale: 0=None, 1=Weak, 2=Adequate, 3=Strong
+                                    Scale: 0-3 (dimension-specific criteria)
                                   </span>
                                 </p>
                               </div>
