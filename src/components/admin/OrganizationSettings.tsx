@@ -217,8 +217,8 @@ export default function OrganizationSettings() {
                 </SelectTrigger>
                 <SelectContent>
                   {PERIOD_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
+                    <SelectItem key={option} value={option}>
+                      {option}
                     </SelectItem>
                   ))}
                 </SelectContent>

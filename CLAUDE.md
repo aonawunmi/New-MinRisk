@@ -3,7 +3,52 @@
 **Project:** MinRisk Risk Management Platform (Clean Rebuild)
 **Location:** NEW-MINRISK/
 **Status:** Active Development
-**Last Updated:** 2025-12-04
+**Last Updated:** 2025-12-05
+
+---
+
+## 🚨 CRITICAL BUILD ISSUE - READ FIRST
+
+### Problem: Duplicate .js and .tsx Files
+
+**Date Discovered:** 2025-12-05
+
+**Symptom:**
+- Code changes to `.tsx` files are not reflected in the browser
+- Components show old behavior even after editing
+- Console.log statements don't appear
+- Browser shows "Failed to load resource: 404" for `.js` files
+
+**Root Cause:**
+TypeScript compiler is outputting compiled `.js` files in the **same directory** as `.tsx` source files (inside `src/`). When importing components, the module system finds both files and loads the `.js` file instead of the `.tsx` file, causing all edits to be ignored.
+
+**Immediate Fix:**
+```bash
+# Delete all compiled .js files from src folder
+cd NEW-MINRISK
+find src -name "*.js" -type f | grep -v node_modules | xargs rm
+
+# Clear Vite cache
+rm -rf node_modules/.vite
+
+# Restart dev server
+npm run dev
+```
+
+**Prevention:**
+Check `tsconfig.json` - the `outDir` should point to `dist/` or be removed entirely. Compiled files should NEVER be in `src/`.
+
+**Quick Check:**
+```bash
+# If this returns files, you have the problem
+find src/components -name "*.js" -type f
+```
+
+**How to Verify Fix:**
+1. Add a console.log to any component
+2. Refresh browser
+3. If console message appears → Fixed ✅
+4. If console message doesn't appear → Still broken ❌
 
 ---
 

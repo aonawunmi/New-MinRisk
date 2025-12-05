@@ -1,17 +1,5 @@
-/**
- * Admin Panel Component
- *
- * Main admin interface with seven sections:
- * 1. Risk Taxonomy Management
- * 2. Risk Configuration (Divisions, Departments, Labels)
- * 3. User Management
- * 4. Period Management
- * 5. Audit Trail (NEW - complete activity logging)
- * 6. Help Documentation
- * 7. Organization Settings
- */
-
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useState } from 'react';
+import { useAuth } from '@/lib/auth';
 import TaxonomyManagement from './TaxonomyManagement';
 import UserManagement from './UserManagement';
 import OrganizationSettings from './OrganizationSettings';
@@ -19,95 +7,78 @@ import RiskConfiguration from './RiskConfiguration';
 import PeriodManagement from './PeriodManagement';
 import AuditTrail from './AuditTrail';
 import HelpTab from './HelpTab';
-import { Shield, Users, Settings, BookOpen, Sliders, Calendar, ScrollText, HelpCircle } from 'lucide-react';
-import { useAuth } from '@/lib/auth';
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
+  const [activeTab, setActiveTab] = useState('taxonomy');
+
+  const tabs = [
+    { id: 'taxonomy', label: 'Risk Taxonomy' },
+    { id: 'configuration', label: 'Risk Configuration' },
+    { id: 'users', label: 'User Management' },
+    { id: 'periods', label: 'Period Management' },
+    { id: 'audit', label: 'Audit Trail' },
+    { id: 'help', label: 'Help' },
+    { id: 'settings', label: 'Organization Settings' },
+  ];
 
   return (
-    <div className="space-y-4">
-      <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-6">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-purple-600 rounded-lg">
-            <Shield className="h-8 w-8 text-white" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">
-              Administration Panel
-            </h2>
-            <p className="text-gray-600">
-              Manage risk taxonomy, users, and organization settings
-            </p>
-          </div>
-        </div>
+    <div style={{ width: '100%', padding: '0' }}>
+      {/* Tab Navigation */}
+      <div style={{
+        display: 'flex',
+        gap: '0',
+        borderBottom: '1px solid #e5e7eb',
+        marginBottom: '24px',
+        overflowX: 'auto',
+        flexWrap: 'nowrap'
+      }}>
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            style={{
+              padding: '12px 24px',
+              border: 'none',
+              background: 'none',
+              cursor: 'pointer',
+              borderBottom: activeTab === tab.id ? '2px solid #7c3aed' : '2px solid transparent',
+              color: activeTab === tab.id ? '#7c3aed' : '#6b7280',
+              fontWeight: activeTab === tab.id ? '600' : '400',
+              fontSize: '14px',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              if (activeTab !== tab.id) {
+                e.currentTarget.style.color = '#374151';
+                e.currentTarget.style.borderBottom = '2px solid #d1d5db';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== tab.id) {
+                e.currentTarget.style.color = '#6b7280';
+                e.currentTarget.style.borderBottom = '2px solid transparent';
+              }
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      <Tabs defaultValue="taxonomy" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 gap-2 h-auto">
-          <TabsTrigger value="taxonomy" className="flex items-center gap-2">
-            <BookOpen className="h-4 w-4" />
-            Risk Taxonomy
-          </TabsTrigger>
-          <TabsTrigger value="configuration" className="flex items-center gap-2">
-            <Sliders className="h-4 w-4" />
-            Risk Configuration
-          </TabsTrigger>
-          <TabsTrigger value="users" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            User Management
-          </TabsTrigger>
-          <TabsTrigger value="periods" className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            Period Management
-          </TabsTrigger>
-          <TabsTrigger value="audit" className="flex items-center gap-2">
-            <ScrollText className="h-4 w-4" />
-            Audit Trail
-          </TabsTrigger>
-          <TabsTrigger value="help" className="flex items-center gap-2">
-            <HelpCircle className="h-4 w-4" />
-            Help
-          </TabsTrigger>
-          <TabsTrigger value="settings" className="flex items-center gap-2">
-            <Settings className="h-4 w-4" />
-            Organization Settings
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="taxonomy" className="mt-6">
-          <TaxonomyManagement />
-        </TabsContent>
-
-        <TabsContent value="configuration" className="mt-6">
-          <RiskConfiguration />
-        </TabsContent>
-
-        <TabsContent value="users" className="mt-6">
-          <UserManagement />
-        </TabsContent>
-
-        <TabsContent value="periods" className="mt-6">
-          {user && profile && (
-            <PeriodManagement
-              orgId={profile.organization_id}
-              userId={user.id}
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="audit" className="mt-6">
-          <AuditTrail />
-        </TabsContent>
-
-        <TabsContent value="help" className="mt-6">
-          <HelpTab />
-        </TabsContent>
-
-        <TabsContent value="settings" className="mt-6">
-          <OrganizationSettings />
-        </TabsContent>
-      </Tabs>
+      {/* Tab Content */}
+      <div>
+        {activeTab === 'taxonomy' && <TaxonomyManagement />}
+        {activeTab === 'configuration' && <RiskConfiguration />}
+        {activeTab === 'users' && <UserManagement />}
+        {activeTab === 'periods' && user && profile && (
+          <PeriodManagement orgId={profile.organization_id} userId={user.id} />
+        )}
+        {activeTab === 'audit' && <AuditTrail />}
+        {activeTab === 'help' && <HelpTab />}
+        {activeTab === 'settings' && <OrganizationSettings />}
+      </div>
     </div>
   );
 }

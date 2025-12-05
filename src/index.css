@@ -78,3 +78,12 @@ body { @apply bg-white text-slate-900; }
     @apply bg-background text-foreground;
   }
 }
+
+/* Hide scrollbar while maintaining scroll functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
