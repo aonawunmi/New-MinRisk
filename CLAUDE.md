@@ -79,6 +79,12 @@ rm -rf node_modules/.vite
 npm run dev
 ```
 
+**⚠️ CRITICAL: This issue recurs frequently!**
+- Check for duplicate .js files **FIRST** when code changes don't appear
+- Run the diagnostic command: `find src -name "*.js" -type f | grep -v node_modules`
+- If it returns ANY files, delete them immediately
+- This has affected: AdminPanel, ControlForm, and potentially all 64+ components
+
 **Prevention:**
 Check `tsconfig.json` - the `outDir` should point to `dist/` or be removed entirely. Compiled files should NEVER be in `src/`.
 
