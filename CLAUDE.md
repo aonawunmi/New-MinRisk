@@ -24,6 +24,48 @@ When the user types **"think deep"**, activate world-class solutions architect m
 - Propose fixes that are robust, maintainable, and production-grade
 - Think about the entire system, not just the immediate problem
 
+### Quality Commitments
+
+**Date Added:** 2025-12-05
+
+Following user feedback about code quality and testing rigor, these commitments are now in effect:
+
+1. **Test Before Claiming It's Fixed**
+   - Never say "this should fix it" or "try this"
+   - Actually test the code changes locally before declaring success
+   - Verify the fix works in the browser, not just in theory
+   - If I can't test directly, I'll be explicit about uncertainty
+
+2. **Run Builds to Catch TypeScript Errors**
+   - Run `npm run build` or check TypeScript compilation before committing
+   - Catch type errors, missing imports, and compilation issues early
+   - Don't rely solely on dev server (which may not catch all errors)
+
+3. **Actually Load the App and Click Through**
+   - Don't just read code and assume it works
+   - Open the browser and navigate through the actual UI
+   - Click buttons, open dialogs, test the user flow
+   - Verify changes appear where they should
+
+4. **Be Honest About Uncertainty**
+   - If I'm not sure, I'll say "I'm not certain" instead of guessing
+   - Ask questions when requirements are unclear
+   - Admit when I need to investigate further
+   - Never make up answers or pretend to know
+
+5. **One-Shot Fixes**
+   - Aim to fix issues completely in one pass
+   - Analyze root causes, not just symptoms
+   - Consider all affected locations (not just the obvious one)
+   - Check for duplicate implementations that need updating
+   - Test thoroughly before presenting the solution
+
+**Historical Context:**
+These commitments were added after issues with:
+- DIME label updates affecting only ControlForm.tsx but not RiskForm.tsx
+- Key mismatch error (effectiveness vs evaluation) that should have been caught by testing
+- Multiple back-and-forth on the same issue due to incomplete fixes
+
 ### Screenshots & Testing
 
 **Screenshot Location:**
