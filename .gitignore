@@ -48,3 +48,9 @@ Screenshot*.png
 *.tmp
 *.temp
 .env.development
+
+# Compiled JavaScript files (TypeScript output)
+src/**/*.js
+src/**/*.jsx
+!*.config.js
+!scripts/*.js
