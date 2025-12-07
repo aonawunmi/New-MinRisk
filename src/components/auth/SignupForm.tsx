@@ -8,7 +8,8 @@
  * 2. Without invite code → Register → Pending approval
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { signUp } from '@/lib/auth';
 import { validateInvitation, useInvitation } from '@/lib/invitations';
 import { approveUser } from '@/lib/admin';
@@ -27,13 +28,10 @@ import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
 interface SignupFormProps {
   onSuccess: () => void;
-  onSwitchToLogin: () => void;
 }
 
-export default function SignupForm({
-  onSuccess,
-  onSwitchToLogin,
-}: SignupFormProps) {
+export default function SignupForm({ onSuccess }: SignupFormProps) {
+  const [searchParams] = useSearchParams();
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -45,6 +43,17 @@ export default function SignupForm({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Pre-fill invite code from URL parameter
+  useEffect(() => {
+    const inviteFromUrl = searchParams.get('invite');
+    if (inviteFromUrl) {
+      setFormData((prev) => ({
+        ...prev,
+        inviteCode: inviteFromUrl.toUpperCase(),
+      }));
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -304,14 +313,12 @@ export default function SignupForm({
 
             <div className="text-center text-sm text-gray-600 mt-4">
               Already have an account?{' '}
-              <button
-                type="button"
-                onClick={onSwitchToLogin}
-                className="text-blue-600 hover:underline font-medium"
-                disabled={isLoading}
+              <Link
+                to="/login"
+                className="text-blue-600 hover:text-blue-700 font-medium"
               >
                 Sign In
-              </button>
+              </Link>
             </div>
           </form>
 

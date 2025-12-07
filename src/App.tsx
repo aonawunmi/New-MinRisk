@@ -6,10 +6,12 @@
  */
 
 import { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { getCurrentUser } from '@/lib/auth';
 import { getCurrentUserProfile, isUserAdmin, isSuperAdmin } from '@/lib/profiles';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import LoginForm from '@/components/auth/LoginForm';
+import SignupForm from '@/components/auth/SignupForm';
 import UserMenu from '@/components/auth/UserMenu';
 import Dashboard from '@/components/dashboard/Dashboard';
 import Analytics from '@/components/analytics/Analytics';
@@ -88,9 +90,17 @@ export default function App() {
     );
   }
 
-  // Not logged in - show login form
+  // Not logged in - show auth pages with routing
   if (!authState.user || !authState.profile) {
-    return <LoginForm onSuccess={loadAuthState} />;
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginForm onSuccess={loadAuthState} />} />
+          <Route path="/signup" element={<SignupForm onSuccess={loadAuthState} />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </BrowserRouter>
+    );
   }
 
   // Logged in - show main app
