@@ -25,6 +25,7 @@ import { AdminIncidentReview } from '@/components/incidents/AdminIncidentReview'
 import ImportExportManager from '@/components/importExport/ImportExportManager';
 import AIAssistant from '@/components/ai/AIAssistant';
 import AdminPanel from '@/components/admin/AdminPanel';
+import AdminCheck from '@/components/debug/AdminCheck';
 import type { AuthState} from '@/types/auth';
 
 export default function App() {
@@ -97,6 +98,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginForm onSuccess={loadAuthState} />} />
           <Route path="/signup" element={<SignupForm onSuccess={loadAuthState} />} />
+          <Route path="/admin-check" element={<AdminCheck />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
