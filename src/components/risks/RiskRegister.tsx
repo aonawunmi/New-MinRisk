@@ -47,7 +47,6 @@ export default function RiskRegister() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingRisk, setEditingRisk] = useState<Risk | null>(null);
   const [showPriorityOnly, setShowPriorityOnly] = useState(false);
-  const [selectedOwner, setSelectedOwner] = useState<string>('all');
   const [selectedOwnerEmail, setSelectedOwnerEmail] = useState<string>('all');
   const [residualRisks, setResidualRisks] = useState<Map<string, ResidualRisk>>(new Map());
   const [activePeriod, setActivePeriod] = useState<Period | null>(null);
@@ -423,9 +422,6 @@ export default function RiskRegister() {
     );
   }
 
-  // Get unique owners for filter dropdown
-  const uniqueOwners = Array.from(new Set(risks.map(r => r.owner).filter(Boolean))).sort();
-
   // Get unique owner emails for filter dropdown (admin only)
   const uniqueOwnerEmails = Array.from(new Set(risks.map(r => r.owner_email).filter(Boolean))).sort();
 
@@ -437,12 +433,7 @@ export default function RiskRegister() {
         return false;
       }
 
-      // Owner filter (admin only) - legacy text field
-      if (selectedOwner !== 'all' && risk.owner !== selectedOwner) {
-        return false;
-      }
-
-      // Owner Email filter (admin only) - new owner_id field
+      // Owner filter (admin only)
       if (selectedOwnerEmail !== 'all' && risk.owner_email !== selectedOwnerEmail) {
         return false;
       }
@@ -564,36 +555,16 @@ export default function RiskRegister() {
                 {showPriorityOnly ? 'Show All Risks' : 'Priority Only'}
               </Button>
 
-              {/* Owner Filter (Admin only) - Legacy text field */}
-              {isAdmin && uniqueOwners.length > 0 && (
+              {/* Owner Filter (Admin only) */}
+              {isAdmin && uniqueOwnerEmails.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-gray-700">Owner (Legacy):</label>
-                  <Select value={selectedOwner} onValueChange={setSelectedOwner}>
-                    <SelectTrigger className="w-[200px]">
+                  <label className="text-sm font-medium text-gray-700">Owner:</label>
+                  <Select value={selectedOwnerEmail} onValueChange={setSelectedOwnerEmail}>
+                    <SelectTrigger className="w-[250px]">
                       <SelectValue placeholder="All Owners" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Owners</SelectItem>
-                      {uniqueOwners.map((owner) => (
-                        <SelectItem key={owner} value={owner}>
-                          {owner}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {/* Owner Email Filter (Admin only) - New owner_id field */}
-              {isAdmin && uniqueOwnerEmails.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-gray-700">Owner Email:</label>
-                  <Select value={selectedOwnerEmail} onValueChange={setSelectedOwnerEmail}>
-                    <SelectTrigger className="w-[250px]">
-                      <SelectValue placeholder="All Owner Emails" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Owner Emails</SelectItem>
                       {uniqueOwnerEmails.map((email) => (
                         <SelectItem key={email} value={email}>
                           {email}
@@ -661,21 +632,13 @@ export default function RiskRegister() {
                         Category {getSortIcon('category')}
                       </button>
                     </TableHead>
-                    <TableHead>
-                      <button
-                        onClick={() => handleSort('owner')}
-                        className="flex items-center hover:text-gray-900 transition-colors"
-                      >
-                        Owner {getSortIcon('owner')}
-                      </button>
-                    </TableHead>
                     {isAdmin && (
                       <TableHead>
                         <button
                           onClick={() => handleSort('owner_email')}
                           className="flex items-center hover:text-gray-900 transition-colors"
                         >
-                          Owner Email {getSortIcon('owner_email')}
+                          Owner {getSortIcon('owner_email')}
                         </button>
                       </TableHead>
                     )}
@@ -702,7 +665,7 @@ export default function RiskRegister() {
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                   <TableRow>
-                    <TableHead colSpan={isAdmin ? 7 : 6}></TableHead>
+                    <TableHead colSpan={isAdmin ? 6 : 5}></TableHead>
                     <TableHead className="text-center text-xs w-12">L</TableHead>
                     <TableHead className="text-center text-xs w-12">I</TableHead>
                     <TableHead className="text-center text-xs w-16">
@@ -763,7 +726,6 @@ export default function RiskRegister() {
                           {risk.risk_title}
                         </TableCell>
                         <TableCell className="whitespace-normal break-words text-xs">{risk.category}</TableCell>
-                        <TableCell className="max-w-[150px] whitespace-normal break-words text-xs">{risk.owner}</TableCell>
                         {isAdmin && (
                           <TableCell className="max-w-[200px] whitespace-normal break-words text-xs">
                             {risk.owner_email || <span className="text-gray-400 italic">No email</span>}
