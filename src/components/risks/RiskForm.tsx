@@ -14,6 +14,8 @@ import { refineRiskStatement, type RiskStatementRefinement, revalidateEditedStat
 import { createControl, getControlsForRisk, updateControl, deleteControl } from '@/lib/controls';
 import { getAlertsWithEventsForRisk, type RiskIntelligenceAlert, type ExternalEvent } from '@/lib/riskIntelligence';
 import { getOrganizationConfig, getLikelihoodOptions, getImpactOptions, type OrganizationConfig } from '@/lib/config';
+import { listUsersInOrganization } from '@/lib/admin';
+import { supabase } from '@/lib/supabase';
 import type { Control, UpdateControlData } from '@/types/control';
 import type { Risk, CreateRiskData } from '@/types/risk';
 import { Button } from '@/components/ui/button';
@@ -148,6 +150,17 @@ export default function RiskForm({
   const [intelligenceAlerts, setIntelligenceAlerts] = useState<AlertWithEvent[]>([]);
   const [loadingAlerts, setLoadingAlerts] = useState(false);
 
+  // User selection state (for owner dropdown)
+  interface OrgUser {
+    id: string;
+    full_name: string;
+    email: string;
+    role: string;
+  }
+  const [orgUsers, setOrgUsers] = useState<OrgUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [selectedOwnerId, setSelectedOwnerId] = useState<string>('');
+
   // Organization configuration state
   const [orgConfig, setOrgConfig] = useState<OrganizationConfig | null>(null);
   const [loadingConfig, setLoadingConfig] = useState(false);
@@ -280,12 +293,13 @@ export default function RiskForm({
     }
   }
 
-  // Load taxonomy, libraries, and config on component mount
+  // Load taxonomy, libraries, config, and users on component mount
   useEffect(() => {
     if (open) {
       loadTaxonomy();
       loadLibraries();
       loadConfig();
+      loadUsers();
     }
   }, [open]);
 
@@ -302,6 +316,42 @@ export default function RiskForm({
       console.error('Unexpected config load error:', err);
     } finally {
       setLoadingConfig(false);
+    }
+  }
+
+  async function loadUsers() {
+    setLoadingUsers(true);
+    try {
+      // Get current user's organization_id
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('User not authenticated');
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile) {
+        console.error('User profile not found');
+        return;
+      }
+
+      // Load all users in organization
+      const { data: users, error } = await listUsersInOrganization(profile.organization_id);
+
+      if (error) {
+        console.error('Failed to load users:', error);
+      } else {
+        setOrgUsers(users || []);
+      }
+    } catch (err) {
+      console.error('Unexpected user load error:', err);
+    } finally {
+      setLoadingUsers(false);
     }
   }
 
@@ -363,6 +413,7 @@ export default function RiskForm({
         department: editingRisk.department,
         category: editingRisk.category,
         owner: editingRisk.owner,
+        owner_id: editingRisk.owner_id || null,
         likelihood_inherent: editingRisk.likelihood_inherent,
         impact_inherent: editingRisk.impact_inherent,
         status: editingRisk.status,
@@ -372,6 +423,9 @@ export default function RiskForm({
         impact_id: editingRisk.impact_id || null,
         event_text: editingRisk.event_text || null,
       });
+
+      // Set selected owner
+      setSelectedOwnerId(editingRisk.owner_id || '');
 
       // Set selected root cause and impact
       setSelectedRootCauseId(editingRisk.root_cause_id || '');
@@ -407,6 +461,7 @@ export default function RiskForm({
         department: '',
         category: '',
         owner: '',
+        owner_id: null,
         likelihood_inherent: 1,
         impact_inherent: 1,
         status: 'OPEN',
@@ -420,6 +475,7 @@ export default function RiskForm({
       setSelectedSubcategory('');
       setSelectedRootCauseId('');
       setSelectedImpactId('');
+      setSelectedOwnerId('');
     }
     setError(null);
     setRefinement(null);
@@ -1078,14 +1134,37 @@ export default function RiskForm({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="owner">Risk Owner *</Label>
-              <Input
-                id="owner"
-                value={formData.owner}
-                onChange={(e) => handleChange('owner', e.target.value)}
-                placeholder="e.g., John Doe"
-                required
-                disabled={loading}
-              />
+              <Select
+                value={selectedOwnerId}
+                onValueChange={(userId) => {
+                  setSelectedOwnerId(userId);
+                  // Find the selected user
+                  const selectedUser = orgUsers.find(u => u.id === userId);
+                  if (selectedUser) {
+                    // Update both owner (display name) and owner_id (UUID)
+                    handleChange('owner', selectedUser.full_name);
+                    setFormData(prev => ({
+                      ...prev,
+                      owner_id: userId,
+                    }));
+                  }
+                }}
+                disabled={loading || loadingUsers}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingUsers ? "Loading users..." : "Select risk owner"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {orgUsers.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.full_name} ({user.email})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {orgUsers.length === 0 && !loadingUsers && (
+                <p className="text-xs text-gray-500">No users available</p>
+              )}
             </div>
 
             <div className="space-y-2">

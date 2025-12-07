@@ -13,7 +13,9 @@ export interface Risk {
   division: string;
   department: string;
   category: string;
-  owner: string;
+  owner: string; // Legacy TEXT field - kept for backward compatibility
+  owner_id?: string | null; // New field - UUID reference to auth.users
+  owner_email?: string; // Computed field from join with auth.users
   likelihood_inherent: number;
   impact_inherent: number;
   residual_likelihood?: number;
@@ -30,6 +32,8 @@ export interface Risk {
   refined_risk_statement?: string | null;
   created_at: string;
   updated_at: string;
+  created_period_year?: number | null;
+  created_period_quarter?: number | null;
 }
 
 export interface Control {

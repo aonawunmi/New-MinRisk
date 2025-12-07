@@ -48,6 +48,7 @@ export default function RiskRegister() {
   const [editingRisk, setEditingRisk] = useState<Risk | null>(null);
   const [showPriorityOnly, setShowPriorityOnly] = useState(false);
   const [selectedOwner, setSelectedOwner] = useState<string>('all');
+  const [selectedOwnerEmail, setSelectedOwnerEmail] = useState<string>('all');
   const [residualRisks, setResidualRisks] = useState<Map<string, ResidualRisk>>(new Map());
   const [activePeriod, setActivePeriod] = useState<Period | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -423,6 +424,9 @@ export default function RiskRegister() {
   // Get unique owners for filter dropdown
   const uniqueOwners = Array.from(new Set(risks.map(r => r.owner).filter(Boolean))).sort();
 
+  // Get unique owner emails for filter dropdown (admin only)
+  const uniqueOwnerEmails = Array.from(new Set(risks.map(r => r.owner_email).filter(Boolean))).sort();
+
   // Filter and sort risks
   const filteredRisks = risks
     .filter((risk) => {
@@ -431,8 +435,13 @@ export default function RiskRegister() {
         return false;
       }
 
-      // Owner filter (admin only)
+      // Owner filter (admin only) - legacy text field
       if (selectedOwner !== 'all' && risk.owner !== selectedOwner) {
+        return false;
+      }
+
+      // Owner Email filter (admin only) - new owner_id field
+      if (selectedOwnerEmail !== 'all' && risk.owner_email !== selectedOwnerEmail) {
         return false;
       }
 
@@ -462,6 +471,10 @@ export default function RiskRegister() {
         case 'owner':
           aValue = a.owner || '';
           bValue = b.owner || '';
+          break;
+        case 'owner_email':
+          aValue = a.owner_email || '';
+          bValue = b.owner_email || '';
           break;
         case 'period':
           aValue = a.period || '';
@@ -549,10 +562,10 @@ export default function RiskRegister() {
                 {showPriorityOnly ? 'Show All Risks' : 'Priority Only'}
               </Button>
 
-              {/* Owner Filter (Admin only) */}
+              {/* Owner Filter (Admin only) - Legacy text field */}
               {isAdmin && uniqueOwners.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-gray-700">Owner:</label>
+                  <label className="text-sm font-medium text-gray-700">Owner (Legacy):</label>
                   <Select value={selectedOwner} onValueChange={setSelectedOwner}>
                     <SelectTrigger className="w-[200px]">
                       <SelectValue placeholder="All Owners" />
@@ -562,6 +575,26 @@ export default function RiskRegister() {
                       {uniqueOwners.map((owner) => (
                         <SelectItem key={owner} value={owner}>
                           {owner}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Owner Email Filter (Admin only) - New owner_id field */}
+              {isAdmin && uniqueOwnerEmails.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">Owner Email:</label>
+                  <Select value={selectedOwnerEmail} onValueChange={setSelectedOwnerEmail}>
+                    <SelectTrigger className="w-[250px]">
+                      <SelectValue placeholder="All Owner Emails" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Owner Emails</SelectItem>
+                      {uniqueOwnerEmails.map((email) => (
+                        <SelectItem key={email} value={email}>
+                          {email}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -602,16 +635,6 @@ export default function RiskRegister() {
                         title="Select all risks"
                       />
                     </TableHead>
-                    <TableHead className="w-[100px] text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <Checkbox
-                          checked={filteredRisks.length > 0 && filteredRisks.every((r) => r.is_priority)}
-                          onCheckedChange={(checked) => handleBulkPriorityToggle(checked === true)}
-                          title="Mark all filtered risks as priority"
-                        />
-                        <span className="text-xs">Priority</span>
-                      </div>
-                    </TableHead>
                     <TableHead>
                       <button
                         onClick={() => handleSort('code')}
@@ -644,6 +667,16 @@ export default function RiskRegister() {
                         Owner {getSortIcon('owner')}
                       </button>
                     </TableHead>
+                    {isAdmin && (
+                      <TableHead>
+                        <button
+                          onClick={() => handleSort('owner_email')}
+                          className="flex items-center hover:text-gray-900 transition-colors"
+                        >
+                          Owner Email {getSortIcon('owner_email')}
+                        </button>
+                      </TableHead>
+                    )}
                     <TableHead className="text-center">
                       <button
                         onClick={() => handleSort('created')}
@@ -667,7 +700,7 @@ export default function RiskRegister() {
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                   <TableRow>
-                    <TableHead colSpan={7}></TableHead>
+                    <TableHead colSpan={isAdmin ? 7 : 6}></TableHead>
                     <TableHead className="text-center text-xs w-12">L</TableHead>
                     <TableHead className="text-center text-xs w-12">I</TableHead>
                     <TableHead className="text-center text-xs w-16">
@@ -721,15 +754,6 @@ export default function RiskRegister() {
                             title="Select for deletion"
                           />
                         </TableCell>
-                        <TableCell className="text-center">
-                          <Checkbox
-                            checked={risk.is_priority}
-                            onCheckedChange={(checked) =>
-                              handlePriorityToggle(risk, checked === true)
-                            }
-                            title="Mark as priority risk"
-                          />
-                        </TableCell>
                         <TableCell className="font-medium text-xs">
                           {risk.risk_code}
                         </TableCell>
@@ -738,6 +762,11 @@ export default function RiskRegister() {
                         </TableCell>
                         <TableCell className="whitespace-normal break-words text-xs">{risk.category}</TableCell>
                         <TableCell className="max-w-[150px] whitespace-normal break-words text-xs">{risk.owner}</TableCell>
+                        {isAdmin && (
+                          <TableCell className="max-w-[200px] whitespace-normal break-words text-xs">
+                            {risk.owner_email || <span className="text-gray-400 italic">No email</span>}
+                          </TableCell>
+                        )}
                         <TableCell className="text-center text-xs text-gray-600">
                           {risk.created_period_year && risk.created_period_quarter
                             ? `Q${risk.created_period_quarter} ${risk.created_period_year}`

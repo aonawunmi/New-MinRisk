@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { supabaseAdmin } from './supabase';
 import type { Risk, RiskWithControls, Control } from '@/types/risk';
 
 /**
@@ -15,7 +16,8 @@ export interface CreateRiskData {
   division: string;
   department: string;
   category: string;
-  owner: string;
+  owner: string; // Legacy TEXT field
+  owner_id?: string | null; // New field - UUID reference to auth.users
   likelihood_inherent: number;
   impact_inherent: number;
   status?: string;
@@ -82,12 +84,13 @@ async function generateRiskCode(
 }
 
 /**
- * Get all risks for the current user's organization
+ * Get all risks for the current user's organization with owner email
  * RLS automatically filters by organization_id
+ * Fetches owner email from auth.users via admin client
  */
 export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | null }> {
   try {
-    const { data, error } = await supabase
+    const { data: risks, error } = await supabase
       .from('risks')
       .select('*')
       .order('created_at', { ascending: false });
@@ -97,7 +100,49 @@ export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | 
       return { data: null, error: new Error(error.message) };
     }
 
-    return { data, error: null };
+    // If no risks, return empty array
+    if (!risks || risks.length === 0) {
+      return { data: [], error: null };
+    }
+
+    // Get unique owner_ids that are not null
+    const ownerIds = Array.from(new Set(
+      risks
+        .map(r => r.owner_id)
+        .filter((id): id is string => id !== null && id !== undefined)
+    ));
+
+    // If no owner_ids, return risks as-is
+    if (ownerIds.length === 0) {
+      return { data: risks, error: null };
+    }
+
+    // Fetch owner emails from auth.users using admin client (bypasses RLS)
+    if (!supabaseAdmin) {
+      console.warn('Admin client not available - returning risks without owner emails');
+      return { data: risks, error: null };
+    }
+
+    const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+
+    if (authError) {
+      console.warn('Failed to fetch owner emails:', authError.message);
+      // Return risks without emails rather than failing completely
+      return { data: risks, error: null };
+    }
+
+    // Create email lookup map
+    const emailMap = new Map(
+      authUsers.users.map(u => [u.id, u.email || ''])
+    );
+
+    // Merge owner emails into risks
+    const risksWithEmails = risks.map(risk => ({
+      ...risk,
+      owner_email: risk.owner_id ? emailMap.get(risk.owner_id) || null : null,
+    }));
+
+    return { data: risksWithEmails, error: null };
   } catch (err) {
     console.error('Unexpected get risks error:', err);
     return {
@@ -196,6 +241,7 @@ export async function createRisk(
           organization_id: profile.organization_id,
           user_id: user.id,
           owner_profile_id: user.id,
+          owner_id: riskData.owner_id || user.id, // Default to creator if not specified
           status: riskData.status || 'OPEN',
           is_priority: riskData.is_priority || false,
         },

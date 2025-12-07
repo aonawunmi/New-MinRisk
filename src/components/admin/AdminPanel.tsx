@@ -7,6 +7,7 @@ import RiskConfiguration from './RiskConfiguration';
 import PeriodManagement from './PeriodManagement';
 import AuditTrail from './AuditTrail';
 import HelpTab from './HelpTab';
+import OwnerMappingTool from './OwnerMappingTool';
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
@@ -16,6 +17,7 @@ export default function AdminPanel() {
     { id: 'taxonomy', label: 'Risk Taxonomy' },
     { id: 'configuration', label: 'Risk Configuration' },
     { id: 'users', label: 'User Management' },
+    { id: 'owner-mapping', label: 'Owner Mapping' },
     { id: 'periods', label: 'Period Management' },
     { id: 'audit', label: 'Audit Trail' },
     { id: 'help', label: 'Help' },
@@ -72,6 +74,7 @@ export default function AdminPanel() {
         {activeTab === 'taxonomy' && <TaxonomyManagement />}
         {activeTab === 'configuration' && <RiskConfiguration />}
         {activeTab === 'users' && <UserManagement />}
+        {activeTab === 'owner-mapping' && <OwnerMappingTool />}
         {activeTab === 'periods' && user && profile && (
           <PeriodManagement orgId={profile.organization_id} userId={user.id} />
         )}
