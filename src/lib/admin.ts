@@ -37,7 +37,7 @@ export interface AdminResult<T = any> {
  */
 export async function listUsersInOrganization(
   organizationId: string
-): Promise<AdminResult<UserProfile[]>> {
+): Promise<AdminResult<any[]>> {
   if (!supabaseAdmin) {
     return {
       data: null,
@@ -46,18 +46,36 @@ export async function listUsersInOrganization(
   }
 
   try {
-    const { data, error } = await supabaseAdmin
+    // Query user_profiles and join with auth.users to get email
+    const { data: profiles, error: profilesError } = await supabaseAdmin
       .from('user_profiles')
       .select('*')
       .eq('organization_id', organizationId)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('List users error:', error.message);
-      return { data: null, error: new Error(error.message) };
+    if (profilesError) {
+      console.error('List users error:', profilesError.message);
+      return { data: null, error: new Error(profilesError.message) };
     }
 
-    return { data: (data as UserProfile[]) || [], error: null };
+    // Get emails from auth.users for each profile
+    const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+
+    if (authError) {
+      console.error('List auth users error:', authError.message);
+      return { data: null, error: new Error(authError.message) };
+    }
+
+    // Create a map of user_id -> email
+    const emailMap = new Map(authUsers.users.map(u => [u.id, u.email]));
+
+    // Merge profiles with emails
+    const usersWithEmail = (profiles || []).map(profile => ({
+      ...profile,
+      email: emailMap.get(profile.id) || '',
+    }));
+
+    return { data: usersWithEmail, error: null };
   } catch (err) {
     console.error('Unexpected list users error:', err);
     return {
@@ -83,7 +101,7 @@ export async function listUsersInOrganization(
  */
 export async function listPendingUsers(
   organizationId: string
-): Promise<AdminResult<UserProfile[]>> {
+): Promise<AdminResult<any[]>> {
   if (!supabaseAdmin) {
     return {
       data: null,
@@ -92,19 +110,37 @@ export async function listPendingUsers(
   }
 
   try {
-    const { data, error } = await supabaseAdmin
+    // Query pending user_profiles
+    const { data: profiles, error: profilesError } = await supabaseAdmin
       .from('user_profiles')
       .select('*')
       .eq('organization_id', organizationId)
       .eq('status', 'pending')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false});
 
-    if (error) {
-      console.error('List pending users error:', error.message);
-      return { data: null, error: new Error(error.message) };
+    if (profilesError) {
+      console.error('List pending users error:', profilesError.message);
+      return { data: null, error: new Error(profilesError.message) };
     }
 
-    return { data: (data as UserProfile[]) || [], error: null };
+    // Get emails from auth.users for each profile
+    const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+
+    if (authError) {
+      console.error('List auth users error:', authError.message);
+      return { data: null, error: new Error(authError.message) };
+    }
+
+    // Create a map of user_id -> email
+    const emailMap = new Map(authUsers.users.map(u => [u.id, u.email]));
+
+    // Merge profiles with emails
+    const usersWithEmail = (profiles || []).map(profile => ({
+      ...profile,
+      email: emailMap.get(profile.id) || '',
+    }));
+
+    return { data: usersWithEmail, error: null };
   } catch (err) {
     console.error('Unexpected list pending users error:', err);
     return {
