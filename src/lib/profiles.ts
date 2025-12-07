@@ -59,7 +59,7 @@ export async function getCurrentUserProfile(): Promise<ProfileResult> {
       .from('user_profiles')
       .select('*')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Get profile error:', error.message);
