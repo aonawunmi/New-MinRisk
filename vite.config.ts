@@ -14,6 +14,14 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 3000,
+      // Enable SPA fallback for client-side routing
+      // All 404s will serve index.html, letting React Router handle the route
+      historyApiFallback: true,
+    },
+    preview: {
+      port: 3000,
+      // Same for production preview
+      historyApiFallback: true,
     },
   };
 })

@@ -83,6 +83,7 @@ export default function InvitationManagement() {
   });
   const [creating, setCreating] = useState(false);
   const [createdInvite, setCreatedInvite] = useState<UserInvitation | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     loadInvitations();
@@ -192,6 +193,12 @@ export default function InvitationManagement() {
   function handleCopySignupLink(code: string) {
     const signupLink = `${window.location.origin}/signup?invite=${code}`;
     navigator.clipboard.writeText(signupLink);
+
+    // Immediate button feedback
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+
+    // Success message
     setSuccess('Signup link copied to clipboard! Send this to the user.');
     setTimeout(() => setSuccess(null), 3000);
   }
@@ -387,12 +394,21 @@ export default function InvitationManagement() {
                     </code>
                     <Button
                       size="sm"
-                      variant="default"
+                      variant={linkCopied ? "outline" : "default"}
                       onClick={() => handleCopySignupLink(createdInvite.invite_code)}
-                      className="shrink-0"
+                      className={`shrink-0 ${linkCopied ? 'bg-green-50 text-green-700 border-green-300' : ''}`}
                     >
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy Link
+                      {linkCopied ? (
+                        <>
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4 mr-2" />
+                          Copy Link
+                        </>
+                      )}
                     </Button>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
@@ -513,6 +529,7 @@ export default function InvitationManagement() {
               <Button
                 onClick={() => {
                   setCreatedInvite(null);
+                  setLinkCopied(false);
                   setShowCreateDialog(false);
                 }}
               >
