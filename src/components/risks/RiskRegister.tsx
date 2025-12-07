@@ -175,7 +175,9 @@ export default function RiskRegister() {
         .eq('id', user.id)
         .single();
 
-      setIsAdmin(profile?.role === 'admin');
+      // Check if user has any admin role (primary_admin, secondary_admin, or super_admin)
+      const isAdminRole = profile?.role && ['super_admin', 'primary_admin', 'secondary_admin'].includes(profile.role);
+      setIsAdmin(!!isAdminRole);
     } catch (err) {
       console.error('Error checking admin role:', err);
     }

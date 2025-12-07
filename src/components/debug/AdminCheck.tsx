@@ -33,13 +33,16 @@ export default function AdminCheck() {
         .eq('id', user.id)
         .single();
 
+      // Check if user has any admin role
+      const isAdminRole = profile?.role && ['super_admin', 'primary_admin', 'secondary_admin'].includes(profile.role);
+
       setStatus({
         user_id: user.id,
         email: user.email,
         profile_email: profile?.email,
         full_name: profile?.full_name,
         role: profile?.role,
-        is_admin: profile?.role === 'admin',
+        is_admin: !!isAdminRole,
         organization_id: profile?.organization_id,
       });
     } catch (err: any) {
@@ -96,15 +99,20 @@ export default function AdminCheck() {
               <div className="bg-yellow-50 border border-yellow-200 rounded p-4 mt-4">
                 <h4 className="font-semibold text-yellow-800 mb-2">Action Required:</h4>
                 <p className="text-yellow-700 mb-3">
-                  Your role is currently <strong>'{status.role}'</strong>. To see admin features like the Owner Email column, your role needs to be 'admin'.
+                  Your role is currently <strong>'{status.role}'</strong>. To see admin features like the Owner Email column, your role needs to be one of:
                 </p>
+                <ul className="list-disc list-inside mb-3 text-yellow-700">
+                  <li><strong>primary_admin</strong> - Primary organization administrator</li>
+                  <li><strong>secondary_admin</strong> - Secondary administrator</li>
+                  <li><strong>super_admin</strong> - Platform super administrator</li>
+                </ul>
                 <div className="bg-white rounded p-3 text-sm">
                   <p className="font-semibold mb-2">To fix this:</p>
                   <ol className="list-decimal list-inside space-y-1 text-gray-700">
                     <li>Go to: <a href="https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/editor" target="_blank" className="text-blue-600 underline">Supabase Dashboard</a></li>
                     <li>Click on the <strong>user_profiles</strong> table</li>
                     <li>Find your email: <strong>{status.email}</strong></li>
-                    <li>Edit the <strong>role</strong> column to: <strong>admin</strong></li>
+                    <li>Edit the <strong>role</strong> column to: <strong>primary_admin</strong></li>
                     <li>Save and refresh this page</li>
                   </ol>
                 </div>
