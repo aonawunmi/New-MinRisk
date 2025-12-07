@@ -189,6 +189,13 @@ export default function InvitationManagement() {
     setTimeout(() => setSuccess(null), 3000);
   }
 
+  function handleCopySignupLink(code: string) {
+    const signupLink = `${window.location.origin}/signup?invite=${code}`;
+    navigator.clipboard.writeText(signupLink);
+    setSuccess('Signup link copied to clipboard! Send this to the user.');
+    setTimeout(() => setSuccess(null), 3000);
+  }
+
   function getStatusBadge(status: InvitationStatus) {
     switch (status) {
       case 'pending':
@@ -373,19 +380,24 @@ export default function InvitationManagement() {
 
               <div className="p-4 bg-gray-50 rounded-lg space-y-3">
                 <div>
-                  <Label className="text-xs text-gray-500">Invite Code</Label>
+                  <Label className="text-xs text-gray-500">Signup Link</Label>
                   <div className="flex items-center gap-2 mt-1">
-                    <code className="text-2xl font-bold text-blue-600">
-                      {createdInvite.invite_code}
+                    <code className="text-sm font-mono text-blue-600 flex-1 truncate">
+                      {window.location.origin}/signup?invite={createdInvite.invite_code}
                     </code>
                     <Button
                       size="sm"
-                      variant="outline"
-                      onClick={() => handleCopyCode(createdInvite.invite_code)}
+                      variant="default"
+                      onClick={() => handleCopySignupLink(createdInvite.invite_code)}
+                      className="shrink-0"
                     >
-                      <Copy className="h-4 w-4" />
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy Link
                     </Button>
                   </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Copy this link and send it to the user. The invite code will be pre-filled.
+                  </p>
                 </div>
 
                 <div>
@@ -406,10 +418,14 @@ export default function InvitationManagement() {
                 </div>
               </div>
 
-              <p className="text-sm text-gray-600">
-                Send this invite code to {createdInvite.email}. They can use it to
-                sign up and will be automatically approved.
-              </p>
+              <Alert className="bg-blue-50 border-blue-200">
+                <Mail className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-900">
+                  <strong>Next step:</strong> Copy the signup link above and send it to{' '}
+                  <strong>{createdInvite.email}</strong> via email. When they click it,
+                  they'll be taken directly to the signup page with the invite code already filled in.
+                </AlertDescription>
+              </Alert>
             </div>
           ) : (
             // Creation form
