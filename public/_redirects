@@ -1,0 +1,4 @@
+# SPA fallback rule for React Router
+# This tells the server to serve index.html for all routes
+# allowing React Router to handle client-side routing
+/*    /index.html   200
