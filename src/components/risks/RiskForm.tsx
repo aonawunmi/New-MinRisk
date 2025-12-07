@@ -47,6 +47,7 @@ interface RiskFormProps {
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   editingRisk?: Risk | null;
+  readOnly?: boolean;
 }
 
 export default function RiskForm({
@@ -54,6 +55,7 @@ export default function RiskForm({
   onOpenChange,
   onSuccess,
   editingRisk,
+  readOnly = false,
 }: RiskFormProps) {
   const [formData, setFormData] = useState<CreateRiskData>({
     risk_title: '',
@@ -1100,6 +1102,17 @@ export default function RiskForm({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Read-Only Mode Banner */}
+        {readOnly && editingRisk && (
+          <Alert className="bg-blue-50 border-blue-200">
+            <AlertCircle className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-900">
+              <strong>Read-only view.</strong> Owner: <strong>{editingRisk.owner_email || 'Unassigned'}</strong>.
+              Only the risk owner or administrators can edit this risk.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
@@ -1107,7 +1120,10 @@ export default function RiskForm({
           </Alert>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form
+          onSubmit={readOnly ? (e) => e.preventDefault() : handleSubmit}
+          className={`space-y-4 ${readOnly ? 'pointer-events-none opacity-70' : ''}`}
+        >
           {/* Risk Code - only show when editing (read-only) */}
           {editingRisk && (
             <div className="space-y-2">
@@ -2849,18 +2865,20 @@ export default function RiskForm({
               onClick={() => onOpenChange(false)}
               disabled={loading}
             >
-              Cancel
+              {readOnly ? 'Close' : 'Cancel'}
             </Button>
-            <Button type="submit" disabled={loading || !selectedCategory || !selectedSubcategory}>
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {editingRisk ? 'Updating...' : 'Creating...'}
-                </>
-              ) : (
-                <>{editingRisk ? 'Update Risk' : 'Create Risk'}</>
-              )}
-            </Button>
+            {!readOnly && (
+              <Button type="submit" disabled={loading || !selectedCategory || !selectedSubcategory}>
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {editingRisk ? 'Updating...' : 'Creating...'}
+                  </>
+                ) : (
+                  <>{editingRisk ? 'Update Risk' : 'Create Risk'}</>
+                )}
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

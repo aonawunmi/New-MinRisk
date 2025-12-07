@@ -35,7 +35,7 @@ import {
 } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit, Trash2, AlertCircle, RefreshCw, Star, Archive, ArrowUpDown, ArrowUp, ArrowDown, Activity, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, AlertCircle, RefreshCw, Star, Archive, ArrowUpDown, ArrowUp, ArrowDown, Activity, Calendar, Eye } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -51,6 +51,8 @@ export default function RiskRegister() {
   const [residualRisks, setResidualRisks] = useState<Map<string, ResidualRisk>>(new Map());
   const [activePeriod, setActivePeriod] = useState<Period | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [readOnlyMode, setReadOnlyMode] = useState(false);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [kriCounts, setKriCounts] = useState<Map<string, number>>(new Map());
@@ -167,6 +169,9 @@ export default function RiskRegister() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      // Store current user ID
+      setCurrentUserId(user.id);
 
       const { data: profile } = await supabase
         .from('user_profiles')
@@ -350,6 +355,11 @@ export default function RiskRegister() {
 
   const handleEditRisk = (risk: Risk) => {
     setEditingRisk(risk);
+
+    // Determine if user can edit: owner OR admin
+    const canEdit = isAdmin || (currentUserId && risk.owner_id === currentUserId);
+    setReadOnlyMode(!canEdit);
+
     setFormOpen(true);
   };
 
@@ -555,8 +565,8 @@ export default function RiskRegister() {
                 {showPriorityOnly ? 'Show All Risks' : 'Priority Only'}
               </Button>
 
-              {/* Owner Filter (Admin only) */}
-              {isAdmin && uniqueOwnerEmails.length > 0 && (
+              {/* Owner Filter (Available to all users for workflow efficiency) */}
+              {uniqueOwnerEmails.length > 0 && (
                 <div className="flex items-center gap-2">
                   <label className="text-sm font-medium text-gray-700">Owner:</label>
                   <Select value={selectedOwnerEmail} onValueChange={setSelectedOwnerEmail}>
@@ -811,13 +821,24 @@ export default function RiskRegister() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEditRisk(risk)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
+                            {/* Edit/View button with visual indicator */}
+                            {(() => {
+                              const canEdit = isAdmin || (currentUserId && risk.owner_id === currentUserId);
+                              return (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditRisk(risk)}
+                                  title={canEdit ? 'Edit risk' : 'View risk (read-only)'}
+                                >
+                                  {canEdit ? (
+                                    <Edit className="h-4 w-4" />
+                                  ) : (
+                                    <Eye className="h-4 w-4 text-blue-600" />
+                                  )}
+                                </Button>
+                              );
+                            })()}
                             <Button
                               variant="ghost"
                               size="sm"
@@ -854,6 +875,7 @@ export default function RiskRegister() {
         onOpenChange={setFormOpen}
         onSuccess={handleFormSuccess}
         editingRisk={editingRisk}
+        readOnly={readOnlyMode}
       />
 
       {/* KRI Details Dialog */}
