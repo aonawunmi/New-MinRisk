@@ -525,21 +525,22 @@ export async function classifyRiskStatement(
   taxonomy: { category: string; subcategory: string; category_description: string; subcategory_description: string }[]
 ): Promise<ApiResponse<AIRiskClassification>> {
   try {
-    // Get API key from environment
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    // Check for demo mode
     const useDemoMode = import.meta.env.VITE_AI_DEMO_MODE === 'true';
 
-    if (!apiKey && !useDemoMode) {
-      return {
-        data: null,
-        error: new Error('Anthropic API key not configured.'),
-      };
-    }
-
-    // If demo mode, return mock classification
     if (useDemoMode) {
       console.log('AI Demo Mode: Classifying risk statement');
       return generateDemoClassification(userStatement, taxonomy);
+    }
+
+    // Get authentication session for Edge Function
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+    if (sessionError || !session) {
+      return {
+        data: null,
+        error: new Error('Not authenticated. Please log in to use AI classification.'),
+      };
     }
 
     // Build taxonomy context for AI
@@ -584,32 +585,28 @@ IMPORTANT:
 - If unsure, choose the closest match and set confidence to "medium" or "low"
 - Return ONLY the JSON object, no other text.`;
 
-    // Call Claude API
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 1024,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }),
-    });
+    // Call Edge Function (secure server-side proxy)
+    const response = await fetch(
+      `${supabase.supabaseUrl}/functions/v1/ai-refine`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt,
+          maxTokens: 1024,
+        }),
+      }
+    );
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('Claude API error:', errorData);
+      console.error('Edge Function error:', errorData);
       return {
         data: null,
-        error: new Error(`Claude API error: ${errorData.error?.message || response.statusText}`),
+        error: new Error(`AI service error: ${errorData.error || response.statusText}`),
       };
     }
 
