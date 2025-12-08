@@ -688,7 +688,7 @@ export async function getAlertsSummary(): Promise<{
 
     // Get intelligence alerts
     const { count: intelligenceCount, error: intelError } = await supabase
-      .from('risk_intelligence_alerts')
+      .from('intelligence_alerts')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'pending');
 

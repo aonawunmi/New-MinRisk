@@ -467,9 +467,10 @@ export async function cleanupDuplicateEvents(): Promise<{
 // ============================================================================
 
 /**
- * Analyze if an event is relevant to a specific risk using Claude API
+ * Analyze if an event is relevant to a specific risk using Edge Function
  *
- * NOTE: This requires VITE_ANTHROPIC_API_KEY in .env
+ * SECURITY: This function now calls the server-side Edge Function only.
+ * The old implementation that exposed VITE_ANTHROPIC_API_KEY has been removed.
  */
 export async function analyzeEventRelevance(
   event: ExternalEvent,
@@ -481,95 +482,80 @@ export async function analyzeEventRelevance(
   }
 ): Promise<{ data: AIRelevanceAnalysis | null; error: Error | null }> {
   try {
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    // Get authentication session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-    if (!apiKey) {
+    if (sessionError || !session) {
       return {
         data: null,
-        error: new Error('Anthropic API key not configured'),
+        error: new Error('Not authenticated'),
       };
     }
 
-    const prompt = `You are analyzing if an external event is relevant to a specific risk.
-
-EVENT:
-Title: ${event.title}
-Summary: ${event.summary || 'No summary available'}
-Source: ${event.source}
-Type: ${event.event_type}
-Date: ${event.published_date}
-
-RISK:
-Code: ${risk.risk_code}
-Title: ${risk.risk_title}
-Description: ${risk.risk_description}
-Category: ${risk.category}
-
-TASK:
-Determine if this event is relevant to the risk. Consider:
-1. Does the event relate to the risk category or domain?
-2. Could the event increase the likelihood or impact of this risk?
-3. Is there a direct or indirect connection?
-
-Respond ONLY with valid JSON in this exact format:
-{
-  "is_relevant": true or false,
-  "confidence": number between 0 and 100,
-  "likelihood_change": number between -2 and 2 (0 if no change),
-  "impact_change": number between -2 and 2 (0 if no change),
-  "reasoning": "brief explanation"
-}`;
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 1024,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }),
-    });
+    // Call Edge Function (server-side, secure)
+    const response = await fetch(
+      `${supabase.supabaseUrl}/functions/v1/analyze-intelligence`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          eventId: event.id,
+          riskCode: risk.risk_code,
+          minConfidence: 0, // Return analysis regardless of confidence for this use case
+        }),
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Claude API error:', errorText);
+      console.error('Edge Function error:', errorText);
       return {
         data: null,
-        error: new Error(`Claude API error: ${response.status}`),
+        error: new Error(`Analysis failed: ${response.status}`),
       };
     }
 
     const result = await response.json();
-    const contentText = result.content[0].text;
 
-    // Extract JSON from response
-    const jsonMatch = contentText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return {
-        data: null,
-        error: new Error('Failed to parse AI response as JSON'),
-      };
+    // Edge Function returns alerts array, extract first match for this risk
+    if (result.alertsCreated > 0 && result.alerts && result.alerts.length > 0) {
+      const alert = result.alerts.find((a: any) => a.risk_code === risk.risk_code);
+
+      if (alert) {
+        // Convert Edge Function response format to AIRelevanceAnalysis format
+        const analysis: AIRelevanceAnalysis = {
+          is_relevant: alert.is_relevant,
+          confidence: alert.confidence_score,
+          likelihood_change: alert.likelihood_change || 0,
+          impact_change: alert.impact_change || 0,
+          reasoning: alert.ai_reasoning || 'No reasoning provided',
+        };
+
+        console.log('AI relevance analysis complete (via Edge Function):', {
+          event: event.title,
+          risk: risk.risk_code,
+          relevant: analysis.is_relevant,
+          confidence: analysis.confidence,
+        });
+
+        return { data: analysis, error: null };
+      }
     }
 
-    const analysis: AIRelevanceAnalysis = JSON.parse(jsonMatch[0]);
-
-    console.log('AI relevance analysis complete:', {
-      event: event.title,
-      risk: risk.risk_code,
-      relevant: analysis.is_relevant,
-      confidence: analysis.confidence,
-    });
-
-    return { data: analysis, error: null };
+    // No match found
+    return {
+      data: {
+        is_relevant: false,
+        confidence: 0,
+        likelihood_change: 0,
+        impact_change: 0,
+        reasoning: 'Not relevant to this risk',
+      },
+      error: null,
+    };
   } catch (err) {
     console.error('Unexpected analyze event relevance error:', err);
     return {
