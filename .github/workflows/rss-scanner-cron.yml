@@ -1,18 +1,45 @@
-name: RSS Intelligence Scanner
+name: RSS Intelligence Scanner (Daily)
 
 on:
   schedule:
-    - cron: "0 2 * * *"
+    # Run daily at 2:00 AM UTC (adjust timezone as needed)
+    - cron: '0 2 * * *'
+
+  # Allow manual trigger for testing
   workflow_dispatch:
 
 jobs:
-  scan:
+  scan-rss-feeds:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Call RSS Scanner
+      - name: Trigger RSS Scanner Edge Function
         run: |
-          curl -X POST \
+          echo "🔍 Triggering RSS Intelligence Scanner..."
+          echo "Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+
+          # Call Supabase Edge Function
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
             "${{ secrets.SUPABASE_URL }}/functions/v1/scan-rss-feeds" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
-            -d '{"trigger": "scheduled"}'
+            -d '{"trigger": "scheduled"}')
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "Response Code: $HTTP_CODE"
+          echo "Response Body: $BODY"
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ RSS scan completed successfully"
+          else
+            echo "❌ RSS scan failed with code $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Send notification on failure
+        if: failure()
+        run: |
+          echo "⚠️ RSS scanner failed. Check Supabase Edge Function logs."
+          echo "Dashboard: https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/functions"
