@@ -2,19 +2,16 @@
  * Organization Settings Component
  *
  * Allows admins to configure organization-wide settings:
- * - Risk matrix size (3x3 or 5x5)
+ * - Risk matrix size (5x5 or 6x6)
  * - Risk appetite statement
  * - Risk tolerance level
- * - Active period
+ *
+ * Note: Period management is handled in the Period Management tab
  */
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { getActivePeriod, setActivePeriod, generatePeriodOptions, formatPeriod } from '@/lib/periods-v2';
 import { getCurrentUserProfile } from '@/lib/profiles';
-
-// Generate period options (formatted strings like "Q1 2025")
-const PERIOD_OPTIONS = generatePeriodOptions().map(p => formatPeriod(p));
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -56,7 +53,6 @@ export default function OrganizationSettings() {
   const [matrixSize, setMatrixSize] = useState<number>(5);
   const [riskAppetite, setRiskAppetite] = useState('');
   const [riskTolerance, setRiskTolerance] = useState('');
-  const [activePeriod, setActivePeriodState] = useState('Q1 2025');
 
   // Feedback
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +91,6 @@ export default function OrganizationSettings() {
       setMatrixSize(data.matrix_size);
       setRiskAppetite(data.risk_appetite_statement || '');
       setRiskTolerance(data.risk_tolerance_level || '');
-      setActivePeriodState(data.active_period);
     } catch (err: any) {
       console.error('Unexpected error loading config:', err);
       setError(err.message);
@@ -119,7 +114,6 @@ export default function OrganizationSettings() {
           matrix_size: matrixSize,
           risk_appetite_statement: riskAppetite || null,
           risk_tolerance_level: riskTolerance || null,
-          active_period: activePeriod,
         })
         .eq('id', config.id);
 
@@ -202,29 +196,6 @@ export default function OrganizationSettings() {
               </Select>
               <p className="text-sm text-gray-600">
                 Determines the granularity of likelihood and impact assessments
-              </p>
-            </div>
-
-            {/* Active Period */}
-            <div className="space-y-2">
-              <Label htmlFor="active-period">Active Period</Label>
-              <Select
-                value={activePeriod}
-                onValueChange={(value) => setActivePeriodState(value)}
-              >
-                <SelectTrigger id="active-period">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PERIOD_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-sm text-gray-600">
-                The current period for risk register entries
               </p>
             </div>
 
