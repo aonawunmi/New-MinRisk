@@ -2,10 +2,11 @@
  * Risk Configuration Component
  *
  * Allows admins to configure:
- * - Divisions and Departments (dropdown lists)
+ * - Divisions and Departments (organizational structure)
  * - Likelihood and Impact labels (numeric-to-text mapping)
  * - Matrix size (5x5 or 6x6)
- * - Risk categories
+ *
+ * Note: Risk categories are managed via Risk Taxonomy (Admin > Risk Taxonomy tab)
  */
 
 import { useState, useEffect } from 'react';
@@ -50,7 +51,6 @@ import {
   RotateCcw,
   Building2,
   Tag,
-  TrendingUp,
 } from 'lucide-react';
 
 export default function RiskConfiguration() {
@@ -64,12 +64,10 @@ export default function RiskConfiguration() {
   const [impactLabels, setImpactLabels] = useState<ImpactLabels>(DEFAULT_5X5_IMPACT_LABELS);
   const [divisions, setDivisions] = useState<string[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
 
   // New item inputs
   const [newDivision, setNewDivision] = useState('');
   const [newDepartment, setNewDepartment] = useState('');
-  const [newCategory, setNewCategory] = useState('');
 
   // Feedback
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +97,6 @@ export default function RiskConfiguration() {
         setImpactLabels(data.impact_labels);
         setDivisions(data.divisions || []);
         setDepartments(data.departments || []);
-        setCategories(data.categories || []);
       }
     } catch (err: any) {
       console.error('Unexpected error loading config:', err);
@@ -121,7 +118,6 @@ export default function RiskConfiguration() {
         impact_labels: impactLabels,
         divisions,
         departments,
-        categories,
       });
 
       if (updateError) {
@@ -205,17 +201,6 @@ export default function RiskConfiguration() {
     setDepartments(departments.filter(d => d !== department));
   }
 
-  function addCategory() {
-    if (newCategory.trim() && !categories.includes(newCategory.trim())) {
-      setCategories([...categories, newCategory.trim()]);
-      setNewCategory('');
-    }
-  }
-
-  function removeCategory(category: string) {
-    setCategories(categories.filter(c => c !== category));
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -254,7 +239,7 @@ export default function RiskConfiguration() {
 
       {/* Configuration Tabs */}
       <Tabs defaultValue="structure" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="structure">
             <Building2 className="h-4 w-4 mr-2" />
             Organizational Structure
@@ -262,10 +247,6 @@ export default function RiskConfiguration() {
           <TabsTrigger value="labels">
             <Tag className="h-4 w-4 mr-2" />
             Risk Labels
-          </TabsTrigger>
-          <TabsTrigger value="categories">
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Categories
           </TabsTrigger>
         </TabsList>
 
@@ -412,46 +393,6 @@ export default function RiskConfiguration() {
                     </div>
                   ))}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Tab 3: Categories */}
-        <TabsContent value="categories" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Risk Categories</CardTitle>
-              <CardDescription>
-                Define risk categories for classification (e.g., Strategic, Operational, Financial)
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Enter category name..."
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && addCategory()}
-                />
-                <Button onClick={addCategory} size="sm">
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {categories.map((category) => (
-                  <Badge key={category} variant="secondary" className="text-sm py-1 px-3">
-                    {category}
-                    <X
-                      className="h-3 w-3 ml-2 cursor-pointer hover:text-red-600"
-                      onClick={() => removeCategory(category)}
-                    />
-                  </Badge>
-                ))}
-                {categories.length === 0 && (
-                  <p className="text-sm text-gray-500">No categories defined</p>
-                )}
               </div>
             </CardContent>
           </Card>

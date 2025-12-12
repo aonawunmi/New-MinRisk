@@ -36,23 +36,38 @@ ${riskSummary}
 
 TASK:
 1. Determine if this event is relevant to ANY of the listed risks
-2. If relevant, identify which risk(s) it affects
-3. Assess the likely impact on risk likelihood/impact (scale -2 to +2, where +1 = slight increase, +2 = significant increase)
-4. Provide clear reasoning
-5. Suggest 2-4 specific controls or mitigation actions the organization should consider
-6. Provide an impact assessment describing potential consequences if this event materializes
+2. If relevant, identify which risk(s) it affects and provide RISK-SPECIFIC analysis for EACH risk
+3. For EACH affected risk, provide:
+   - Specific reasoning explaining how this event affects THIS PARTICULAR risk
+   - Likelihood/impact changes specific to THIS risk (scale -2 to +2)
+   - 2-4 specific controls tailored to mitigate THIS risk
+   - Impact assessment describing consequences for THIS specific risk area
 
 RESPOND ONLY WITH THIS JSON FORMAT (no markdown, no explanations):
 {
   "is_relevant": true,
   "confidence": 85,
-  "risk_codes": ["STR-CYB-001"],
-  "likelihood_change": 1,
-  "impact_change": 0,
-  "reasoning": "Brief explanation of why this event is relevant and what changed",
-  "suggested_controls": ["Control 1: Specific action to take", "Control 2: Another mitigation step", "Control 3: Additional measure"],
-  "impact_assessment": "Detailed description of potential consequences and business impact if this event occurs"
+  "risk_analyses": [
+    {
+      "risk_code": "STR-CYB-001",
+      "reasoning": "Specific explanation for why this event affects STR-CYB-001 in particular",
+      "likelihood_change": 1,
+      "impact_change": 0,
+      "suggested_controls": ["Control specific to STR-CYB-001", "Another control for this risk"],
+      "impact_assessment": "Detailed consequences specific to the cybersecurity risk area"
+    },
+    {
+      "risk_code": "OPS-005",
+      "reasoning": "Different, specific explanation for how this affects OPS-005 operations",
+      "likelihood_change": 1,
+      "impact_change": 1,
+      "suggested_controls": ["Control specific to OPS-005", "Operational mitigation"],
+      "impact_assessment": "Operational impact consequences specific to this risk"
+    }
+  ]
 }
+
+IMPORTANT: Each risk must have UNIQUE, SPECIFIC reasoning. Do NOT reuse generic text across multiple risks.
 
 OR if not relevant:
 {"is_relevant": false}`
@@ -66,7 +81,7 @@ OR if not relevant:
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 1024,
+        max_tokens: 2048,
         temperature: 0.3,
         messages: [{
           role: 'user',
@@ -87,11 +102,18 @@ OR if not relevant:
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       console.error('   ❌ Could not extract JSON from AI response')
+      console.error('   Response text:', text.substring(0, 500))
       return { is_relevant: false }
     }
 
-    const analysis = JSON.parse(jsonMatch[0])
-    return analysis
+    try {
+      const analysis = JSON.parse(jsonMatch[0])
+      return analysis
+    } catch (parseError) {
+      console.error('   ❌ JSON parse error:', parseError.message)
+      console.error('   Attempted to parse:', jsonMatch[0].substring(0, 500))
+      return { is_relevant: false }
+    }
 
   } catch (error) {
     console.error('   ❌ Error in AI analysis:', error.message)
@@ -110,23 +132,32 @@ async function createRiskAlerts(
 ) {
   let alertsCreated = 0
 
-  if (!analysis.is_relevant || !analysis.risk_codes || analysis.risk_codes.length === 0) {
+  if (!analysis.is_relevant) {
     return alertsCreated
   }
 
-  for (const riskCode of analysis.risk_codes) {
+  // Check if we have the new format (risk_analyses array)
+  if (!analysis.risk_analyses || !Array.isArray(analysis.risk_analyses) || analysis.risk_analyses.length === 0) {
+    console.log(`   ⚠️ No risk_analyses array in response - AI may have returned invalid format`)
+    return alertsCreated
+  }
+
+  // Process each risk-specific analysis
+  for (const riskAnalysis of analysis.risk_analyses) {
     try {
+      if (!riskAnalysis.risk_code) {
+        console.log(`   ⚠️ Skipping analysis without risk_code`)
+        continue
+      }
+
       const alert = {
-        organization_id: organizationId,
         event_id: event.id,
-        risk_code: riskCode,
-        is_relevant: true,
-        confidence_score: analysis.confidence || 70,
-        likelihood_change: analysis.likelihood_change || 0,
-        impact_change: analysis.impact_change || 0,
-        ai_reasoning: analysis.reasoning || 'No reasoning provided',
-        suggested_controls: analysis.suggested_controls || [],
-        impact_assessment: analysis.impact_assessment || null,
+        risk_code: riskAnalysis.risk_code,
+        confidence_score: (analysis.confidence || 70) / 100, // Convert 0-100 to 0-1 decimal
+        suggested_likelihood_change: riskAnalysis.likelihood_change || 0,
+        reasoning: riskAnalysis.reasoning || 'No reasoning provided',
+        suggested_controls: riskAnalysis.suggested_controls || [],
+        impact_assessment: riskAnalysis.impact_assessment || null,
         status: 'pending',
         applied_to_risk: false,
       }
@@ -137,12 +168,12 @@ async function createRiskAlerts(
 
       if (!error) {
         alertsCreated++
-        console.log(`   ✅ Created alert for ${riskCode}`)
+        console.log(`   ✅ Created alert for ${riskAnalysis.risk_code}`)
       } else {
         console.log(`   ❌ Failed to insert alert: ${error.message}`)
       }
     } catch (error) {
-      console.error(`   ❌ Error creating alert for ${riskCode}:`, error)
+      console.error(`   ❌ Error creating alert for ${riskAnalysis.risk_code}:`, error)
     }
   }
 
@@ -214,11 +245,14 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}))
     const minConfidence = body.minConfidence || 70
     const eventId = body.eventId // Optional: analyze specific event
+    const limit = body.limit || 50 // Optional: limit number of events to process
 
     console.log(`🚀 Starting intelligence analysis...`)
     console.log(`🎯 Minimum confidence threshold: ${minConfidence}%`)
     if (eventId) {
       console.log(`🎯 Analyzing specific event: ${eventId}`)
+    } else {
+      console.log(`🎯 Batch mode: processing up to ${limit} events`)
     }
 
     // Get events to analyze
@@ -235,7 +269,7 @@ serve(async (req) => {
       eventsQuery = eventsQuery
         .eq('relevance_checked', false)
         .order('published_date', { ascending: false })
-        .limit(50)
+        .limit(limit)
     }
 
     const { data: events, error: eventsError } = await eventsQuery
@@ -302,7 +336,8 @@ serve(async (req) => {
 
         // Create alerts if relevant and meets confidence threshold
         if (analysis.is_relevant && analysis.confidence >= minConfidence) {
-          console.log(`   ✅ Relevant! Confidence: ${analysis.confidence}%, Risks: ${analysis.risk_codes?.join(', ')}`)
+          const riskCodes = analysis.risk_analyses?.map((r: any) => r.risk_code) || []
+          console.log(`   ✅ Relevant! Confidence: ${analysis.confidence}%, Risks: ${riskCodes.join(', ')}`)
           const created = await createRiskAlerts(supabaseClient, event, analysis, organizationId)
           alertsCreated += created
         } else if (analysis.is_relevant) {
@@ -318,7 +353,7 @@ serve(async (req) => {
           .eq('id', event.id)
 
         // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        await new Promise(resolve => setTimeout(resolve, 500))
 
       } catch (error) {
         console.error(`❌ Error analyzing event ${event.id}:`, error)

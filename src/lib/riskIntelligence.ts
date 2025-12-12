@@ -43,9 +43,9 @@ export interface RiskIntelligenceAlert {
   risk_code: string;
   is_relevant: boolean;
   confidence_score: number;
-  likelihood_change: number | null;
+  suggested_likelihood_change: number | null;
   impact_change: number | null;
-  ai_reasoning: string | null;
+  reasoning: string | null;
   suggested_controls: string[] | null;
   impact_assessment: string | null;
   user_notes: string | null;
@@ -89,6 +89,9 @@ export async function getExternalEvents(options?: {
   limit?: number;
   offset?: number;
   source?: string;
+  event_type?: string;
+  date_from?: string; // YYYY-MM-DD format
+  date_to?: string; // YYYY-MM-DD format
 }): Promise<{ data: ExternalEvent[] | null; error: Error | null }> {
   try {
     let query = supabase
@@ -98,6 +101,18 @@ export async function getExternalEvents(options?: {
 
     if (options?.source) {
       query = query.eq('source', options.source);
+    }
+
+    if (options?.event_type) {
+      query = query.eq('event_type', options.event_type);
+    }
+
+    if (options?.date_from) {
+      query = query.gte('published_date', options.date_from);
+    }
+
+    if (options?.date_to) {
+      query = query.lte('published_date', options.date_to);
     }
 
     if (options?.limit) {
@@ -360,6 +375,101 @@ export async function deleteExternalEvent(
 }
 
 /**
+ * Bulk delete external events
+ * @param eventIds - Array of event IDs to delete
+ * @returns Count of deleted events and any error
+ */
+export async function bulkDeleteExternalEvents(
+  eventIds: string[]
+): Promise<{ deletedCount: number; error: Error | null }> {
+  try {
+    if (!eventIds || eventIds.length === 0) {
+      return { deletedCount: 0, error: null };
+    }
+
+    // Delete events (CASCADE will delete associated alerts)
+    const { error, count } = await supabase
+      .from('external_events')
+      .delete()
+      .in('id', eventIds);
+
+    if (error) {
+      console.error('Bulk delete external events error:', error.message);
+      return { deletedCount: 0, error: new Error(error.message) };
+    }
+
+    console.log(`Bulk deleted ${count || eventIds.length} external events`);
+    return { deletedCount: count || eventIds.length, error: null };
+  } catch (err) {
+    console.error('Unexpected bulk delete external events error:', err);
+    return {
+      deletedCount: 0,
+      error: err instanceof Error ? err : new Error('Unknown error'),
+    };
+  }
+}
+
+/**
+ * Get unique event sources for filter dropdown
+ */
+export async function getUniqueSources(): Promise<{
+  data: string[] | null;
+  error: Error | null;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('external_events')
+      .select('source')
+      .order('source');
+
+    if (error) {
+      console.error('Get unique sources error:', error.message);
+      return { data: null, error: new Error(error.message) };
+    }
+
+    // Extract unique sources
+    const uniqueSources = Array.from(new Set(data?.map(e => e.source) || []));
+    return { data: uniqueSources, error: null };
+  } catch (err) {
+    console.error('Unexpected get unique sources error:', err);
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error('Unknown error'),
+    };
+  }
+}
+
+/**
+ * Get unique event types for filter dropdown
+ */
+export async function getUniqueEventTypes(): Promise<{
+  data: string[] | null;
+  error: Error | null;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('external_events')
+      .select('event_type')
+      .order('event_type');
+
+    if (error) {
+      console.error('Get unique event types error:', error.message);
+      return { data: null, error: new Error(error.message) };
+    }
+
+    // Extract unique event types
+    const uniqueTypes = Array.from(new Set(data?.map(e => e.event_type) || []));
+    return { data: uniqueTypes, error: null };
+  } catch (err) {
+    console.error('Unexpected get unique event types error:', err);
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error('Unknown error'),
+    };
+  }
+}
+
+/**
  * Find and delete duplicate external events
  * Keeps the oldest event, deletes newer duplicates
  * Returns count of duplicates deleted
@@ -529,9 +639,9 @@ export async function analyzeEventRelevance(
         const analysis: AIRelevanceAnalysis = {
           is_relevant: alert.is_relevant,
           confidence: alert.confidence_score,
-          likelihood_change: alert.likelihood_change || 0,
+          likelihood_change: alert.suggested_likelihood_change || 0,
           impact_change: alert.impact_change || 0,
-          reasoning: alert.ai_reasoning || 'No reasoning provided',
+          reasoning: alert.reasoning || 'No reasoning provided',
         };
 
         console.log('AI relevance analysis complete (via Edge Function):', {
@@ -579,14 +689,10 @@ export async function getIntelligenceAlertsByStatus(
   error: Error | null;
 }> {
   try {
-    const { data, error } = await supabase
-      .from('intelligence_alerts')
-      .select(
-        `
-        *,
-        external_events (*)
-      `
-      )
+    // Fetch alerts without joins (no foreign keys exist)
+    const { data: alerts, error } = await supabase
+      .from('risk_intelligence_alerts')
+      .select('*')
       .eq('status', status)
       .order('created_at', { ascending: false });
 
@@ -595,7 +701,31 @@ export async function getIntelligenceAlertsByStatus(
       return { data: null, error: new Error(error.message) };
     }
 
-    return { data, error: null };
+    if (!alerts || alerts.length === 0) {
+      return { data: [], error: null };
+    }
+
+    // Manually fetch related external_events and risks
+    const eventIds = [...new Set(alerts.map(a => a.event_id))];
+    const riskCodes = [...new Set(alerts.map(a => a.risk_code))];
+
+    const [eventsResult, risksResult] = await Promise.all([
+      supabase.from('external_events').select('*').in('id', eventIds),
+      supabase.from('risks').select('risk_code, risk_title').in('risk_code', riskCodes)
+    ]);
+
+    // Create lookup maps
+    const eventsMap = new Map((eventsResult.data || []).map(e => [e.id, e]));
+    const risksMap = new Map((risksResult.data || []).map(r => [r.risk_code, r]));
+
+    // Attach related data to each alert
+    const enrichedAlerts = alerts.map(alert => ({
+      ...alert,
+      external_events: eventsMap.get(alert.event_id) || null,
+      risks: risksMap.get(alert.risk_code) || null
+    }));
+
+    return { data: enrichedAlerts, error: null };
   } catch (err) {
     console.error('Unexpected get intelligence alerts error:', err);
     return {
@@ -623,14 +753,10 @@ export async function getAcceptedIntelligenceAlerts(): Promise<{
   error: Error | null;
 }> {
   try {
-    const { data, error } = await supabase
-      .from('intelligence_alerts')
-      .select(
-        `
-        *,
-        external_events (*)
-      `
-      )
+    // Fetch alerts without joins (no foreign keys exist)
+    const { data: alerts, error } = await supabase
+      .from('risk_intelligence_alerts')
+      .select('*')
       .eq('status', 'accepted')
       .order('applied_to_risk', { ascending: true }) // Show unapplied first
       .order('created_at', { ascending: false });
@@ -640,7 +766,31 @@ export async function getAcceptedIntelligenceAlerts(): Promise<{
       return { data: null, error: new Error(error.message) };
     }
 
-    return { data, error: null };
+    if (!alerts || alerts.length === 0) {
+      return { data: [], error: null };
+    }
+
+    // Manually fetch related external_events and risks
+    const eventIds = [...new Set(alerts.map(a => a.event_id))];
+    const riskCodes = [...new Set(alerts.map(a => a.risk_code))];
+
+    const [eventsResult, risksResult] = await Promise.all([
+      supabase.from('external_events').select('*').in('id', eventIds),
+      supabase.from('risks').select('risk_code, risk_title').in('risk_code', riskCodes)
+    ]);
+
+    // Create lookup maps
+    const eventsMap = new Map((eventsResult.data || []).map(e => [e.id, e]));
+    const risksMap = new Map((risksResult.data || []).map(r => [r.risk_code, r]));
+
+    // Attach related data to each alert
+    const enrichedAlerts = alerts.map(alert => ({
+      ...alert,
+      external_events: eventsMap.get(alert.event_id) || null,
+      risks: risksMap.get(alert.risk_code) || null
+    }));
+
+    return { data: enrichedAlerts, error: null };
   } catch (err) {
     console.error('Unexpected get accepted intelligence alerts error:', err);
     return {
@@ -658,7 +808,7 @@ export async function getAlertsForRisk(
 ): Promise<{ data: RiskIntelligenceAlert[] | null; error: Error | null }> {
   try {
     const { data, error } = await supabase
-      .from('intelligence_alerts')
+      .from('risk_intelligence_alerts')
       .select('*')
       .eq('risk_code', riskCode)
       .order('created_at', { ascending: false });
@@ -685,14 +835,10 @@ export async function getAlertsWithEventsForRisk(
   riskCode: string
 ): Promise<{ data: any[] | null; error: Error | null }> {
   try {
-    const { data, error } = await supabase
-      .from('intelligence_alerts')
-      .select(
-        `
-        *,
-        external_events (*)
-      `
-      )
+    // Fetch alerts without joins (no foreign keys exist)
+    const { data: alerts, error } = await supabase
+      .from('risk_intelligence_alerts')
+      .select('*')
       .eq('risk_code', riskCode)
       .order('created_at', { ascending: false });
 
@@ -701,7 +847,27 @@ export async function getAlertsWithEventsForRisk(
       return { data: null, error: new Error(error.message) };
     }
 
-    return { data, error: null };
+    if (!alerts || alerts.length === 0) {
+      return { data: [], error: null };
+    }
+
+    // Manually fetch related external_events
+    const eventIds = [...new Set(alerts.map(a => a.event_id))];
+    const { data: events } = await supabase
+      .from('external_events')
+      .select('*')
+      .in('id', eventIds);
+
+    // Create lookup map
+    const eventsMap = new Map((events || []).map(e => [e.id, e]));
+
+    // Attach related data to each alert
+    const enrichedAlerts = alerts.map(alert => ({
+      ...alert,
+      external_events: eventsMap.get(alert.event_id) || null
+    }));
+
+    return { data: enrichedAlerts, error: null };
   } catch (err) {
     console.error('Unexpected get alerts with events for risk error:', err);
     return {
@@ -719,9 +885,9 @@ export async function createIntelligenceAlert(alertData: {
   risk_code: string;
   is_relevant: boolean;
   confidence_score: number;
-  likelihood_change?: number;
+  suggested_likelihood_change?: number;
   impact_change?: number;
-  ai_reasoning?: string;
+  reasoning?: string;
 }): Promise<{ data: RiskIntelligenceAlert | null; error: Error | null }> {
   try {
     // Get user profile for organization_id
@@ -745,7 +911,7 @@ export async function createIntelligenceAlert(alertData: {
     }
 
     const { data, error } = await supabase
-      .from('intelligence_alerts')
+      .from('risk_intelligence_alerts')
       .insert([
         {
           ...alertData,
@@ -792,7 +958,7 @@ export async function acceptIntelligenceAlert(
 
     // Get the alert
     const { data: alert, error: alertError } = await supabase
-      .from('intelligence_alerts')
+      .from('risk_intelligence_alerts')
       .select('risk_code')
       .eq('id', alertId)
       .single();
@@ -803,7 +969,7 @@ export async function acceptIntelligenceAlert(
 
     // Update alert status (but don't apply to risk yet)
     const { error: alertUpdateError } = await supabase
-      .from('intelligence_alerts')
+      .from('risk_intelligence_alerts')
       .update({
         status: 'accepted',
         reviewed_by: user.id,
@@ -846,7 +1012,7 @@ export async function applyIntelligenceAlert(
 
     // Get the alert
     const { data: alert, error: alertError } = await supabase
-      .from('intelligence_alerts')
+      .from('risk_intelligence_alerts')
       .select('*')
       .eq('id', alertId)
       .single();
@@ -892,8 +1058,8 @@ export async function applyIntelligenceAlert(
 
     // Get ALL applied alerts for this risk (including the one we're about to apply)
     const { data: appliedAlerts } = await supabase
-      .from('intelligence_alerts')
-      .select('likelihood_change, impact_change')
+      .from('risk_intelligence_alerts')
+      .select('suggested_likelihood_change, impact_change')
       .eq('risk_code', alert.risk_code)
       .eq('status', 'accepted')
       .or(`id.eq.${alertId},applied_to_risk.eq.true`);
@@ -904,8 +1070,8 @@ export async function applyIntelligenceAlert(
 
     if (appliedAlerts && appliedAlerts.length > 0) {
       appliedAlerts.forEach((a) => {
-        if (a.likelihood_change !== null && Math.abs(a.likelihood_change) > Math.abs(maxLikelihoodChange)) {
-          maxLikelihoodChange = a.likelihood_change;
+        if (a.suggested_likelihood_change !== null && Math.abs(a.suggested_likelihood_change) > Math.abs(maxLikelihoodChange)) {
+          maxLikelihoodChange = a.suggested_likelihood_change;
         }
         if (a.impact_change !== null && Math.abs(a.impact_change) > Math.abs(maxImpactChange)) {
           maxImpactChange = a.impact_change;
@@ -939,7 +1105,7 @@ export async function applyIntelligenceAlert(
 
     // Mark alert as applied
     const { error: alertUpdateError } = await supabase
-      .from('intelligence_alerts')
+      .from('risk_intelligence_alerts')
       .update({
         applied_to_risk: true,
       })
@@ -983,6 +1149,58 @@ export async function applyIntelligenceAlert(
 }
 
 /**
+ * Bulk delete intelligence alerts (pending/rejected only)
+ */
+export async function bulkDeleteIntelligenceAlerts(
+  alertIds: string[]
+): Promise<{ deletedCount: number; error: Error | null }> {
+  try {
+    if (!alertIds || alertIds.length === 0) {
+      return { deletedCount: 0, error: null };
+    }
+
+    // Safety: Only delete alerts that haven't been applied to risks
+    // This includes: pending, rejected, and accepted (but not yet applied)
+    const { data: alerts } = await supabase
+      .from('risk_intelligence_alerts')
+      .select('id, status, applied_to_risk')
+      .in('id', alertIds);
+
+    const safeToDelete = (alerts || []).filter(
+      a => !a.applied_to_risk
+    );
+
+    if (safeToDelete.length === 0) {
+      return {
+        deletedCount: 0,
+        error: new Error('No alerts are safe to delete (only unapplied alerts can be deleted)')
+      };
+    }
+
+    const safeIds = safeToDelete.map(a => a.id);
+
+    const { error, count } = await supabase
+      .from('risk_intelligence_alerts')
+      .delete()
+      .in('id', safeIds);
+
+    if (error) {
+      console.error('Bulk delete intelligence alerts error:', error.message);
+      return { deletedCount: 0, error: new Error(error.message) };
+    }
+
+    console.log(`Bulk deleted ${count || safeIds.length} intelligence alerts`);
+    return { deletedCount: count || safeIds.length, error: null };
+  } catch (err) {
+    console.error('Unexpected bulk delete intelligence alerts error:', err);
+    return {
+      deletedCount: 0,
+      error: err instanceof Error ? err : new Error('Unknown error'),
+    };
+  }
+}
+
+/**
  * Reject an intelligence alert
  */
 export async function rejectIntelligenceAlert(
@@ -1001,7 +1219,7 @@ export async function rejectIntelligenceAlert(
 
     // Get the alert
     const { data: alert, error: alertError } = await supabase
-      .from('intelligence_alerts')
+      .from('risk_intelligence_alerts')
       .select('risk_code')
       .eq('id', alertId)
       .single();
@@ -1012,7 +1230,7 @@ export async function rejectIntelligenceAlert(
 
     // Update alert status
     const { error: updateError } = await supabase
-      .from('intelligence_alerts')
+      .from('risk_intelligence_alerts')
       .update({
         status: 'rejected',
         reviewed_by: user.id,
@@ -1073,7 +1291,7 @@ export async function undoAppliedAlert(
 
     // Get the alert
     const { data: alert, error: alertError } = await supabase
-      .from('intelligence_alerts')
+      .from('risk_intelligence_alerts')
       .select('*')
       .eq('id', alertId)
       .single();
@@ -1117,7 +1335,7 @@ export async function undoAppliedAlert(
 
     // Mark this alert as not applied
     const { error: alertUpdateError } = await supabase
-      .from('intelligence_alerts')
+      .from('risk_intelligence_alerts')
       .update({
         applied_to_risk: false,
       })
@@ -1129,8 +1347,8 @@ export async function undoAppliedAlert(
 
     // Get ALL REMAINING applied alerts (excluding the one we just unapplied)
     const { data: remainingAlerts } = await supabase
-      .from('intelligence_alerts')
-      .select('likelihood_change, impact_change')
+      .from('risk_intelligence_alerts')
+      .select('suggested_likelihood_change, impact_change')
       .eq('risk_code', alert.risk_code)
       .eq('status', 'accepted')
       .eq('applied_to_risk', true);
@@ -1141,8 +1359,8 @@ export async function undoAppliedAlert(
 
     if (remainingAlerts && remainingAlerts.length > 0) {
       remainingAlerts.forEach((a) => {
-        if (a.likelihood_change !== null && Math.abs(a.likelihood_change) > Math.abs(maxLikelihoodChange)) {
-          maxLikelihoodChange = a.likelihood_change;
+        if (a.suggested_likelihood_change !== null && Math.abs(a.suggested_likelihood_change) > Math.abs(maxLikelihoodChange)) {
+          maxLikelihoodChange = a.suggested_likelihood_change;
         }
         if (a.impact_change !== null && Math.abs(a.impact_change) > Math.abs(maxImpactChange)) {
           maxImpactChange = a.impact_change;
@@ -1356,9 +1574,9 @@ export async function scanRisksForRelevantEvents(options?: {
             risk_code: risk.risk_code,
             is_relevant: analysis.is_relevant,
             confidence_score: analysis.confidence,
-            likelihood_change: analysis.likelihood_change,
+            suggested_likelihood_change: analysis.likelihood_change,
             impact_change: analysis.impact_change,
-            ai_reasoning: analysis.reasoning,
+            reasoning: analysis.reasoning,
           });
 
           if (alertError) {
@@ -1381,5 +1599,277 @@ export async function scanRisksForRelevantEvents(options?: {
       `Unexpected error: ${err instanceof Error ? err.message : 'Unknown'}`
     );
     return { scanned, alertsCreated, errors };
+  }
+}
+
+// ============================================================================
+// RSS SCANNER TRIGGER
+// ============================================================================
+
+export interface RssScanResult {
+  success: boolean;
+  message: string;
+  stats?: {
+    feeds_scanned?: number;
+    events_stored?: number;
+    alerts_created?: number;
+    execution_time?: string;
+  };
+  error?: string;
+}
+
+/**
+ * Trigger the RSS scanner Edge Function
+ * Admin-only function to manually trigger RSS feed scanning
+ */
+export async function triggerRssScan(): Promise<RssScanResult> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      return {
+        success: false,
+        message: 'Not authenticated',
+        error: 'You must be logged in to trigger RSS scanning'
+      };
+    }
+
+    // Get Supabase URL from environment
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    if (!supabaseUrl) {
+      return {
+        success: false,
+        message: 'Configuration error',
+        error: 'Supabase URL not configured'
+      };
+    }
+
+    // Call the Edge Function
+    const response = await fetch(`${supabaseUrl}/functions/v1/scan-rss-feeds`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ trigger: 'manual-scan' }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        success: false,
+        message: 'Scan failed',
+        error: `HTTP ${response.status}: ${errorText}`
+      };
+    }
+
+    const result = await response.json();
+
+    return {
+      success: true,
+      message: `RSS scan completed! ${result.stats?.events_stored || 0} events stored, ${result.stats?.alerts_created || 0} alerts created`,
+      stats: result.stats
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Scan error',
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
+}
+
+// ============================================================================
+// RSS SOURCE MANAGEMENT
+// ============================================================================
+
+export interface RssSource {
+  id: string;
+  organization_id: string;
+  name: string;
+  url: string;
+  description: string | null;
+  category: string[]; // Array of categories
+  is_active: boolean;
+  last_scanned_at: string | null;
+  last_scan_status: string | null;
+  last_scan_error: string | null;
+  events_count: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateRssSourceInput {
+  name: string;
+  url: string;
+  description?: string;
+  category: string[]; // Array of categories
+}
+
+export interface UpdateRssSourceInput {
+  name?: string;
+  url?: string;
+  description?: string;
+  category?: string[]; // Array of categories
+  is_active?: boolean;
+}
+
+/**
+ * Get all RSS sources for the user's organization
+ */
+export async function getRssSources(): Promise<{
+  data: RssSource[] | null;
+  error: Error | null;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('rss_sources')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error fetching RSS sources:', error);
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error('Failed to fetch RSS sources')
+    };
+  }
+}
+
+/**
+ * Create a new RSS source (admin only)
+ */
+export async function createRssSource(
+  input: CreateRssSourceInput
+): Promise<{
+  data: RssSource | null;
+  error: Error | null;
+}> {
+  try {
+    // Get current user's profile to get organization_id
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error('Not authenticated');
+    }
+
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('organization_id')
+      .eq('user_id', session.user.id)
+      .single();
+
+    if (!profile) {
+      throw new Error('User profile not found');
+    }
+
+    const { data, error } = await supabase
+      .from('rss_sources')
+      .insert({
+        organization_id: profile.organization_id,
+        name: input.name,
+        url: input.url,
+        description: input.description || null,
+        category: input.category,
+        is_active: true,
+        created_by: session.user.id
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error creating RSS source:', error);
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error('Failed to create RSS source')
+    };
+  }
+}
+
+/**
+ * Update an existing RSS source (admin only)
+ */
+export async function updateRssSource(
+  id: string,
+  input: UpdateRssSourceInput
+): Promise<{
+  data: RssSource | null;
+  error: Error | null;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('rss_sources')
+      .update({
+        ...input,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error updating RSS source:', error);
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error('Failed to update RSS source')
+    };
+  }
+}
+
+/**
+ * Delete an RSS source (admin only)
+ */
+export async function deleteRssSource(id: string): Promise<{
+  success: boolean;
+  error: Error | null;
+}> {
+  try {
+    const { error } = await supabase
+      .from('rss_sources')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    return { success: true, error: null };
+  } catch (error) {
+    console.error('Error deleting RSS source:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error : new Error('Failed to delete RSS source')
+    };
+  }
+}
+
+/**
+ * Toggle RSS source active status (admin only)
+ */
+export async function toggleRssSourceStatus(id: string, isActive: boolean): Promise<{
+  success: boolean;
+  error: Error | null;
+}> {
+  try {
+    const { error } = await supabase
+      .from('rss_sources')
+      .update({ is_active: isActive })
+      .eq('id', id);
+
+    if (error) throw error;
+
+    return { success: true, error: null };
+  } catch (error) {
+    console.error('Error toggling RSS source status:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error : new Error('Failed to toggle RSS source status')
+    };
   }
 }

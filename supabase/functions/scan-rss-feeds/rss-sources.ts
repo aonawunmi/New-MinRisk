@@ -1,15 +1,19 @@
 /**
  * RSS Feed Sources Configuration
- * Default sources covering Nigerian and global risk events
+ * Now loading from database (rss_sources table)
  *
  * Ported from old MinRisk scan-news.js (lines 24-41)
+ * Upgraded to use database sources
  */
 
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
 export interface RSSSource {
+  id?: string; // Database ID (optional for backward compatibility)
   name: string;
   url: string;
-  category: 'regulatory' | 'market' | 'business' | 'cybersecurity' | 'environmental';
-  country: 'Nigeria' | 'Global';
+  category: 'regulatory' | 'market' | 'business' | 'cybersecurity' | 'environmental' | 'geopolitical' | 'operational' | 'social' | 'technology' | 'other';
+  country?: 'Nigeria' | 'Global'; // Optional for backward compatibility
 }
 
 /**
@@ -81,14 +85,95 @@ export const DEFAULT_RSS_SOURCES: RSSSource[] = [
 ];
 
 /**
- * Get RSS sources (defaults for now, database lookup in Phase 1.5)
- * @param organizationId - Organization ID (for future database lookup)
- * @returns Array of RSS sources
+ * Get RSS sources from database (with fallback to defaults)
+ * @param supabase - Supabase client
+ * @param organizationId - Organization ID
+ * @returns Array of active RSS sources
  */
-export async function getRSSSources(organizationId: string): Promise<RSSSource[]> {
-  // Phase 1: Return hardcoded defaults
-  // Phase 1.5: Load from news_sources table
+export async function getRSSSources(
+  supabase: SupabaseClient,
+  organizationId: string
+): Promise<RSSSource[]> {
+  try {
+    console.log(`📡 Loading RSS sources from database for org: ${organizationId}`);
 
-  console.log(`📡 Using ${DEFAULT_RSS_SOURCES.length} default RSS sources`);
-  return DEFAULT_RSS_SOURCES;
+    // Query active RSS sources for this organization
+    const { data: sources, error } = await supabase
+      .from('rss_sources')
+      .select('id, name, url, category')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('❌ Failed to load RSS sources from database:', error);
+      console.log('⚠️  Falling back to default sources');
+      return DEFAULT_RSS_SOURCES;
+    }
+
+    if (!sources || sources.length === 0) {
+      console.log('⚠️  No active RSS sources found in database, using defaults');
+      return DEFAULT_RSS_SOURCES;
+    }
+
+    console.log(`✅ Loaded ${sources.length} active RSS sources from database`);
+
+    // Map database sources to RSSSource format
+    return sources.map((source) => ({
+      id: source.id,
+      name: source.name,
+      url: source.url,
+      category: source.category as RSSSource['category'],
+    }));
+  } catch (error) {
+    console.error('❌ Exception loading RSS sources:', error);
+    console.log('⚠️  Falling back to default sources');
+    return DEFAULT_RSS_SOURCES;
+  }
+}
+
+/**
+ * Update scan statistics for an RSS source
+ * @param supabase - Supabase client
+ * @param sourceId - RSS source ID
+ * @param status - Scan status ('success' or 'failed')
+ * @param eventsCount - Number of events fetched (0 if failed)
+ * @param error - Error message (if failed)
+ */
+export async function updateScanStats(
+  supabase: SupabaseClient,
+  sourceId: string,
+  status: 'success' | 'failed',
+  eventsCount: number = 0,
+  error: string | null = null
+): Promise<void> {
+  try {
+    // Get current events_count to increment
+    const { data: currentSource } = await supabase
+      .from('rss_sources')
+      .select('events_count')
+      .eq('id', sourceId)
+      .single();
+
+    const newEventsCount = (currentSource?.events_count || 0) + eventsCount;
+
+    // Update scan statistics
+    const { error: updateError } = await supabase
+      .from('rss_sources')
+      .update({
+        last_scanned_at: new Date().toISOString(),
+        last_scan_status: status,
+        last_scan_error: error,
+        events_count: newEventsCount,
+      })
+      .eq('id', sourceId);
+
+    if (updateError) {
+      console.error(`❌ Failed to update scan stats for source ${sourceId}:`, updateError);
+    } else {
+      console.log(`  ✅ Updated scan stats: ${status}, ${eventsCount} events`);
+    }
+  } catch (err) {
+    console.error(`❌ Exception updating scan stats for source ${sourceId}:`, err);
+  }
 }

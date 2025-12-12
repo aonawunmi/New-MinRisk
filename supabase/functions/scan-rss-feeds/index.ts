@@ -19,7 +19,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { parse } from 'https://deno.land/x/xml@2.1.1/mod.ts';
-import { DEFAULT_RSS_SOURCES, getRSSSources, type RSSSource } from './rss-sources.ts';
+import { DEFAULT_RSS_SOURCES, getRSSSources, updateScanStats, type RSSSource } from './rss-sources.ts';
 import { extractKeywords, getAllKeywords, matchesCategory, KEYWORD_CATEGORIES } from './keywords.ts';
 
 const corsHeaders = {
@@ -33,7 +33,7 @@ const corsHeaders = {
 const MAX_AGE_DAYS = 7; // Only process news from last 7 days
 const MIN_CONFIDENCE = 0.6; // Minimum confidence to create alert
 const ITEMS_PER_FEED = 10; // Take first 10 items per feed
-const AI_RATE_LIMIT_MS = 1000; // 1 second between AI calls
+const AI_RATE_LIMIT_MS = 500; // 500ms between AI calls (reduced from 1000ms for faster processing)
 
 interface RSSItem {
   title: string;
@@ -45,6 +45,31 @@ interface RSSItem {
 interface ParsedFeed {
   source: RSSSource;
   items: RSSItem[];
+}
+
+/**
+ * Strip HTML tags from text and decode HTML entities
+ */
+function stripHtml(html: string): string {
+  if (!html) return '';
+
+  // Remove HTML tags
+  let text = html.replace(/<[^>]*>/g, ' ');
+
+  // Decode common HTML entities
+  text = text
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'");
+
+  // Remove extra whitespace
+  text = text.replace(/\s+/g, ' ').trim();
+
+  return text;
 }
 
 /**
@@ -205,8 +230,8 @@ async function storeEvents(
       // Store event
       const event = {
         organization_id: organizationId,
-        title: item.title.substring(0, 500),
-        summary: item.description ? item.description.substring(0, 2000) : '',
+        title: stripHtml(item.title).substring(0, 500),
+        summary: item.description ? stripHtml(item.description).substring(0, 2000) : '',
         source: feedData.source.name,
         event_type: category,
         url: item.link,
@@ -302,7 +327,7 @@ OR if truly no connection:
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-3-5-haiku-20241022',
         max_tokens: 1024,
         temperature: 0.3,
         messages: [{ role: 'user', content: prompt }]
@@ -526,14 +551,26 @@ serve(async (req) => {
 
     console.log(`📋 Organization ID: ${organizationId}`);
 
-    // Step 1: Load RSS sources
-    const sources = await getRSSSources(organizationId);
+    // Step 1: Load RSS sources from database
+    const sources = await getRSSSources(supabase, organizationId);
     console.log(`\n📡 Parsing ${sources.length} RSS feeds...`);
 
-    // Step 2: Parse all feeds
+    // Step 2: Parse all feeds and update scan statistics
     const parsedFeeds: ParsedFeed[] = [];
     for (const source of sources) {
       const result = await parseSingleFeed(source);
+
+      // Update scan statistics for this source
+      if (source.id) {
+        if (result.error) {
+          // Failed to parse feed
+          await updateScanStats(supabase, source.id, 'failed', 0, result.error);
+        } else {
+          // Successfully parsed feed
+          await updateScanStats(supabase, source.id, 'success', result.items.length, null);
+        }
+      }
+
       if (result.items.length > 0) {
         parsedFeeds.push({ source, items: result.items });
       }
