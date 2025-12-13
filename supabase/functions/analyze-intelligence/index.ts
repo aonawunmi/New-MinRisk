@@ -1,9 +1,10 @@
 // Supabase Edge Function for analyzing external events against risks
 // Simplified version for NEW-MINRISK
-// Updated: 2025-11-25
+// Updated: 2025-12-13
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { USE_CASE_MODELS } from '../_shared/ai-models.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -80,7 +81,7 @@ OR if not relevant:
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
+        model: USE_CASE_MODELS.RISK_INTELLIGENCE,
         max_tokens: 2048,
         temperature: 0.3,
         messages: [{

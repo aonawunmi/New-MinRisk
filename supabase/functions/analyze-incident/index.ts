@@ -1,9 +1,10 @@
 // Supabase Edge Function for AI-powered incident analysis
 // Feature: AI-Powered Incident-to-Risk Linking & Control Adequacy Assessment
 // Created: 2025-01-02
-// Phase 5: Enhanced error handling, timeouts, and edge cases
+// Updated: 2025-12-13 - Centralized AI model configuration
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { USE_CASE_MODELS } from '../_shared/ai-models.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -229,7 +230,7 @@ RESPOND WITH ONLY THIS JSON (no markdown, no explanations):
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
+        model: USE_CASE_MODELS.INCIDENT_ANALYSIS,
         max_tokens: 2048,
         temperature: 0.3,
         messages: [{
@@ -423,7 +424,7 @@ RESPOND WITH ONLY THIS JSON (no markdown):
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
+        model: USE_CASE_MODELS.INCIDENT_ANALYSIS,
         max_tokens: 2048,
         temperature: 0.3,
         messages: [{

@@ -3,10 +3,13 @@
  *
  * This function proxies AI requests to Anthropic API to avoid CORS issues
  * and keep the API key secure on the server side.
+ *
+ * Updated: 2025-12-13 - Centralized AI model configuration
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { USE_CASE_MODELS } from '../_shared/ai-models.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
@@ -113,7 +116,7 @@ serve(async (req) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-5-20250929",
+        model: USE_CASE_MODELS.TEXT_REFINEMENT,
         max_tokens: maxTokens,
         messages: [
           {

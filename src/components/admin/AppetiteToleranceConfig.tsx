@@ -21,6 +21,12 @@ import {
   type ChainValidationResult,
   type EnterpriseAppetiteStatus
 } from '@/lib/appetiteValidation';
+import {
+  generateAppetiteStatement,
+  generateAppetiteCategories,
+  generateToleranceMetrics,
+  getOrganizationContext,
+} from '@/lib/appetiteAI';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -48,12 +54,15 @@ import {
   ShieldAlert,
   Target,
   Gauge,
-  TrendingUp,
   FileText,
   Plus,
-  X,
   Play,
   AlertTriangle,
+  Sparkles,
+  Loader2,
+  Trash2,
+  History,
+  X,
 } from 'lucide-react';
 
 export default function AppetiteToleranceConfig() {
@@ -99,6 +108,15 @@ export default function AppetiteToleranceConfig() {
     red_min: '',
     kri_id: '',
   });
+
+  // AI Assistant state
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<{
+    statement?: string;
+    categories?: any[];
+    metrics?: any[];
+  }>({});
+  const [showAiPreview, setShowAiPreview] = useState<'statement' | 'categories' | 'metrics' | null>(null);
 
   useEffect(() => {
     if (profile?.organization_id) {
@@ -166,17 +184,16 @@ export default function AppetiteToleranceConfig() {
   }
 
   async function loadRiskCategories() {
-    // Get unique risk categories from risks table
-    const { data, error: riskError } = await supabase
-      .from('risks')
-      .select('category')
-      .eq('organization_id', profile!.organization_id)
-      .eq('is_active', true);
+    // Get risk categories from the taxonomy (not from created risks)
+    const { data, error: catError } = await supabase
+      .from('risk_categories')
+      .select('name')
+      .order('name', { ascending: true });
 
-    if (riskError) throw riskError;
+    if (catError) throw catError;
 
-    const uniqueCategories = [...new Set(data?.map(r => r.category) || [])];
-    setRiskCategories(uniqueCategories.filter(Boolean) as string[]);
+    const categoryNames = data?.map(c => c.name) || [];
+    setRiskCategories(categoryNames);
   }
 
   async function loadKRIList() {
@@ -380,6 +397,398 @@ export default function AppetiteToleranceConfig() {
     }
   }
 
+  // ============================================================================
+  // GOVERNANCE-PROOF DELETE & SUPERSEDE HANDLERS
+  // ============================================================================
+
+  async function handleDeleteDraftStatement(statementId: string) {
+    if (!confirm('Delete this draft statement? This cannot be undone.')) return;
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      // Check if can delete (should only be DRAFT)
+      const { data: canDelete, error: checkError } = await supabase.rpc(
+        'can_delete_statement',
+        { statement_id: statementId }
+      );
+
+      if (checkError) throw checkError;
+
+      if (!canDelete) {
+        setError('Cannot delete approved or superseded statements. They may only be superseded.');
+        return;
+      }
+
+      const { error: deleteError } = await supabase
+        .from('risk_appetite_statements')
+        .delete()
+        .eq('id', statementId);
+
+      if (deleteError) throw deleteError;
+
+      setSuccess('Draft statement deleted successfully');
+      await loadStatements();
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error('Error deleting statement:', err);
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSupersedeStatement(statementId: string) {
+    if (!confirm(
+      'Supersede this approved statement?\n\n' +
+      'This will:\n' +
+      '• Mark the current statement as SUPERSEDED\n' +
+      '• Create a new DRAFT statement for editing\n' +
+      '• Preserve the old statement for audit trail'
+    )) return;
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      // Calculate tomorrow's date for new statement
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const effectiveFrom = tomorrow.toISOString().split('T')[0];
+
+      const { data: newStatementId, error: supersedeError } = await supabase.rpc(
+        'supersede_appetite_statement',
+        { statement_id: statementId, new_effective_from: effectiveFrom }
+      );
+
+      if (supersedeError) throw supersedeError;
+
+      setSuccess('Statement superseded successfully. Edit the new draft statement above.');
+      await loadStatements();
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err: any) {
+      console.error('Error superseding statement:', err);
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteCategory(categoryId: string) {
+    if (!confirm(
+      'Delete this appetite category?\n\n' +
+      'This will also delete any tolerance metrics linked to this category.'
+    )) return;
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      // Check if can delete
+      const { data: canDelete, error: checkError } = await supabase.rpc(
+        'can_delete_appetite_category',
+        { category_id: categoryId }
+      );
+
+      if (checkError) throw checkError;
+
+      if (!canDelete) {
+        setError('Cannot delete this category. It may be locked (parent statement approved) or has linked metrics.');
+        return;
+      }
+
+      const { error: deleteError } = await supabase
+        .from('risk_appetite_categories')
+        .delete()
+        .eq('id', categoryId);
+
+      if (deleteError) throw deleteError;
+
+      setSuccess('Category deleted successfully');
+      await loadCategories();
+      await runValidation();
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error('Error deleting category:', err);
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteMetric(metricId: string) {
+    if (!confirm(
+      'Delete this tolerance metric?\n\n' +
+      'Note: Only metrics that have never been activated can be deleted.'
+    )) return;
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      // Check if can delete
+      const { data: canDelete, error: checkError } = await supabase.rpc(
+        'can_delete_tolerance_metric',
+        { metric_id: metricId }
+      );
+
+      if (checkError) throw checkError;
+
+      if (!canDelete) {
+        setError('Cannot delete this metric. Active or previously activated metrics must be deactivated, not deleted.');
+        return;
+      }
+
+      const { error: deleteError } = await supabase
+        .from('tolerance_metrics')
+        .delete()
+        .eq('id', metricId);
+
+      if (deleteError) throw deleteError;
+
+      setSuccess('Metric deleted successfully');
+      await loadMetrics();
+      await runValidation();
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error('Error deleting metric:', err);
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeactivateMetric(metricId: string) {
+    if (!confirm(
+      'Deactivate this tolerance metric?\n\n' +
+      'This will:\n' +
+      '• Mark the metric as inactive\n' +
+      '• Set effective_to date to today\n' +
+      '• Preserve it for historical breach interpretation\n' +
+      '• Allow you to create a new version if needed'
+    )) return;
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const { error: updateError } = await supabase
+        .from('tolerance_metrics')
+        .update({
+          is_active: false,
+          effective_to: new Date().toISOString().split('T')[0],
+        })
+        .eq('id', metricId);
+
+      if (updateError) throw updateError;
+
+      setSuccess('Metric deactivated successfully. It remains visible as a historical record.');
+      await loadMetrics();
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error('Error deactivating metric:', err);
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSupersedeMetric(metricId: string) {
+    if (!confirm(
+      'Create new version of this metric?\n\n' +
+      'This will:\n' +
+      '• Deactivate the current metric\n' +
+      '• Create a new version (inactive) with same thresholds\n' +
+      '• You can then edit and activate the new version'
+    )) return;
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      // Calculate tomorrow's date for new metric version
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const effectiveFrom = tomorrow.toISOString().split('T')[0];
+
+      const { data: newMetricId, error: supersedeError } = await supabase.rpc(
+        'supersede_tolerance_metric',
+        { metric_id: metricId, new_effective_from: effectiveFrom }
+      );
+
+      if (supersedeError) throw supersedeError;
+
+      setSuccess('New metric version created successfully. Edit and activate it when ready.');
+      await loadMetrics();
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err: any) {
+      console.error('Error superseding metric:', err);
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // AI Assistant Handlers
+  async function handleGenerateStatement() {
+    if (!profile) return;
+
+    setAiGenerating(true);
+    setError(null);
+
+    try {
+      const context = await getOrganizationContext(profile.organization_id, supabase);
+      const generatedStatement = await generateAppetiteStatement(context);
+
+      setAiSuggestions({ ...aiSuggestions, statement: generatedStatement });
+      setNewStatement({ ...newStatement, statement_text: generatedStatement });
+      setShowAiPreview('statement');
+      setSuccess('AI generated statement! Review and edit before creating.');
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err: any) {
+      console.error('Error generating statement:', err);
+      setError('AI generation failed: ' + err.message);
+    } finally {
+      setAiGenerating(false);
+    }
+  }
+
+  async function handleGenerateCategories() {
+    if (!profile) return;
+
+    setAiGenerating(true);
+    setError(null);
+
+    try {
+      const context = await getOrganizationContext(profile.organization_id, supabase);
+      const generatedCategories = await generateAppetiteCategories(context);
+
+      setAiSuggestions({ ...aiSuggestions, categories: generatedCategories });
+      setShowAiPreview('categories');
+      setSuccess(`AI generated ${generatedCategories.length} category suggestions! Review below.`);
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err: any) {
+      console.error('Error generating categories:', err);
+      setError('AI generation failed: ' + err.message);
+    } finally {
+      setAiGenerating(false);
+    }
+  }
+
+  async function handleGenerateMetrics(categoryId: string, categoryName: string, appetiteLevel: string) {
+    if (!profile) return;
+
+    setAiGenerating(true);
+    setError(null);
+
+    try {
+      const context = await getOrganizationContext(profile.organization_id, supabase);
+      const generatedMetrics = await generateToleranceMetrics(
+        categoryName,
+        appetiteLevel as any,
+        context
+      );
+
+      setAiSuggestions({ ...aiSuggestions, metrics: generatedMetrics });
+      setShowAiPreview('metrics');
+      setSuccess(`AI generated ${generatedMetrics.length} metric suggestions! Review below.`);
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err: any) {
+      console.error('Error generating metrics:', err);
+      setError('AI generation failed: ' + err.message);
+    } finally {
+      setAiGenerating(false);
+    }
+  }
+
+  async function handleAcceptAiCategory(category: any) {
+    if (!profile || !user || !activeStatement) return;
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const { error: insertError } = await supabase
+        .from('risk_appetite_categories')
+        .insert({
+          statement_id: activeStatement.id,
+          organization_id: profile.organization_id,
+          risk_category: category.risk_category,
+          appetite_level: category.appetite_level,
+          rationale: category.rationale,
+          created_by: user.id,
+        });
+
+      if (insertError) throw insertError;
+
+      setSuccess(`Added: ${category.risk_category}`);
+      await loadCategories();
+      await runValidation();
+
+      // Remove from suggestions
+      setAiSuggestions({
+        ...aiSuggestions,
+        categories: aiSuggestions.categories?.filter(c => c.risk_category !== category.risk_category)
+      });
+
+      setTimeout(() => setSuccess(null), 2000);
+    } catch (err: any) {
+      console.error('Error accepting category:', err);
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAcceptAiMetric(metric: any, categoryId: string) {
+    if (!profile || !user) return;
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const { error: insertError } = await supabase
+        .from('tolerance_metrics')
+        .insert({
+          organization_id: profile.organization_id,
+          appetite_category_id: categoryId,
+          metric_name: metric.metric_name,
+          metric_description: metric.metric_description,
+          metric_type: metric.metric_type,
+          unit: metric.unit,
+          materiality_type: metric.materiality_type,
+          green_max: metric.green_max,
+          amber_max: metric.amber_max,
+          red_min: metric.red_min,
+          green_min: metric.green_min,
+          amber_min: metric.amber_min,
+          red_max: metric.red_max,
+          is_active: false,
+          created_by: user.id,
+        });
+
+      if (insertError) throw insertError;
+
+      setSuccess(`Added: ${metric.metric_name}`);
+      await loadMetrics();
+      await runValidation();
+
+      // Remove from suggestions
+      setAiSuggestions({
+        ...aiSuggestions,
+        metrics: aiSuggestions.metrics?.filter(m => m.metric_name !== metric.metric_name)
+      });
+
+      setTimeout(() => setSuccess(null), 2000);
+    } catch (err: any) {
+      console.error('Error accepting metric:', err);
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (loading) {
     return (
       <div style={{ padding: '24px', textAlign: 'center' }}>
@@ -493,9 +902,25 @@ export default function AppetiteToleranceConfig() {
             <CardContent>
               {/* Create New Statement */}
               <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>
-                  Create New Statement
-                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: '600' }}>
+                    Create New Statement
+                  </h3>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateStatement}
+                    disabled={aiGenerating || saving}
+                    style={{ backgroundColor: '#7c3aed', color: '#ffffff', border: 'none' }}
+                  >
+                    {aiGenerating ? (
+                      <Loader2 size={14} style={{ marginRight: '6px' }} className="animate-spin" />
+                    ) : (
+                      <Sparkles size={14} style={{ marginRight: '6px' }} />
+                    )}
+                    AI Assistant
+                  </Button>
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div>
                     <Label htmlFor="statement_text">Statement Text</Label>
@@ -503,9 +928,14 @@ export default function AppetiteToleranceConfig() {
                       id="statement_text"
                       value={newStatement.statement_text}
                       onChange={(e) => setNewStatement({ ...newStatement, statement_text: e.target.value })}
-                      placeholder="Enter Board-approved risk appetite statement..."
+                      placeholder="Enter Board-approved risk appetite statement... or use AI Assistant above"
                       rows={4}
                     />
+                    {showAiPreview === 'statement' && newStatement.statement_text && (
+                      <p style={{ fontSize: '12px', color: '#7c3aed', marginTop: '4px' }}>
+                        ✨ AI-generated content - Edit as needed before creating
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label htmlFor="effective_from">Effective From</Label>
@@ -549,16 +979,40 @@ export default function AppetiteToleranceConfig() {
                             {stmt.status}
                           </Badge>
                         </div>
-                        {stmt.status === 'DRAFT' && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleApproveStatement(stmt.id)}
-                            disabled={saving}
-                          >
-                            <CheckCircle size={14} style={{ marginRight: '4px' }} />
-                            Approve
-                          </Button>
-                        )}
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {stmt.status === 'DRAFT' && (
+                            <>
+                              <Button
+                                size="sm"
+                                onClick={() => handleApproveStatement(stmt.id)}
+                                disabled={saving}
+                              >
+                                <CheckCircle size={14} style={{ marginRight: '4px' }} />
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleDeleteDraftStatement(stmt.id)}
+                                disabled={saving}
+                              >
+                                <Trash2 size={14} style={{ marginRight: '4px' }} />
+                                Delete Draft
+                              </Button>
+                            </>
+                          )}
+                          {stmt.status === 'APPROVED' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleSupersedeStatement(stmt.id)}
+                              disabled={saving}
+                            >
+                              <FileText size={14} style={{ marginRight: '4px' }} />
+                              Supersede & Replace
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <p style={{ color: '#374151', marginBottom: '8px' }}>
                         {stmt.statement_text}
@@ -596,9 +1050,66 @@ export default function AppetiteToleranceConfig() {
                 <>
                   {/* Add New Category */}
                   <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>
-                      Add Appetite Category
-                    </h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h3 style={{ fontSize: '16px', fontWeight: '600' }}>
+                        Add Appetite Category
+                      </h3>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGenerateCategories}
+                        disabled={aiGenerating || saving}
+                        style={{ backgroundColor: '#7c3aed', color: '#ffffff', border: 'none' }}
+                      >
+                        {aiGenerating ? (
+                          <Loader2 size={14} style={{ marginRight: '6px' }} className="animate-spin" />
+                        ) : (
+                          <Sparkles size={14} style={{ marginRight: '6px' }} />
+                        )}
+                        AI Generate All
+                      </Button>
+                    </div>
+
+                    {/* AI Suggestions */}
+                    {showAiPreview === 'categories' && aiSuggestions.categories && aiSuggestions.categories.length > 0 && (
+                      <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#f0f9ff', borderRadius: '8px', border: '1px solid #7c3aed' }}>
+                        <p style={{ fontSize: '14px', fontWeight: '600', color: '#7c3aed', marginBottom: '12px' }}>
+                          ✨ AI Suggestions - Click Accept to add or manually configure below
+                        </p>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '8px' }}>
+                          {aiSuggestions.categories.map((aiCat, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                padding: '12px',
+                                backgroundColor: '#ffffff',
+                                borderRadius: '6px',
+                                border: '1px solid #e5e7eb',
+                              }}
+                            >
+                              <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
+                                {aiCat.risk_category}
+                              </div>
+                              <Badge variant="outline" style={{ marginBottom: '8px' }}>
+                                {aiCat.appetite_level}
+                              </Badge>
+                              <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>
+                                {aiCat.rationale.substring(0, 80)}...
+                              </p>
+                              <Button
+                                size="sm"
+                                onClick={() => handleAcceptAiCategory(aiCat)}
+                                disabled={saving}
+                                style={{ width: '100%' }}
+                              >
+                                Accept
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div>
                         <Label htmlFor="risk_category">Risk Category</Label>
@@ -641,14 +1152,14 @@ export default function AppetiteToleranceConfig() {
                           id="rationale"
                           value={newCategory.rationale}
                           onChange={(e) => setNewCategory({ ...newCategory, rationale: e.target.value })}
-                          placeholder="Why this appetite level?"
+                          placeholder="Why this appetite level? (or use AI Generate All above)"
                           rows={2}
                         />
                       </div>
                       <div style={{ gridColumn: 'span 2' }}>
                         <Button onClick={handleAddCategory} disabled={saving || !newCategory.risk_category}>
                           <Plus size={16} style={{ marginRight: '6px' }} />
-                          Add Category
+                          Add Category Manually
                         </Button>
                       </div>
                     </div>
@@ -661,35 +1172,59 @@ export default function AppetiteToleranceConfig() {
                         No appetite categories yet. Add one above.
                       </p>
                     ) : (
-                      categories.map((cat) => (
-                        <div
-                          key={cat.id}
-                          style={{
-                            padding: '16px',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '8px',
-                          }}
-                        >
-                          <div style={{ fontWeight: '600', marginBottom: '8px' }}>
-                            {cat.risk_category}
-                          </div>
-                          <Badge
-                            variant={
-                              cat.appetite_level === 'ZERO' ? 'destructive' :
-                              cat.appetite_level === 'LOW' ? 'secondary' :
-                              cat.appetite_level === 'MODERATE' ? 'default' :
-                              'outline'
-                            }
+                      categories.map((cat) => {
+                        const parentStatement = statements.find(s => s.id === cat.statement_id);
+                        const canDelete = parentStatement?.status === 'DRAFT';
+
+                        return (
+                          <div
+                            key={cat.id}
+                            style={{
+                              padding: '16px',
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              position: 'relative',
+                            }}
                           >
-                            {cat.appetite_level}
-                          </Badge>
-                          {cat.rationale && (
-                            <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '8px' }}>
-                              {cat.rationale}
-                            </p>
-                          )}
-                        </div>
-                      ))
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+                              <div style={{ fontWeight: '600' }}>
+                                {cat.risk_category}
+                              </div>
+                              {canDelete && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleDeleteCategory(cat.id)}
+                                  disabled={saving}
+                                  style={{ padding: '4px', height: 'auto' }}
+                                >
+                                  <X size={16} />
+                                </Button>
+                              )}
+                            </div>
+                            <Badge
+                              variant={
+                                cat.appetite_level === 'ZERO' ? 'destructive' :
+                                cat.appetite_level === 'LOW' ? 'secondary' :
+                                cat.appetite_level === 'MODERATE' ? 'default' :
+                                'outline'
+                              }
+                            >
+                              {cat.appetite_level}
+                            </Badge>
+                            {cat.rationale && (
+                              <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '8px' }}>
+                                {cat.rationale}
+                              </p>
+                            )}
+                            {!canDelete && (
+                              <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px', fontStyle: 'italic' }}>
+                                🔒 Locked (parent statement approved)
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </>
@@ -719,9 +1254,77 @@ export default function AppetiteToleranceConfig() {
                 <>
                   {/* Add New Metric */}
                   <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>
-                      Add Tolerance Metric
-                    </h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h3 style={{ fontSize: '16px', fontWeight: '600' }}>
+                        Add Tolerance Metric
+                      </h3>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const selectedCategory = categories.find(c => c.id === newMetric.appetite_category_id);
+                          if (selectedCategory) {
+                            handleGenerateMetrics(
+                              selectedCategory.id,
+                              selectedCategory.risk_category,
+                              selectedCategory.appetite_level
+                            );
+                          }
+                        }}
+                        disabled={aiGenerating || saving || !newMetric.appetite_category_id}
+                        style={{ backgroundColor: '#7c3aed', color: '#ffffff', border: 'none' }}
+                      >
+                        {aiGenerating ? (
+                          <Loader2 size={14} style={{ marginRight: '6px' }} className="animate-spin" />
+                        ) : (
+                          <Sparkles size={14} style={{ marginRight: '6px' }} />
+                        )}
+                        AI Generate Metrics
+                      </Button>
+                    </div>
+
+                    {/* AI Suggestions Preview */}
+                    {showAiPreview === 'metrics' && aiSuggestions.metrics && aiSuggestions.metrics.length > 0 && (
+                      <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#f0f9ff', borderRadius: '8px', border: '1px solid #7c3aed' }}>
+                        <p style={{ fontSize: '14px', fontWeight: '600', color: '#7c3aed', marginBottom: '12px' }}>
+                          ✨ AI Suggestions - Click Accept to add or configure manually below
+                        </p>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+                          {aiSuggestions.metrics.map((aiMetric, idx) => (
+                            <div key={idx} style={{ padding: '12px', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+                              <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
+                                {aiMetric.metric_name}
+                              </div>
+                              <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
+                                <Badge variant="outline" style={{ fontSize: '11px' }}>
+                                  {aiMetric.metric_type}
+                                </Badge>
+                                <Badge variant="outline" style={{ fontSize: '11px' }}>
+                                  {aiMetric.materiality_type}
+                                </Badge>
+                              </div>
+                              <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>
+                                {aiMetric.metric_description.substring(0, 100)}...
+                              </p>
+                              <div style={{ fontSize: '11px', color: '#374151', marginBottom: '8px', fontFamily: 'monospace' }}>
+                                {aiMetric.green_max && <div>🟢 Green: ≤ {aiMetric.green_max}{aiMetric.unit}</div>}
+                                {aiMetric.amber_max && <div>🟠 Amber: ≤ {aiMetric.amber_max}{aiMetric.unit}</div>}
+                                {aiMetric.red_min && <div>🔴 Red: ≥ {aiMetric.red_min}{aiMetric.unit}</div>}
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => handleAcceptAiMetric(aiMetric, newMetric.appetite_category_id)}
+                                disabled={saving}
+                                style={{ width: '100%' }}
+                              >
+                                Accept
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div>
                         <Label htmlFor="appetite_category">Appetite Category</Label>
@@ -730,7 +1333,7 @@ export default function AppetiteToleranceConfig() {
                           onValueChange={(val) => setNewMetric({ ...newMetric, appetite_category_id: val })}
                         >
                           <SelectTrigger>
-                            <SelectValue placeholder="Select category" />
+                            <SelectValue placeholder="Select category (or use AI above)" />
                           </SelectTrigger>
                           <SelectContent>
                             {categories.map((cat) => (
@@ -836,7 +1439,7 @@ export default function AppetiteToleranceConfig() {
                       <div style={{ gridColumn: 'span 2' }}>
                         <Button onClick={handleAddMetric} disabled={saving || !newMetric.metric_name || !newMetric.appetite_category_id}>
                           <Plus size={16} style={{ marginRight: '6px' }} />
-                          Add Metric
+                          Add Metric Manually
                         </Button>
                       </div>
                     </div>
@@ -849,41 +1452,90 @@ export default function AppetiteToleranceConfig() {
                         No tolerance metrics yet. Add one above.
                       </p>
                     ) : (
-                      metrics.map((metric) => (
-                        <div
-                          key={metric.id}
-                          style={{
-                            padding: '16px',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '8px',
-                            backgroundColor: metric.is_active ? '#f0fdf4' : '#ffffff',
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
-                            <div>
-                              <span style={{ fontWeight: '600', fontSize: '16px' }}>
-                                {metric.metric_name}
-                              </span>
-                              <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-                                {metric.appetite_category?.risk_category} • {metric.metric_type} • {metric.unit}
+                      metrics.map((metric) => {
+                        const neverActivated = metric.never_activated ?? true;
+                        const canDelete = !metric.is_active && neverActivated;
+                        const isHistorical = !metric.is_active && !neverActivated;
+
+                        return (
+                          <div
+                            key={metric.id}
+                            style={{
+                              padding: '16px',
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              backgroundColor: metric.is_active ? '#f0fdf4' : isHistorical ? '#fafafa' : '#ffffff',
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+                              <div>
+                                <span style={{ fontWeight: '600', fontSize: '16px' }}>
+                                  {metric.metric_name}
+                                </span>
+                                {metric.version && metric.version > 1 && (
+                                  <Badge variant="outline" style={{ marginLeft: '8px', fontSize: '11px' }}>
+                                    v{metric.version}
+                                  </Badge>
+                                )}
+                                <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+                                  {metric.appetite_category?.risk_category} • {metric.metric_type} • {metric.unit}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                {isHistorical && (
+                                  <Badge variant="outline" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <History size={12} />
+                                    Historical
+                                  </Badge>
+                                )}
+                                {metric.is_active && (
+                                  <>
+                                    <Badge variant="default">Active</Badge>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleDeactivateMetric(metric.id)}
+                                      disabled={saving}
+                                    >
+                                      Deactivate
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleSupersedeMetric(metric.id)}
+                                      disabled={saving}
+                                    >
+                                      <FileText size={14} style={{ marginRight: '4px' }} />
+                                      Supersede Metric
+                                    </Button>
+                                  </>
+                                )}
+                                {!metric.is_active && !isHistorical && metric.kri_id && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleActivateMetric(metric.id)}
+                                    disabled={saving}
+                                  >
+                                    <Play size={14} style={{ marginRight: '4px' }} />
+                                    Activate
+                                  </Button>
+                                )}
+                                {!metric.is_active && !isHistorical && (
+                                  <Badge variant="secondary">Inactive</Badge>
+                                )}
+                                {canDelete && (
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => handleDeleteMetric(metric.id)}
+                                    disabled={saving}
+                                  >
+                                    <Trash2 size={14} style={{ marginRight: '4px' }} />
+                                    Delete
+                                  </Button>
+                                )}
                               </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                              <Badge variant={metric.is_active ? 'default' : 'secondary'}>
-                                {metric.is_active ? 'Active' : 'Inactive'}
-                              </Badge>
-                              {!metric.is_active && metric.kri_id && (
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleActivateMetric(metric.id)}
-                                  disabled={saving}
-                                >
-                                  <Play size={14} style={{ marginRight: '4px' }} />
-                                  Activate
-                                </Button>
-                              )}
-                            </div>
-                          </div>
                           <div style={{ display: 'flex', gap: '16px', fontSize: '13px', marginTop: '12px' }}>
                             <div>
                               <span style={{ color: '#10b981', fontWeight: '600' }}>Green:</span> {' '}
@@ -904,7 +1556,8 @@ export default function AppetiteToleranceConfig() {
                             </p>
                           )}
                         </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </>

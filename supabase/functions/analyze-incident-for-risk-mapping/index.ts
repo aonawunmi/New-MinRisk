@@ -10,6 +10,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { USE_CASE_MODELS } from '../_shared/ai-models.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -166,7 +167,7 @@ RESPOND WITH ONLY THIS JSON (no markdown, no code blocks, no explanations):
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929', // Latest model
+        model: USE_CASE_MODELS.INCIDENT_RISK_MAPPING,
         max_tokens: 4096,
         temperature: 0.2, // Lower temperature for more consistent analysis
         messages: [{

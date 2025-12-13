@@ -21,6 +21,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { parse } from 'https://deno.land/x/xml@2.1.1/mod.ts';
 import { DEFAULT_RSS_SOURCES, getRSSSources, updateScanStats, type RSSSource } from './rss-sources.ts';
 import { extractKeywords, getAllKeywords, matchesCategory, KEYWORD_CATEGORIES } from './keywords.ts';
+import { USE_CASE_MODELS } from '../_shared/ai-models.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -327,7 +328,7 @@ OR if truly no connection:
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-3-5-haiku-20241022',
+        model: USE_CASE_MODELS.RSS_FILTERING,
         max_tokens: 1024,
         temperature: 0.3,
         messages: [{ role: 'user', content: prompt }]
