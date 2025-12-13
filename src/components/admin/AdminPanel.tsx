@@ -4,6 +4,7 @@ import TaxonomyManagement from './TaxonomyManagement';
 import UserManagement from './UserManagement';
 import OrganizationSettings from './OrganizationSettings';
 import RiskConfiguration from './RiskConfiguration';
+import AppetiteToleranceConfig from './AppetiteToleranceConfig';
 import PeriodManagement from './PeriodManagement';
 import AuditTrail from './AuditTrail';
 import HelpTab from './HelpTab';
@@ -16,6 +17,7 @@ export default function AdminPanel() {
   const tabs = [
     { id: 'taxonomy', label: 'Risk Taxonomy' },
     { id: 'configuration', label: 'Risk Configuration' },
+    { id: 'appetite', label: 'Appetite & Tolerance' },
     { id: 'users', label: 'User Management' },
     { id: 'owner-mapping', label: 'Owner Mapping' },
     { id: 'periods', label: 'Period Management' },
@@ -73,6 +75,7 @@ export default function AdminPanel() {
       <div>
         {activeTab === 'taxonomy' && <TaxonomyManagement />}
         {activeTab === 'configuration' && <RiskConfiguration />}
+        {activeTab === 'appetite' && <AppetiteToleranceConfig />}
         {activeTab === 'users' && <UserManagement />}
         {activeTab === 'owner-mapping' && <OwnerMappingTool />}
         {activeTab === 'periods' && user && profile && (
