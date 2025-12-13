@@ -3,7 +3,35 @@
 **Project:** MinRisk Risk Management Platform (Clean Rebuild)
 **Location:** NEW-MINRISK/
 **Status:** Active Development
-**Last Updated:** 2025-12-05
+**Last Updated:** 2025-12-13
+
+---
+
+## ⚠️ CRITICAL: WORKING DIRECTORY
+
+**ALWAYS work in this folder going forward:**
+```
+/Users/AyodeleOnawunmi/Library/CloudStorage/OneDrive-FMDQSecuritiesExchange/Desktop/AY/CODING/MinRisk/NEW-MINRISK/
+```
+
+**Current working directory from shell should be:**
+```bash
+pwd
+# Should output: .../MinRisk/NEW-MINRISK
+```
+
+**When starting any session:**
+1. Verify you're in NEW-MINRISK folder
+2. Check `git status` to confirm correct repository
+3. Run `ls -la` and verify you see: src/, database/, supabase/, CLAUDE.md, package.json, etc.
+
+**DO NOT work in:**
+- ❌ `minrisk-v2-19112025/` (old scaffold, not used)
+- ❌ `MinRisk/Project File - MinRisk/minrisk-starter/` (old version with ERM reports)
+- ❌ `MinRisk/minrisk_phase1/` (old version)
+- ❌ Any other MinRisk folders
+
+**This is the ONLY active development folder.**
 
 ---
 
