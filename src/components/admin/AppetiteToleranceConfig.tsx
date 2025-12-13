@@ -155,8 +155,11 @@ export default function AppetiteToleranceConfig() {
     if (stmtError) throw stmtError;
     setStatements(data || []);
 
-    const active = data?.find(s => s.status === 'APPROVED');
-    setActiveStatement(active || null);
+    // Use APPROVED statement if exists, otherwise use most recent DRAFT
+    // (Allows editing categories on DRAFT after superseding)
+    const approved = data?.find(s => s.status === 'APPROVED');
+    const latestDraft = data?.find(s => s.status === 'DRAFT');
+    setActiveStatement(approved || latestDraft || null);
   }
 
   async function loadCategories() {
@@ -445,6 +448,7 @@ export default function AppetiteToleranceConfig() {
       'This will:\n' +
       '• Mark the current statement as SUPERSEDED\n' +
       '• Create a new DRAFT statement for editing\n' +
+      '• Migrate existing categories to the new statement\n' +
       '• Preserve the old statement for audit trail'
     )) return;
 
@@ -464,8 +468,20 @@ export default function AppetiteToleranceConfig() {
 
       if (supersedeError) throw supersedeError;
 
-      setSuccess('Statement superseded successfully. Edit the new draft statement above.');
+      // Migrate existing categories to the new statement
+      const { error: migrateError } = await supabase
+        .from('risk_appetite_categories')
+        .update({ statement_id: newStatementId })
+        .eq('statement_id', statementId);
+
+      if (migrateError) {
+        console.error('Error migrating categories:', migrateError);
+        // Don't fail the whole operation, just warn
+      }
+
+      setSuccess('Statement superseded successfully. Categories migrated to new version. Edit the draft statement above.');
       await loadStatements();
+      await loadCategories();
       setTimeout(() => setSuccess(null), 5000);
     } catch (err: any) {
       console.error('Error superseding statement:', err);
@@ -1043,7 +1059,7 @@ export default function AppetiteToleranceConfig() {
                 <Alert>
                   <AlertCircle size={16} />
                   <AlertDescription>
-                    Please create and approve a Risk Appetite Statement first
+                    Please create a Risk Appetite Statement first (Statements tab)
                   </AlertDescription>
                 </Alert>
               ) : (

@@ -180,11 +180,12 @@ CONTEXT:
 TASK:
 Design 2-3 quantitative tolerance metrics for this category with Green/Amber/Red thresholds.
 
-METRIC TYPES:
+METRIC TYPES (use MAXIMUM, MINIMUM, or RANGE only):
 - MAXIMUM: Upper limit (e.g., "VaR must not exceed X")
 - MINIMUM: Lower limit (e.g., "Liquidity ratio must stay above X")
 - RANGE: Between two values (e.g., "NPL ratio between X and Y")
-- DIRECTIONAL: Trend-based (e.g., "No more than 10% increase in 30 days")
+
+IMPORTANT: Do NOT use DIRECTIONAL type - only MAXIMUM, MINIMUM, or RANGE.
 
 THRESHOLD LOGIC:
 - GREEN zone: Safe, within appetite
