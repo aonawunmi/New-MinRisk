@@ -325,6 +325,22 @@ When porting features from minrisk-starter:
 
 ## Environment Configuration
 
+### Credentials & Access Tokens
+
+**📋 All credentials, tokens, and access information are stored in:**
+```
+.credentials (gitignored, never committed)
+```
+
+This file contains:
+- Supabase Access Token (for CLI deployments)
+- Project URLs and references
+- Important dashboard links
+- Deployment workflow notes
+- Token rotation schedule
+
+**Last Updated:** 2025-12-15
+
 ### Supabase Project Details
 - **Project URL:** https://qrxwgjjgaekalvaqzpuf.supabase.co
 - **Project Ref:** qrxwgjjgaekalvaqzpuf
@@ -334,19 +350,23 @@ When porting features from minrisk-starter:
 
 ```bash
 VITE_SUPABASE_URL=https://qrxwgjjgaekalvaqzpuf.supabase.co
-VITE_SUPABASE_ANON_KEY=<see-supabase-dashboard-or-env-file>
-VITE_SUPABASE_SERVICE_ROLE_KEY=<see-supabase-dashboard-or-env-file>
-VITE_ANTHROPIC_API_KEY=<see-anthropic-platform-or-env-file>
+VITE_SUPABASE_ANON_KEY=<see .env.development or .credentials>
+VITE_SUPABASE_SERVICE_ROLE_KEY=<see .env.development or .credentials>
+VITE_ANTHROPIC_API_KEY=<see .env.development or .credentials>
 ```
 
 **⚠️ SECURITY WARNING:**
 - **NEVER commit API keys to Git** - even in documentation!
 - Never hardcode secrets in shell scripts
-- Actual keys are stored in `.env.development` (which is gitignored)
-- To get the keys:
-  - Supabase keys: https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/settings/api
-  - Anthropic key: https://platform.claude.com/settings/keys
+- Actual keys are stored in `.env.development` (gitignored)
+- Access tokens stored in `.credentials` (gitignored)
+- Both files are in `.gitignore` - verify before committing
 - If a key is exposed on GitHub, it will be automatically revoked by GitHub's secret scanning
+
+**Quick Access to Credentials:**
+```bash
+cat .credentials  # View all tokens and access info
+```
 
 ---
 
@@ -619,3 +639,112 @@ This is a **clean rebuild** of the MinRisk platform. Key decisions:
 ### 2025-11-25 - Risk Intelligence Phase 1
 
 **Last Session:** Completed Phase 1 implementation, created diagnostic scripts, documented Edge Function secret configuration
+
+### 2025-12-13 - Risk Appetite & Tolerance Architecture Cleanup
+
+**Session Focus:** Clean separation of governance and operational layers, category hierarchy fixes, threshold architectural cleanup
+
+#### Completed:
+
+1. **Architectural Separation: Governance vs Operations**
+   - Removed "Alerts" tab from KRI Monitoring (operational layer)
+   - KRI Monitoring now purely operational: Definitions + Data Entry
+   - Alerts will move to Risk Appetite & Tolerance tab (governance layer) in future
+   - Clear separation: Operations measure, Governance decides acceptable
+
+2. **Threshold Duplication Removed**
+   - Removed all threshold fields from KRI Definition form
+   - Architectural principle established: KRIs measure, Tolerance Metrics govern
+   - Added explanatory note in UI directing users to Risk Appetite & Tolerance tab
+   - Updated AI KRI generation to exclude threshold fields
+   - Updated AI suggestion display to show operational fields only
+
+3. **Category Hierarchy Matching Fixed**
+   - Identified taxonomy structure: Parent Categories → Subcategories → Risks
+   - Fixed KRI filtering to properly traverse hierarchy:
+     * Parent (e.g., "Operational Risk") → Subcategories (e.g., "Process Risk", "Fraud Risk")
+     * Subcategories → Risks → KRIs
+   - Updated `loadKRIList()` to query subcategories and match correctly
+   - Context-aware filtering now works: tolerance metric for "Operational Risk" shows KRIs linked to all operational subcategories
+
+4. **Parent-Level-Only Appetite Categories (Option 1)**
+   - Enforced Board-level governance: appetite set ONLY at parent category level
+   - Subcategories automatically inherit from parent
+   - Updated UI labels: "Appetite Categories (Parent Level Only)"
+   - Added helper text throughout interface
+   - Cleaned up database: deleted 5 subcategory appetite entries (Credit Risk, Fraud Risk, Market Risk, Regulatory Compliance, Strategic Innovation Risk)
+   - Only parent categories remain: Operational Risk, Strategic Risk
+
+5. **AI Generation Fixes**
+   - Fixed AI to generate appetite ONLY for parent categories (already querying `risk_categories`)
+   - Fixed risk statistics aggregation: now properly maps subcategory → parent
+   - AI context now correctly shows risk counts per parent category
+   - Updated model: Sonnet 3.5 → Sonnet 4.5 (3.5 deprecated Oct 2025)
+
+6. **Centralized AI Model Configuration**
+   - Fixed model references in both client and server configs
+   - Added clear documentation explaining dual config files:
+     * `src/config/ai-models.ts` - Client-side (browser)
+     * `supabase/functions/_shared/ai-models.ts` - Edge Functions (Deno server)
+   - Cross-referenced both files with twin file warnings
+   - Redeployed Edge Functions with corrected model
+
+7. **Database Fixes**
+   - Fixed foreign key constraint: `tolerance_metrics.kri_id` now references `kri_definitions` (was incorrectly pointing to `kri_kci_library`)
+   - Migration: `FIX_tolerance_metrics_kri_fkey.sql` executed successfully
+
+**Files Modified:**
+- `src/components/kri/KRIManagement.tsx` - Removed Alerts tab, updated description
+- `src/components/kri/KRIForm.tsx` - Removed threshold fields (target_value, lower_threshold, upper_threshold, threshold_direction)
+- `src/components/admin/AppetiteToleranceConfig.tsx` - Major updates:
+  * Added subcategory-to-parent hierarchy matching in `loadKRIList()`
+  * Updated category filtering logic
+  * Added "Parent Level Only" labels and guidance
+  * Enhanced debugging output
+- `src/lib/appetiteAI.ts` - Fixed risk statistics aggregation to properly map subcategory → parent
+- `src/config/ai-models.ts` - Updated model IDs, added twin file documentation
+- `supabase/functions/_shared/ai-models.ts` - Updated model IDs, added twin file documentation
+- `database/migrations/FIX_tolerance_metrics_kri_fkey.sql` - Executed
+
+**Database Changes:**
+```sql
+-- Foreign key fix
+ALTER TABLE tolerance_metrics DROP CONSTRAINT tolerance_metrics_kri_id_fkey;
+ALTER TABLE tolerance_metrics ADD CONSTRAINT tolerance_metrics_kri_id_fkey 
+  FOREIGN KEY (kri_id) REFERENCES kri_definitions(id) ON DELETE SET NULL;
+
+-- Data cleanup
+DELETE FROM risk_appetite_categories 
+WHERE risk_category IN ('Credit Risk', 'Fraud Risk', 'Market Risk', 
+                        'Regulatory Compliance', 'Strategic Innovation Risk');
+```
+
+**Taxonomy Structure Confirmed:**
+```
+Parent Categories (13):
+- Compliance & Legal Risk
+- ESG & Sustainability Risk
+- Financial Risk
+- Governance & Reputational Risk
+- Human Capital Risk
+- Innovation & IP Risk
+- Operational Risk
+- Physical & Safety Risk
+- Product & Service Risk
+- Project & Programme Risk
+- Strategic Risk
+- Supply Chain & Logistics Risk
+- Technology & Cyber Risk
+
+Subcategories (70+): 
+Process Risk, Fraud Risk, Credit Risk - Concentration, Market Risk - Equity, etc.
+```
+
+**Status:** Architecture now clean and aligned with world-class risk governance principles.
+
+**Pending Tasks (Future Sessions):**
+- Add Trends/History view to KRI Data Entry tab
+- Add Tolerance Breach Alerts section to Risk Appetite & Tolerance tab
+- Enhance AI to generate DIRECTIONAL metrics
+
+---

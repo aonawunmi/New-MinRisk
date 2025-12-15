@@ -54,3 +54,4 @@ src/**/*.js
 src/**/*.jsx
 !*.config.js
 !scripts/*.js
+.credentials
