@@ -18,12 +18,26 @@ jobs:
           echo "🔍 Triggering RSS Intelligence Scanner..."
           echo "Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
 
-          # Call Supabase Edge Function
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+          # Call Supabase Edge Function with 3-minute timeout
+          # RSS scanning + AI analysis can take 60-120 seconds
+          RESPONSE=$(curl -s -m 180 -w "\n%{http_code}" -X POST \
             "${{ secrets.SUPABASE_URL }}/functions/v1/scan-rss-feeds" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
             -d '{"trigger": "scheduled"}')
+
+          # Check if curl succeeded
+          CURL_EXIT=$?
+
+          if [ $CURL_EXIT -eq 28 ]; then
+            echo "⏱️  TIMEOUT: Function took longer than 3 minutes"
+            echo "This may indicate too many RSS items or slow AI processing"
+            echo "Check Edge Function logs: https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/functions/scan-rss-feeds/logs"
+            exit 1
+          elif [ $CURL_EXIT -ne 0 ]; then
+            echo "❌ curl failed with exit code $CURL_EXIT"
+            exit 1
+          fi
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | head -n-1)
