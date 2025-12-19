@@ -1,0 +1,31 @@
+#!/bin/bash
+
+echo "📊 Applying RSS Sources Migration..."
+echo ""
+echo "📋 Migration file: supabase/migrations/20251211000001_create_rss_sources.sql"
+echo ""
+echo "🔧 Please apply this migration using ONE of these methods:"
+echo ""
+echo "Method 1: Supabase Dashboard SQL Editor (Recommended)"
+echo "  1. Go to: https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/sql/new"
+echo "  2. Copy the contents of: supabase/migrations/20251211000001_create_rss_sources.sql"
+echo "  3. Paste into SQL editor"
+echo "  4. Click 'Run'"
+echo ""
+echo "Method 2: Command Line (if you have direct DB access)"
+echo "  Update the connection string in this script with correct credentials, then run:"
+echo "  psql '<your-connection-string>' -f supabase/migrations/20251211000001_create_rss_sources.sql"
+echo ""
+echo "✅ After applying the migration, you'll have:"
+echo "  - rss_sources table created"
+echo "  - 10 default RSS feeds seeded (Nigerian + Global security)"
+echo "  - RLS policies for organization-based access"
+echo "  - Admin-only insert/update/delete permissions"
+echo ""
+
+# Display the first few lines of the migration to verify
+echo "📄 Migration Preview:"
+echo "---"
+head -20 supabase/migrations/20251211000001_create_rss_sources.sql
+echo "..."
+echo "---"

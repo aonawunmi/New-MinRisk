@@ -1,0 +1,405 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MinRisk Cyber Risk Management Schema",
+  "description": "Comprehensive schema for cyber risk management, aligned with NIST CSF, ISO 27001, and CIS Controls",
+  "version": "1.0.0",
+  "created": "2025-12-15",
+
+  "definitions": {
+    "cyberRisk": {
+      "type": "object",
+      "description": "Cyber risk extending the base risk model",
+      "required": ["risk_code", "risk_title", "category", "cyber_metadata"],
+      "properties": {
+        "risk_code": {
+          "type": "string",
+          "pattern": "^CYB-[A-Z]{3}-\\d{3}$",
+          "description": "Cyber risk code format: CYB-{SUBCATEGORY}-{NUMBER}",
+          "examples": ["CYB-RAN-001", "CYB-BRE-002", "CYB-PHI-003"]
+        },
+        "risk_title": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Concise risk title",
+          "examples": ["Ransomware Attack", "Data Breach via Phishing", "Cloud Misconfiguration"]
+        },
+        "category": {
+          "type": "string",
+          "enum": ["Technology & Cyber Risk"],
+          "description": "Parent category from risk taxonomy"
+        },
+        "subcategory": {
+          "type": "string",
+          "enum": [
+            "Ransomware Risk",
+            "Data Breach Risk",
+            "Phishing & Social Engineering",
+            "Cloud Security Risk",
+            "Third-Party Vendor Risk",
+            "Insider Threat",
+            "DDoS & Availability Risk",
+            "Malware & Virus Risk",
+            "Patch Management Risk",
+            "Access Control Risk",
+            "Encryption & Cryptography Risk",
+            "Application Security Risk",
+            "Network Security Risk",
+            "IoT & OT Security Risk",
+            "Supply Chain Cyber Risk"
+          ],
+          "description": "Cyber-specific subcategory"
+        },
+        "cyber_metadata": {
+          "type": "object",
+          "description": "Cyber-specific fields not in base risk model",
+          "properties": {
+            "threat_actors": {
+              "type": "array",
+              "description": "Who might exploit this risk",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "Nation-State APT",
+                  "Cybercrime Groups",
+                  "Hacktivists",
+                  "Insider Malicious",
+                  "Insider Negligent",
+                  "Script Kiddies",
+                  "Competitors",
+                  "Third-Party Vendors"
+                ]
+              }
+            },
+            "attack_vectors": {
+              "type": "array",
+              "description": "How the attack could occur",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "Email Phishing",
+                  "Spear Phishing",
+                  "Credential Stuffing",
+                  "SQL Injection",
+                  "XSS (Cross-Site Scripting)",
+                  "Zero-Day Exploit",
+                  "Unpatched Vulnerability",
+                  "Misconfigured Cloud Storage",
+                  "Weak Passwords",
+                  "Stolen API Keys",
+                  "Man-in-the-Middle",
+                  "DDoS Attack",
+                  "Supply Chain Compromise",
+                  "Physical Access",
+                  "Social Engineering"
+                ]
+              }
+            },
+            "mitre_attack_techniques": {
+              "type": "array",
+              "description": "MITRE ATT&CK framework techniques",
+              "items": {
+                "type": "string",
+                "pattern": "^T\\d{4}(\\.\\d{3})?$",
+                "examples": ["T1566", "T1078", "T1486", "T1059.001"]
+              }
+            },
+            "nist_csf_functions": {
+              "type": "array",
+              "description": "NIST Cybersecurity Framework functions affected",
+              "items": {
+                "type": "string",
+                "enum": ["Identify", "Protect", "Detect", "Respond", "Recover"]
+              }
+            },
+            "nist_csf_categories": {
+              "type": "array",
+              "description": "Specific NIST CSF categories",
+              "items": {
+                "type": "string",
+                "examples": [
+                  "ID.AM - Asset Management",
+                  "PR.AC - Access Control",
+                  "DE.CM - Continuous Monitoring",
+                  "RS.AN - Analysis",
+                  "RC.RP - Recovery Planning"
+                ]
+              }
+            },
+            "iso_27001_controls": {
+              "type": "array",
+              "description": "ISO 27001:2022 Annex A controls",
+              "items": {
+                "type": "string",
+                "pattern": "^A\\.\\d+\\.\\d+$",
+                "examples": ["A.5.1", "A.8.1", "A.8.23", "A.5.7"]
+              }
+            },
+            "cis_controls": {
+              "type": "array",
+              "description": "CIS Critical Security Controls v8",
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 18,
+                "examples": [1, 2, 3, 5, 6, 10]
+              }
+            },
+            "cve_references": {
+              "type": "array",
+              "description": "Related CVE identifiers",
+              "items": {
+                "type": "string",
+                "pattern": "^CVE-\\d{4}-\\d{4,}$",
+                "examples": ["CVE-2021-44228", "CVE-2023-23397"]
+              }
+            },
+            "affected_assets": {
+              "type": "array",
+              "description": "Asset types affected by this risk",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "Customer Database",
+                  "Employee Records",
+                  "Financial Systems",
+                  "Email Server",
+                  "Web Applications",
+                  "Cloud Infrastructure",
+                  "Active Directory",
+                  "Backup Systems",
+                  "Payment Processing",
+                  "Mobile Applications",
+                  "IoT Devices",
+                  "Industrial Control Systems",
+                  "Third-Party APIs",
+                  "Source Code Repository"
+                ]
+              }
+            },
+            "data_classification": {
+              "type": "array",
+              "description": "Types of data at risk",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "Public",
+                  "Internal",
+                  "Confidential",
+                  "Restricted",
+                  "PII (Personal Identifiable Information)",
+                  "PHI (Protected Health Information)",
+                  "PCI (Payment Card Industry)",
+                  "Intellectual Property",
+                  "Trade Secrets",
+                  "Financial Records"
+                ]
+              }
+            },
+            "compliance_impact": {
+              "type": "array",
+              "description": "Regulatory frameworks affected",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "GDPR (EU)",
+                  "NDPR (Nigeria Data Protection Regulation)",
+                  "HIPAA (US Healthcare)",
+                  "PCI-DSS (Payment Cards)",
+                  "SOX (Financial Reporting)",
+                  "CBN IT Risk Guidelines",
+                  "SEC Cybersecurity Rules",
+                  "ISO 27001",
+                  "SOC 2",
+                  "NIST 800-53"
+                ]
+              }
+            },
+            "incident_response_plan": {
+              "type": "string",
+              "description": "Reference to incident response runbook",
+              "examples": ["IRP-RANSOMWARE-2024", "IRP-BREACH-DISCLOSURE"]
+            },
+            "cyber_insurance_coverage": {
+              "type": "boolean",
+              "description": "Whether this risk is covered by cyber insurance"
+            },
+            "mean_time_to_detect_hours": {
+              "type": "number",
+              "description": "Average hours to detect this type of incident",
+              "minimum": 0
+            },
+            "mean_time_to_contain_hours": {
+              "type": "number",
+              "description": "Average hours to contain this type of incident",
+              "minimum": 0
+            },
+            "business_impact_scenarios": {
+              "type": "array",
+              "description": "Specific business impact scenarios",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "scenario": {
+                    "type": "string",
+                    "examples": ["Complete production outage", "Customer data exfiltration"]
+                  },
+                  "likelihood": {
+                    "type": "string",
+                    "enum": ["Very Low", "Low", "Medium", "High", "Very High"]
+                  },
+                  "financial_impact_min": {
+                    "type": "number",
+                    "description": "Minimum financial loss (NGN or USD)"
+                  },
+                  "financial_impact_max": {
+                    "type": "number",
+                    "description": "Maximum financial loss (NGN or USD)"
+                  },
+                  "recovery_time_hours": {
+                    "type": "number",
+                    "description": "Time to recover from this scenario"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "cyberControl": {
+      "type": "object",
+      "description": "Cyber security control",
+      "properties": {
+        "control_code": {
+          "type": "string",
+          "pattern": "^CTRL-CYB-\\d{3}$",
+          "examples": ["CTRL-CYB-001", "CTRL-CYB-042"]
+        },
+        "control_title": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "control_type": {
+          "type": "string",
+          "enum": ["Preventive", "Detective", "Corrective", "Deterrent", "Compensating"]
+        },
+        "control_nature": {
+          "type": "string",
+          "enum": ["Technical", "Administrative", "Physical"]
+        },
+        "automation_level": {
+          "type": "string",
+          "enum": ["Manual", "Partially Automated", "Fully Automated"]
+        },
+        "framework_mappings": {
+          "type": "object",
+          "properties": {
+            "nist_csf": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "iso_27001": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "cis_controls": {
+              "type": "array",
+              "items": { "type": "integer" }
+            },
+            "mitre_defend": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "cyberKRI": {
+      "type": "object",
+      "description": "Cyber Key Risk Indicator",
+      "properties": {
+        "kri_code": {
+          "type": "string",
+          "pattern": "^KRI-CYB-\\d{3}$"
+        },
+        "kri_name": {
+          "type": "string"
+        },
+        "indicator_type": {
+          "type": "string",
+          "enum": ["Leading", "Lagging", "Hybrid"]
+        },
+        "measurement_frequency": {
+          "type": "string",
+          "enum": ["Real-time", "Hourly", "Daily", "Weekly", "Monthly"]
+        },
+        "data_source": {
+          "type": "string",
+          "enum": [
+            "SIEM (Security Information Event Management)",
+            "EDR (Endpoint Detection Response)",
+            "Firewall Logs",
+            "IDS/IPS",
+            "Active Directory",
+            "Vulnerability Scanner",
+            "Patch Management System",
+            "Email Security Gateway",
+            "Cloud Security Posture Management",
+            "Identity Access Management",
+            "Manual Review"
+          ]
+        },
+        "threshold_green": {
+          "type": "number",
+          "description": "Green threshold (safe zone)"
+        },
+        "threshold_amber": {
+          "type": "number",
+          "description": "Amber threshold (warning zone)"
+        },
+        "threshold_red": {
+          "type": "number",
+          "description": "Red threshold (critical zone)"
+        }
+      }
+    }
+  },
+
+  "examples": {
+    "sampleCyberRisk": {
+      "risk_code": "CYB-RAN-001",
+      "risk_title": "Ransomware Attack via Phishing Email",
+      "category": "Technology & Cyber Risk",
+      "subcategory": "Ransomware Risk",
+      "risk_description": "Threat actors deploy ransomware through phishing emails, encrypting critical systems and demanding payment",
+      "likelihood_inherent": 4,
+      "impact_inherent": 5,
+      "score_inherent": 20,
+      "cyber_metadata": {
+        "threat_actors": ["Cybercrime Groups", "Nation-State APT"],
+        "attack_vectors": ["Email Phishing", "Spear Phishing"],
+        "mitre_attack_techniques": ["T1566.001", "T1486"],
+        "nist_csf_functions": ["Protect", "Detect", "Respond", "Recover"],
+        "iso_27001_controls": ["A.5.7", "A.8.23", "A.8.16"],
+        "cis_controls": [7, 10, 11, 16],
+        "affected_assets": ["Email Server", "Financial Systems", "Backup Systems"],
+        "data_classification": ["Confidential", "Financial Records"],
+        "compliance_impact": ["CBN IT Risk Guidelines", "SOC 2"],
+        "cyber_insurance_coverage": true,
+        "mean_time_to_detect_hours": 4,
+        "mean_time_to_contain_hours": 24,
+        "business_impact_scenarios": [
+          {
+            "scenario": "Complete production outage for 3 days",
+            "likelihood": "Medium",
+            "financial_impact_min": 50000000,
+            "financial_impact_max": 200000000,
+            "recovery_time_hours": 72
+          }
+        ]
+      }
+    }
+  }
+}

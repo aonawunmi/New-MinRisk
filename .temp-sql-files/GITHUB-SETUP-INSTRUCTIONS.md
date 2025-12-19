@@ -1,0 +1,194 @@
+# GitHub Actions Setup - Manual Instructions
+
+**Issue:** Git push blocked because Personal Access Token lacks `workflow` scope
+
+**Solution:** Create workflow file directly via GitHub web UI
+
+---
+
+## Step 1: Create Workflow Directory
+
+1. Go to your GitHub repository: https://github.com/aonawunmi/New-MinRisk
+2. Click **"Add file"** → **"Create new file"**
+3. In the filename box, type: `.github/workflows/rss-scanner-cron.yml`
+   - GitHub will automatically create the directories
+
+---
+
+## Step 2: Copy Workflow Content
+
+Paste this content into the file:
+
+```yaml
+name: RSS Intelligence Scanner (Daily)
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  scan-rss-feeds:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger RSS Scanner Edge Function
+        run: |
+          echo "Triggering RSS Intelligence Scanner..."
+          echo "Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "${{ secrets.SUPABASE_URL }}/functions/v1/scan-rss-feeds" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"trigger": "scheduled"}')
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "Response Code: $HTTP_CODE"
+          echo "Response Body: $BODY"
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "RSS scan completed successfully"
+          else
+            echo "RSS scan failed with code $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Send notification on failure
+        if: failure()
+        run: |
+          echo "RSS scanner failed. Check Supabase Edge Function logs."
+          echo "Dashboard: https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/functions"
+```
+
+4. Click **"Commit changes"**
+5. Add commit message: `Add RSS scanner GitHub Actions workflow`
+6. Click **"Commit changes"** again
+
+---
+
+## Step 3: Configure GitHub Secrets
+
+1. In your repository, go to **Settings** → **Secrets and variables** → **Actions**
+2. Click **"New repository secret"**
+
+### Secret 1: SUPABASE_URL
+
+- **Name:** `SUPABASE_URL`
+- **Value:** `https://qrxwgjjgaekalvaqzpuf.supabase.co`
+- Click **"Add secret"**
+
+### Secret 2: SUPABASE_SERVICE_ROLE_KEY
+
+- **Name:** `SUPABASE_SERVICE_ROLE_KEY`
+- **Value:** Get from your `.env.development` file
+  ```bash
+  # Look for this line:
+  VITE_SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+  # Copy the value (the long JWT token)
+  ```
+- Click **"Add secret"**
+
+**To get the service role key:**
+
+Option A - From local `.env.development`:
+```bash
+cd /Users/AyodeleOnawunmi/Library/CloudStorage/OneDrive-FMDQSecuritiesExchange/Desktop/AY/CODING/MinRisk/NEW-MINRISK
+cat .env.development | grep VITE_SUPABASE_SERVICE_ROLE_KEY
+```
+
+Option B - From Supabase Dashboard:
+1. Go to: https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/settings/api
+2. Find **"service_role"** section
+3. Click **"Reveal"** to show the key
+4. Copy it
+
+---
+
+## Step 4: Test the Workflow
+
+1. Go to **Actions** tab in your GitHub repository
+2. Click on **"RSS Intelligence Scanner (Daily)"** workflow
+3. Click **"Run workflow"** dropdown
+4. Click **"Run workflow"** button
+5. Wait ~2 minutes for completion
+6. Click on the workflow run to see logs
+
+**Expected result:**
+- ✅ Green checkmark
+- Logs show: "✅ RSS scan completed successfully"
+- Response shows events_stored > 0
+
+---
+
+## Step 5: Verify Daily Automation
+
+After successful manual test:
+
+1. The workflow will now run automatically every day at 2:00 AM UTC
+2. View scheduled runs in **Actions** tab
+3. Monitor execution in Supabase Edge Function logs
+
+---
+
+## Troubleshooting
+
+### Workflow not appearing in Actions tab?
+
+- Make sure you committed the file to `.github/workflows/rss-scanner-cron.yml`
+- Check the file exists in the repository
+- GitHub may take 1-2 minutes to detect new workflows
+
+### Secrets not working?
+
+- Verify secret names are EXACTLY: `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`
+- No extra spaces or special characters
+- Service role key should start with `eyJhbGciOiJI...`
+
+### Workflow fails with 401 Unauthorized?
+
+- Check `SUPABASE_SERVICE_ROLE_KEY` is correct
+- Make sure you copied the **service_role** key, not the anon key
+
+### Workflow fails with 404 Not Found?
+
+- Check `SUPABASE_URL` is correct
+- Verify Edge Function `scan-rss-feeds` is deployed
+- Check deployment at: https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/functions
+
+---
+
+## Alternative: Update Git Credentials
+
+If you prefer to push via Git instead:
+
+1. Go to GitHub → Settings → Developer settings → Personal access tokens
+2. Edit your token
+3. Check the **`workflow`** permission
+4. Save changes
+5. Try `git push origin main` again
+
+---
+
+## Next Steps
+
+After workflow is configured:
+
+1. ✅ Workflow file created
+2. ✅ Secrets configured
+3. ✅ Manual test successful
+4. ✅ Daily automation active
+
+**You're done!** RSS scanner will now run daily at 2:00 AM UTC automatically.
+
+Monitor at:
+- GitHub Actions: https://github.com/aonawunmi/New-MinRisk/actions
+- Supabase Logs: https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/functions
+
+---
+
+**Created:** 2025-12-09
+**Phase 1 Completion - Day 1-2**

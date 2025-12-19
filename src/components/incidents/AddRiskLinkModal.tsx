@@ -43,6 +43,12 @@ interface AddRiskLinkModalProps {
   existingRiskIds?: string[]; // Risk IDs already linked to this incident
 }
 
+interface ExistingPrimaryLink {
+  risk_code: string;
+  risk_title: string;
+  link_id: string;
+}
+
 export function AddRiskLinkModal({
   incidentId,
   incidentTitle,
@@ -60,11 +66,13 @@ export function AddRiskLinkModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [existingPrimaryLink, setExistingPrimaryLink] = useState<ExistingPrimaryLink | null>(null);
 
-  // Load available risks
+  // Load available risks and check for existing PRIMARY link
   useEffect(() => {
     if (isOpen) {
       loadRisks();
+      checkExistingPrimaryLink();
     }
   }, [isOpen]);
 
@@ -95,9 +103,58 @@ export function AddRiskLinkModal({
     }
   };
 
+  /**
+   * Check if this incident already has a PRIMARY risk link
+   * ERM Best Practice: Each incident should have only ONE primary risk
+   */
+  const checkExistingPrimaryLink = async () => {
+    try {
+      const { data, error: checkError } = await supabase
+        .from('incident_risk_links')
+        .select(`
+          id,
+          link_type,
+          risks!inner (
+            risk_code,
+            risk_title
+          )
+        `)
+        .eq('incident_id', incidentId)
+        .eq('link_type', 'PRIMARY')
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('Error checking for existing PRIMARY link:', checkError);
+        return;
+      }
+
+      if (data && data.risks) {
+        const riskData = Array.isArray(data.risks) ? data.risks[0] : data.risks;
+        setExistingPrimaryLink({
+          link_id: data.id,
+          risk_code: riskData.risk_code,
+          risk_title: riskData.risk_title
+        });
+      } else {
+        setExistingPrimaryLink(null);
+      }
+    } catch (err) {
+      console.error('Error checking PRIMARY link:', err);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!selectedRiskId) {
       setError('Please select a risk');
+      return;
+    }
+
+    // Prevent duplicate PRIMARY link
+    if (linkType === 'PRIMARY' && existingPrimaryLink) {
+      setError(
+        `Cannot create duplicate PRIMARY link. This incident already has ${existingPrimaryLink.risk_code} as its primary risk. ` +
+        `Please select a different link type (SECONDARY, CONTRIBUTORY, or ASSOCIATED).`
+      );
       return;
     }
 
@@ -129,7 +186,7 @@ export function AddRiskLinkModal({
   const handleClose = () => {
     // Reset form
     setSelectedRiskId('');
-    setLinkType('PRIMARY');
+    setLinkType(existingPrimaryLink ? 'SECONDARY' : 'PRIMARY'); // Default to SECONDARY if PRIMARY exists
     setAdminNotes('');
     setClassificationConfidence(100);
     setError(null);
@@ -217,6 +274,20 @@ export function AddRiskLinkModal({
             )}
           </div>
 
+          {/* Existing PRIMARY Link Warning */}
+          {existingPrimaryLink && (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-md">
+              <p className="text-sm font-medium text-amber-900">
+                ⚠️ Primary Risk Already Assigned
+              </p>
+              <p className="text-xs text-amber-800 mt-1">
+                This incident already has <strong>{existingPrimaryLink.risk_code}</strong> ({existingPrimaryLink.risk_title}) as its PRIMARY risk.
+                <br />
+                <strong>ERM Best Practice:</strong> Each incident should have only ONE primary risk.
+              </p>
+            </div>
+          )}
+
           {/* Link Type Selection */}
           <div>
             <Label>Risk Link Type *</Label>
@@ -225,13 +296,16 @@ export function AddRiskLinkModal({
               onChange={(e) => setLinkType(e.target.value)}
               className="mt-2 w-full p-2 border rounded-md bg-background"
             >
-              <option value="PRIMARY">PRIMARY - Main contributing risk</option>
+              <option value="PRIMARY" disabled={!!existingPrimaryLink}>
+                PRIMARY - Main contributing risk {existingPrimaryLink ? '(Already assigned)' : ''}
+              </option>
               <option value="SECONDARY">SECONDARY - Supporting factor</option>
               <option value="CONTRIBUTORY">CONTRIBUTORY - Partial contributor</option>
               <option value="ASSOCIATED">ASSOCIATED - Related but indirect</option>
             </select>
             <p className="text-xs text-muted-foreground mt-1">
-              {linkType === 'PRIMARY' && '🔴 This risk is a main cause of the incident'}
+              {linkType === 'PRIMARY' && !existingPrimaryLink && '🔴 This risk is a main cause of the incident'}
+              {linkType === 'PRIMARY' && existingPrimaryLink && '❌ Cannot assign - PRIMARY link already exists'}
               {linkType === 'SECONDARY' && '🟡 This risk is a supporting factor'}
               {linkType === 'CONTRIBUTORY' && '🟠 This risk partially contributed'}
               {linkType === 'ASSOCIATED' && '🔵 This risk is related but indirect'}
