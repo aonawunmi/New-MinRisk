@@ -50,6 +50,7 @@ export default function KRIForm({ kri, onSave, onCancel }: KRIFormProps) {
   const [risks, setRisks] = useState<Risk[]>([]);
   const [selectedRiskCode, setSelectedRiskCode] = useState<string>('');
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set());
+  const [isSubmitting, setIsSubmitting] = useState(false); // Prevent double-clicks
 
   useEffect(() => {
     loadRisks();
@@ -119,47 +120,57 @@ export default function KRIForm({ kri, onSave, onCancel }: KRIFormProps) {
       return;
     }
 
+    if (isSubmitting) {
+      console.log('⚠️ KRI creation already in progress, ignoring duplicate click');
+      return;
+    }
+
+    setIsSubmitting(true);
     const selectedIndices = Array.from(selectedSuggestions);
     let successCount = 0;
     let failCount = 0;
 
-    for (const index of selectedIndices) {
-      const suggestion = aiSuggestions[index];
-      try {
-        // Pass the risk code to link the KRI to the risk
-        await onSave({
-          kri_name: suggestion.kri_name,
-          description: suggestion.description,
-          category: suggestion.category,
-          indicator_type: suggestion.indicator_type,
-          measurement_unit: suggestion.measurement_unit,
-          data_source: suggestion.data_source,
-          collection_frequency: suggestion.collection_frequency,
-          target_value: suggestion.target_value,
-          lower_threshold: suggestion.lower_threshold,
-          upper_threshold: suggestion.upper_threshold,
-          threshold_direction: suggestion.threshold_direction,
-          responsible_user: suggestion.responsible_user,
-        }, suggestion.linked_risk_code || selectedRiskCode);
-        successCount++;
-      } catch (err) {
-        console.error(`Failed to create KRI: ${suggestion.kri_name}`, err);
-        failCount++;
+    try {
+      for (const index of selectedIndices) {
+        const suggestion = aiSuggestions[index];
+        try {
+          // Pass the risk code to link the KRI to the risk
+          await onSave({
+            kri_name: suggestion.kri_name,
+            description: suggestion.description,
+            category: suggestion.category,
+            indicator_type: suggestion.indicator_type,
+            measurement_unit: suggestion.measurement_unit,
+            data_source: suggestion.data_source,
+            collection_frequency: suggestion.collection_frequency,
+            target_value: suggestion.target_value,
+            lower_threshold: suggestion.lower_threshold,
+            upper_threshold: suggestion.upper_threshold,
+            threshold_direction: suggestion.threshold_direction,
+            responsible_user: suggestion.responsible_user,
+          }, suggestion.linked_risk_code || selectedRiskCode);
+          successCount++;
+        } catch (err) {
+          console.error(`Failed to create KRI: ${suggestion.kri_name}`, err);
+          failCount++;
+        }
       }
-    }
 
-    // Show summary
-    if (successCount > 0) {
-      alert(`Successfully created ${successCount} KRI(s)${failCount > 0 ? `. ${failCount} failed.` : '!'}`);
-      setShowSuggestions(false);
-      setSelectedSuggestions(new Set());
-      setAiSuggestions([]);
-    } else {
-      alert('Failed to create KRIs. Please try again.');
+      // Show summary
+      if (successCount > 0) {
+        alert(`Successfully created ${successCount} KRI(s)${failCount > 0 ? `. ${failCount} failed.` : '!'}`);
+        setShowSuggestions(false);
+        setSelectedSuggestions(new Set());
+        setAiSuggestions([]);
+      } else {
+        alert('Failed to create KRIs. Please try again.');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     // Validation - kri_code will be auto-generated if not present
@@ -168,8 +179,18 @@ export default function KRIForm({ kri, onSave, onCancel }: KRIFormProps) {
       return;
     }
 
-    // Save the KRI and pass the risk code to link if provided
-    onSave(formData, manualRiskLink || undefined);
+    if (isSubmitting) {
+      console.log('⚠️ KRI save already in progress, ignoring duplicate submit');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // Save the KRI and pass the risk code to link if provided
+      await onSave(formData, manualRiskLink || undefined);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -507,11 +528,11 @@ export default function KRIForm({ kri, onSave, onCancel }: KRIFormProps) {
       </div>
 
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onCancel}>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
           Cancel
         </Button>
-        <Button type="submit">
-          {kri ? 'Update KRI' : 'Create KRI'}
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? (kri ? 'Updating...' : 'Creating...') : (kri ? 'Update KRI' : 'Create KRI')}
         </Button>
       </div>
     </form>

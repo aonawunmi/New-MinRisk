@@ -106,29 +106,33 @@ export interface KRIRiskLink {
 // ============================================================================
 
 /**
- * Generate a unique KRI code
+ * Generate a unique KRI code using database function
  * Format: KRI-001, KRI-002, KRI-003, etc.
  * - "KRI-" prefix
  * - Sequential 3-digit number
+ * - Uses database-level locking to prevent race conditions
  */
 async function generateKRICode(organizationId: string): Promise<string> {
   try {
-    // Count existing KRIs in the organization
-    const { count, error } = await supabase
-      .from('kri_definitions')
-      .select('*', { count: 'exact', head: true })
-      .eq('organization_id', organizationId);
+    // Call database function for atomic code generation
+    const { data, error } = await supabase
+      .rpc('generate_next_kri_code', {
+        p_organization_id: organizationId
+      });
 
     if (error) {
-      console.error('Error fetching KRI count:', error);
+      console.error('Error generating KRI code via database function:', error);
       // Fallback to timestamp-based code
       return `KRI-${Date.now().toString().slice(-3)}`;
     }
 
-    const nextNumber = (count || 0) + 1;
+    if (!data) {
+      console.warn('Database function returned no data, using timestamp fallback');
+      return `KRI-${Date.now().toString().slice(-3)}`;
+    }
 
-    // Return formatted code with 3-digit padding
-    return `KRI-${String(nextNumber).padStart(3, '0')}`;
+    console.log('✅ Generated KRI code atomically:', data);
+    return data;
   } catch (err) {
     console.error('Unexpected error generating KRI code:', err);
     // Fallback to timestamp-based code
