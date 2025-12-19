@@ -2229,47 +2229,64 @@ export default function RiskForm({
               )}
           </div>
 
-          {/* Residual Risk Calculation */}
-          {(manualControls.length > 0 || selectedSuggestions.size > 0) && (
-            <Card className="border-indigo-200 bg-indigo-50 mt-6">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-indigo-600" />
-                  Residual Risk (Post-Controls)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {(() => {
-                  const residual = calculateResidualRisk();
-                  const inherent = formData.likelihood_inherent * formData.impact_inherent;
-                  const reduction = Math.round(((inherent - residual.residual_score) / inherent) * 100);
+          {/* Residual Risk Calculation - ALWAYS VISIBLE */}
+          <Card className="border-indigo-200 bg-indigo-50 mt-6">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-indigo-600" />
+                Residual Risk (Post-Controls)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                const residual = calculateResidualRisk();
+                const inherent = formData.likelihood_inherent * formData.impact_inherent;
+                const totalControls = manualControls.length + selectedSuggestions.size;
+                const reduction = inherent > 0
+                  ? Math.round(((inherent - residual.residual_score) / inherent) * 100)
+                  : 0;
 
-                  return (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="bg-white p-4 rounded-lg border border-indigo-200">
-                          <p className="text-xs text-gray-600 mb-1">Inherent Risk</p>
-                          <p className="text-2xl font-bold text-gray-900">
-                            {formData.likelihood_inherent} × {formData.impact_inherent} = {inherent}
-                          </p>
-                        </div>
-                        <div className="bg-white p-4 rounded-lg border border-indigo-200">
-                          <p className="text-xs text-gray-600 mb-1">Residual Risk</p>
-                          <p className="text-2xl font-bold text-indigo-600">
-                            {residual.residual_likelihood} × {residual.residual_impact} ={' '}
-                            {residual.residual_score}
-                          </p>
-                        </div>
-                        <div className="bg-white p-4 rounded-lg border border-green-200">
-                          <p className="text-xs text-gray-600 mb-1">Risk Reduction</p>
-                          <p className="text-2xl font-bold text-green-600">{reduction}%</p>
-                        </div>
-                      </div>
+                return (
+                  <div className="space-y-4">
+                    {/* Warning when no controls exist */}
+                    {totalControls === 0 && (
+                      <Alert className="border-amber-300 bg-amber-50">
+                        <AlertCircle className="h-4 w-4 text-amber-600" />
+                        <AlertDescription className="text-amber-800">
+                          <strong>No controls are currently linked to this risk.</strong>
+                          <br />
+                          Residual risk equals inherent risk until controls are applied.
+                        </AlertDescription>
+                      </Alert>
+                    )}
 
-                      <div className="bg-white p-3 rounded-lg border border-indigo-200">
-                        <p className="text-xs text-gray-700 mb-2">
-                          <strong>DIME Framework Calculation:</strong>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-white p-4 rounded-lg border border-indigo-200">
+                        <p className="text-xs text-gray-600 mb-1">Inherent Risk</p>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {formData.likelihood_inherent} × {formData.impact_inherent} = {inherent}
                         </p>
+                      </div>
+                      <div className="bg-white p-4 rounded-lg border border-indigo-200">
+                        <p className="text-xs text-gray-600 mb-1">Residual Risk</p>
+                        <p className="text-2xl font-bold text-indigo-600">
+                          {residual.residual_likelihood} × {residual.residual_impact} ={' '}
+                          {residual.residual_score}
+                        </p>
+                      </div>
+                      <div className={`bg-white p-4 rounded-lg border ${totalControls === 0 ? 'border-gray-200' : 'border-green-200'}`}>
+                        <p className="text-xs text-gray-600 mb-1">Risk Reduction</p>
+                        <p className={`text-2xl font-bold ${totalControls === 0 ? 'text-gray-400' : 'text-green-600'}`}>
+                          {reduction}%
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-lg border border-indigo-200">
+                      <p className="text-xs text-gray-700 mb-2">
+                        <strong>DIME Framework Calculation:</strong>
+                      </p>
+                      {totalControls > 0 ? (
                         <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
                           <li>
                             Control Effectiveness = (Design + Implementation + Monitoring + Evaluation) /
@@ -2283,17 +2300,21 @@ export default function RiskForm({
                             Residual = MAX(1, Inherent - ROUND((Inherent - 1) × Max Effectiveness))
                           </li>
                           <li>
-                            Total Controls: {manualControls.length + selectedSuggestions.size} (
+                            Total Controls: {totalControls} (
                             {manualControls.length} manual + {selectedSuggestions.size} AI)
                           </li>
                         </ul>
-                      </div>
+                      ) : (
+                        <p className="text-xs text-gray-600">
+                          No controls applied. DIME effectiveness = 0. Residual risk unchanged from inherent risk.
+                        </p>
+                      )}
                     </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-          )}
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
 
           {/* Existing Controls Section - Only show when editing */}
           {editingRisk && (
