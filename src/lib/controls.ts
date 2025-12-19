@@ -25,30 +25,35 @@ interface ApiResponse<T> {
 }
 
 /**
- * Generate a unique control code
+ * Generate a unique control code using database function
  * Format: CTRL-001, CTRL-002, CTRL-003, etc.
+ * - "CTRL-" prefix
+ * - Sequential 3-digit number
+ * - Uses database-level locking to prevent race conditions
  */
 async function generateControlCode(organizationId: string): Promise<string> {
   try {
-    // Count existing controls in the organization
-    const { count, error } = await supabase
-      .from('controls')
-      .select('*', { count: 'exact', head: true })
-      .eq('organization_id', organizationId)
-      .is('deleted_at', null);
+    // Call database function for atomic code generation
+    const { data, error } = await supabase
+      .rpc('generate_next_control_code', {
+        p_organization_id: organizationId
+      });
 
     if (error) {
-      console.error('Error fetching control count:', error);
+      console.error('Error generating Control code via database function:', error);
       // Fallback to timestamp-based code
       return `CTRL-${Date.now().toString().slice(-3)}`;
     }
 
-    const nextNumber = (count || 0) + 1;
+    if (!data) {
+      console.warn('Database function returned no data, using timestamp fallback');
+      return `CTRL-${Date.now().toString().slice(-3)}`;
+    }
 
-    // Return formatted code with 3-digit padding
-    return `CTRL-${String(nextNumber).padStart(3, '0')}`;
+    console.log('✅ Generated Control code atomically:', data);
+    return data;
   } catch (err) {
-    console.error('Unexpected error generating control code:', err);
+    console.error('Unexpected error generating Control code:', err);
     // Fallback to timestamp-based code
     return `CTRL-${Date.now().toString().slice(-3)}`;
   }

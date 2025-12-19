@@ -94,6 +94,7 @@ export default function ControlForm({
     monitoring_score: null,
     evaluation_score: null,
   });
+  const [isSubmitting, setIsSubmitting] = useState(false); // Prevent double-clicks
 
   // Debug: Log available risks when form opens
   useEffect(() => {
@@ -133,7 +134,7 @@ export default function ControlForm({
     }
   }, [editingControl, open, riskId]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.name.trim()) {
@@ -146,20 +147,30 @@ export default function ControlForm({
       return;
     }
 
-    // Build the data object
-    const data: Partial<Control> = {
-      name: formData.name,
-      description: formData.description || null,
-      control_type: formData.control_type || null, // Convert empty string to null
-      target: formData.target,
-      risk_id: formData.risk_id,
-      design_score: formData.design_score,
-      implementation_score: formData.implementation_score,
-      monitoring_score: formData.monitoring_score,
-      evaluation_score: formData.evaluation_score,
-    };
+    if (isSubmitting) {
+      console.log('⚠️ Control save already in progress, ignoring duplicate submit');
+      return;
+    }
 
-    onSave(data);
+    setIsSubmitting(true);
+    try {
+      // Build the data object
+      const data: Partial<Control> = {
+        name: formData.name,
+        description: formData.description || null,
+        control_type: formData.control_type || null, // Convert empty string to null
+        target: formData.target,
+        risk_id: formData.risk_id,
+        design_score: formData.design_score,
+        implementation_score: formData.implementation_score,
+        monitoring_score: formData.monitoring_score,
+        evaluation_score: formData.evaluation_score,
+      };
+
+      await onSave(data);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const renderDIMEScoreSelector = (
@@ -437,11 +448,11 @@ export default function ControlForm({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit">
-              {editingControl ? 'Update Control' : 'Create Control'}
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (editingControl ? 'Updating...' : 'Creating...') : (editingControl ? 'Update Control' : 'Create Control')}
             </Button>
           </DialogFooter>
         </form>
