@@ -507,6 +507,13 @@ export default function RiskForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Prevent duplicate submissions (defensive check)
+    if (loading) {
+      console.log('⚠️ Risk save already in progress, ignoring duplicate submit');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 

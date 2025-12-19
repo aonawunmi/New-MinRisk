@@ -30,11 +30,12 @@ export interface UpdateRiskData extends Partial<CreateRiskData> {
 }
 
 /**
- * Generate a unique risk code based on division and category
+ * Generate a unique risk code using database function with dynamic prefix
  * Format: DIV-CAT-001 (e.g., CLE-CRE-001)
  * - First 3 letters of division (uppercase)
  * - First 3 letters of category (uppercase)
- * - Sequential 3-digit number
+ * - Sequential 3-digit number per prefix
+ * - Uses database-level locking to prevent race conditions
  */
 async function generateRiskCode(
   organizationId: string,
@@ -42,40 +43,33 @@ async function generateRiskCode(
   category: string
 ): Promise<string> {
   try {
-    // Create prefix from first 3 letters
-    const divPrefix = division.substring(0, 3).toUpperCase();
-    const catPrefix = category.substring(0, 3).toUpperCase();
-    const prefix = `${divPrefix}-${catPrefix}`;
-
-    // Find max number for this prefix in the organization
-    const { data: existingRisks, error } = await supabase
-      .from('risks')
-      .select('risk_code')
-      .eq('organization_id', organizationId)
-      .like('risk_code', `${prefix}-%`)
-      .order('risk_code', { ascending: false })
-      .limit(1);
+    // Call database function for atomic code generation with dynamic prefix
+    const { data, error } = await supabase
+      .rpc('generate_next_risk_code', {
+        p_organization_id: organizationId,
+        p_division: division,
+        p_category: category
+      });
 
     if (error) {
-      console.error('Error fetching existing risk codes:', error);
+      console.error('Error generating Risk code via database function:', error);
       // Fallback to timestamp-based code
-      return `${prefix}-${Date.now().toString().slice(-3)}`;
+      const divPrefix = division.substring(0, 3).toUpperCase();
+      const catPrefix = category.substring(0, 3).toUpperCase();
+      return `${divPrefix}-${catPrefix}-${Date.now().toString().slice(-3)}`;
     }
 
-    let nextNumber = 1;
-    if (existingRisks && existingRisks.length > 0) {
-      // Extract number from last code (e.g., "CLE-CRE-005" -> 5)
-      const lastCode = existingRisks[0].risk_code;
-      const match = lastCode.match(/-(\d+)$/);
-      if (match) {
-        nextNumber = parseInt(match[1], 10) + 1;
-      }
+    if (!data) {
+      console.warn('Database function returned no data, using timestamp fallback');
+      const divPrefix = division.substring(0, 3).toUpperCase();
+      const catPrefix = category.substring(0, 3).toUpperCase();
+      return `${divPrefix}-${catPrefix}-${Date.now().toString().slice(-3)}`;
     }
 
-    // Return formatted code with 3-digit padding
-    return `${prefix}-${String(nextNumber).padStart(3, '0')}`;
+    console.log('✅ Generated Risk code atomically:', data, 'for', division, '/', category);
+    return data;
   } catch (err) {
-    console.error('Unexpected error generating risk code:', err);
+    console.error('Unexpected error generating Risk code:', err);
     // Fallback to timestamp-based code
     const divPrefix = division.substring(0, 3).toUpperCase();
     const catPrefix = category.substring(0, 3).toUpperCase();
