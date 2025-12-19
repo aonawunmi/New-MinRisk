@@ -35,6 +35,39 @@ pwd
 
 ---
 
+## 🔐 SECURITY & COMPLIANCE TODO
+
+**📋 IMPORTANT:** Comprehensive security hardening checklist is documented in:
+
+```
+SECURITY-HARDENING-TODO.md
+```
+
+**Quick Access:**
+```bash
+cat SECURITY-HARDENING-TODO.md
+```
+
+**What's Inside:**
+- 🔴 Critical security fixes (service role exposure, env separation, audit logging)
+- 🟡 Medium priority items (rate limiting, monitoring, encryption)
+- 🟢 Future enhancements (SOC 2, penetration testing, DR testing)
+- Regulatory compliance checklists (CBN, SEC, ISO 27001, SOC 2)
+- Cost estimates and timelines
+- Success metrics
+
+**Trigger Phrases:** When user mentions any of these, reference SECURITY-HARDENING-TODO.md:
+- "security hardening"
+- "regulatory compliance" / "audit preparation"
+- "SOC 2" / "ISO 27001" / "CBN guidelines"
+- "fix security issues"
+- "data encryption" / "audit logging"
+
+**Status:** Created 2025-12-15, pending implementation
+**Priority:** HIGH - Required for regulatory approval
+
+---
+
 ## 🧠 SPECIAL INSTRUCTIONS
 
 ### "Think Deep" Mode
