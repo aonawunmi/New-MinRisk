@@ -11,10 +11,11 @@ import { createRisk, updateRisk } from '@/lib/risks';
 import { getCategoriesWithSubcategories, type CategoryWithSubcategories, exportTaxonomy } from '@/lib/taxonomy';
 import { getRootCauses, getImpacts, createCustomRootCause, createCustomImpact, type RootCause, type Impact } from '@/lib/libraries';
 import { refineRiskStatement, type RiskStatementRefinement, revalidateEditedStatement, type RevalidationResult, getAIControlRecommendations, type AISuggestedControl } from '@/lib/ai';
-import { createControl, getControlsForRisk, updateControl, deleteControl } from '@/lib/controls';
+import { createControl, getControlsForRisk, updateControl, deleteControl, calculateControlEffectiveness } from '@/lib/controls';
 import { getAlertsWithEventsForRisk, type RiskIntelligenceAlert, type ExternalEvent } from '@/lib/riskIntelligence';
 import { getOrganizationConfig, getLikelihoodOptions, getImpactOptions, type OrganizationConfig } from '@/lib/config';
 import { listUsersInOrganization } from '@/lib/admin';
+import { isUserAdmin } from '@/lib/profiles';
 import { supabase } from '@/lib/supabase';
 import type { Control, UpdateControlData } from '@/types/control';
 import type { Risk, CreateRiskData } from '@/types/risk';
@@ -105,6 +106,9 @@ export default function RiskForm({
     category: '',
   });
   const [savingCustom, setSavingCustom] = useState(false);
+
+  // Admin access state
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // AI Refinement state
   const [isRefining, setIsRefining] = useState(false);
@@ -302,6 +306,7 @@ export default function RiskForm({
       loadLibraries();
       loadConfig();
       loadUsers();
+      loadAdminStatus();
     }
   }, [open]);
 
@@ -354,6 +359,16 @@ export default function RiskForm({
       console.error('Unexpected user load error:', err);
     } finally {
       setLoadingUsers(false);
+    }
+  }
+
+  async function loadAdminStatus() {
+    try {
+      const adminStatus = await isUserAdmin();
+      setIsAdmin(adminStatus);
+    } catch (err) {
+      console.error('Error checking admin status:', err);
+      setIsAdmin(false); // Default to non-admin on error
     }
   }
 
@@ -925,19 +940,15 @@ export default function RiskForm({
   }
 
   function calculateEffectiveness(control: AISuggestedControl): number {
-    // DIME Framework Rule: If Design = 0 OR Implementation = 0, effectiveness = 0
-    if (control.design_score === 0 || control.implementation_score === 0) {
-      return 0;
-    }
-
-    return Math.round(
-      ((control.design_score +
-        control.implementation_score +
-        control.monitoring_score +
-        control.evaluation_score) /
-        12) *
-        100
+    // Use single source of truth from src/lib/controls.ts
+    const effectivenessFraction = calculateControlEffectiveness(
+      control.design_score,
+      control.implementation_score,
+      control.monitoring_score,
+      control.evaluation_score
     );
+    // Convert from fraction (0-1) to percentage (0-100)
+    return Math.round(effectivenessFraction * 100);
   }
 
   function updateAISuggestionDIME(
@@ -953,7 +964,7 @@ export default function RiskForm({
     setAiSuggestions(updatedSuggestions);
   }
 
-  // Calculate residual risk based on all controls (manual + selected AI)
+  // Calculate residual risk based on all controls (existing + manual + selected AI)
   function calculateResidualRisk(): {
     residual_likelihood: number;
     residual_impact: number;
@@ -962,14 +973,17 @@ export default function RiskForm({
     const inherentLikelihood = formData.likelihood_inherent;
     const inherentImpact = formData.impact_inherent;
 
-    // Collect all controls (manual + selected AI)
+    // Collect all controls (existing from DB + manual + selected AI)
     const allControls: Array<{
       target: 'Likelihood' | 'Impact';
-      design_score: number;
-      implementation_score: number;
-      monitoring_score: number;
-      evaluation_score: number;
+      design_score: number | null;
+      implementation_score: number | null;
+      monitoring_score: number | null;
+      evaluation_score: number | null;
     }> = [];
+
+    // Add existing controls from database
+    allControls.push(...existingControls);
 
     // Add manual controls
     allControls.push(...manualControls);
@@ -988,16 +1002,17 @@ export default function RiskForm({
     let maxImpactEffectiveness = 0;
 
     for (const control of allControls) {
-      // DIME Framework Rule: If Design = 0 OR Implementation = 0, effectiveness = 0
-      let effectiveness = 0;
-      if (control.design_score !== 0 && control.implementation_score !== 0) {
-        // Calculate effectiveness: (D + I + M + E) / 12
-        effectiveness =
-          (control.design_score +
-            control.implementation_score +
-            control.monitoring_score +
-            control.evaluation_score) /
-          12.0;
+      // Use single source of truth from src/lib/controls.ts
+      const effectiveness = calculateControlEffectiveness(
+        control.design_score,
+        control.implementation_score,
+        control.monitoring_score,
+        control.evaluation_score
+      );
+
+      // Skip controls with 0 effectiveness
+      if (effectiveness === 0) {
+        continue;
       }
 
       // Track maximum effectiveness per target
@@ -1242,17 +1257,20 @@ export default function RiskForm({
             <div className="space-y-2">
               <div className="flex items-center justify-between mb-1">
                 <Label htmlFor="root_cause">Root Cause (Optional)</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowCustomRootCause(true)}
-                  className="h-7 text-xs"
-                  disabled={loading}
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Add Custom
-                </Button>
+                {/* Admin-only: Add custom root causes */}
+                {isAdmin && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCustomRootCause(true)}
+                    className="h-7 text-xs"
+                    disabled={loading}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add Custom
+                  </Button>
+                )}
               </div>
               {loadingLibraries ? (
                 <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -1316,17 +1334,20 @@ export default function RiskForm({
             <div className="space-y-2">
               <div className="flex items-center justify-between mb-1">
                 <Label htmlFor="impact">Impact (Optional)</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowCustomImpact(true)}
-                  className="h-7 text-xs"
-                  disabled={loading}
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Add Custom
-                </Button>
+                {/* Admin-only: Add custom impacts */}
+                {isAdmin && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCustomImpact(true)}
+                    className="h-7 text-xs"
+                    disabled={loading}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add Custom
+                  </Button>
+                )}
               </div>
               {loadingLibraries ? (
                 <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -2248,7 +2269,7 @@ export default function RiskForm({
               {(() => {
                 const residual = calculateResidualRisk();
                 const inherent = formData.likelihood_inherent * formData.impact_inherent;
-                const totalControls = manualControls.length + selectedSuggestions.size;
+                const totalControls = existingControls.length + manualControls.length + selectedSuggestions.size;
                 const reduction = inherent > 0
                   ? Math.round(((inherent - residual.residual_score) / inherent) * 100)
                   : 0;
@@ -2308,7 +2329,7 @@ export default function RiskForm({
                           </li>
                           <li>
                             Total Controls: {totalControls} (
-                            {manualControls.length} manual + {selectedSuggestions.size} AI)
+                            {existingControls.length} existing + {manualControls.length} manual + {selectedSuggestions.size} AI)
                           </li>
                         </ul>
                       ) : (
@@ -2346,15 +2367,21 @@ export default function RiskForm({
                 ) : (
                   <div className="space-y-3">
                     {existingControls.map((control) => {
-                      // Calculate average DIME score
-                      const dimeScores = [
-                        control.design_score || 0,
-                        control.implementation_score || 0,
-                        control.monitoring_score || 0,
-                        control.evaluation_score || 0,
-                      ];
-                      const avgDIME = (dimeScores.reduce((sum, score) => sum + score, 0) / 4).toFixed(2);
-                      const effectiveness = ((parseFloat(avgDIME) / 3) * 100).toFixed(0);
+                      // Use single source of truth from src/lib/controls.ts
+                      const effectivenessFraction = calculateControlEffectiveness(
+                        control.design_score,
+                        control.implementation_score,
+                        control.monitoring_score,
+                        control.evaluation_score
+                      );
+                      const effectiveness = Math.round(effectivenessFraction * 100);
+
+                      // Calculate average for display purposes only (not used in residual calc)
+                      const d = control.design_score ?? 0;
+                      const i = control.implementation_score ?? 0;
+                      const m = control.monitoring_score ?? 0;
+                      const e = control.evaluation_score ?? 0;
+                      const avgDIME = ((d + i + m + e) / 4).toFixed(2);
 
                       const isEditing = editingControlId === control.id;
 

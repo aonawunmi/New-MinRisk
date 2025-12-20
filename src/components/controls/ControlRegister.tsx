@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { getAllControls, createControl, updateControl, deleteControl, calculateControlEffectiveness } from '@/lib/controls';
 import { getRisks } from '@/lib/risks';
+import { getCurrentProfileId } from '@/lib/auth';
 import type { Control } from '@/types/control';
 import type { Risk } from '@/types/risk';
 import { Button } from '@/components/ui/button';
@@ -39,6 +40,7 @@ export default function ControlRegister() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingControl, setEditingControl] = useState<Control | null>(null);
+  const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,7 +53,13 @@ export default function ControlRegister() {
 
   useEffect(() => {
     loadData();
+    loadCurrentProfile();
   }, []);
+
+  async function loadCurrentProfile() {
+    const profileId = await getCurrentProfileId();
+    setCurrentProfileId(profileId);
+  }
 
   async function loadData() {
     setLoading(true);
@@ -518,20 +526,37 @@ export default function ControlRegister() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEdit(control)}
-                            >
-                              <Edit className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDelete(control)}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
+                            {/* Only control owner can edit/delete */}
+                            {control.created_by_profile_id === currentProfileId ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleEdit(control)}
+                                  title="Edit control"
+                                >
+                                  <Edit className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDelete(control)}
+                                  title="Delete control"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEdit(control)}
+                                title="View control (read-only)"
+                                className="text-gray-600"
+                              >
+                                View
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -558,6 +583,7 @@ export default function ControlRegister() {
           risk_code: r.risk_code,
           risk_title: r.risk_title,
         }))}
+        isReadOnly={editingControl !== null && editingControl.created_by_profile_id !== currentProfileId}
       />
     </div>
   );

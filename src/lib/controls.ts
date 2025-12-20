@@ -305,22 +305,26 @@ export function calculateControlEffectiveness(
   monitoring: DIMEScore | null,
   evaluation: DIMEScore | null
 ): number {
-  if (
-    design === null ||
-    implementation === null ||
-    monitoring === null ||
-    evaluation === null
-  ) {
-    return 0;
-  }
-
-  // Special case: no design or no implementation = no effectiveness
+  // DIME Framework Critical Rule:
+  // If Design=0 or Implementation=0, control has NO effectiveness
+  // (Can't work if poorly designed or not implemented)
   if (design === 0 || implementation === 0) {
     return 0;
   }
 
+  // If Design or Implementation are null, we can't assess effectiveness
+  if (design === null || implementation === null) {
+    return 0;
+  }
+
+  // Monitoring and Evaluation can be null or 0 - control still has SOME effectiveness
+  // Treat null M/E as 0 (not measured, but control still works based on D and I)
+  const m = monitoring ?? 0;
+  const e = evaluation ?? 0;
+
   // Calculate effectiveness as fraction (0 to 1)
-  return (design + implementation + monitoring + evaluation) / 12.0;
+  // Formula: (D + I + M + E) / 12
+  return (design + implementation + m + e) / 12.0;
 }
 
 /**
@@ -350,18 +354,18 @@ export async function calculateResidualRisk(
 
     if (controls) {
       for (const control of controls) {
-        // Skip controls without complete DIME scores
+        // Skip controls without Design or Implementation (required for effectiveness)
+        // Monitoring and Evaluation are optional - control can still be effective
         if (
           control.design_score === null ||
           control.implementation_score === null ||
-          control.monitoring_score === null ||
-          control.evaluation_score === null ||
           !control.target
         ) {
           continue;
         }
 
         // Calculate control effectiveness
+        // (M and E can be null - will be treated as 0 in calculation)
         const effectiveness = calculateControlEffectiveness(
           control.design_score,
           control.implementation_score,

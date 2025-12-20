@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 import { getAIControlRecommendations, type AISuggestedControl } from '@/lib/ai';
-import { createControl } from '@/lib/controls';
+import { createControl, calculateControlEffectiveness } from '@/lib/controls';
 import {
   Dialog,
   DialogContent,
@@ -153,17 +153,15 @@ export default function AIControlSuggestions({
   }
 
   function calculateEffectiveness(suggestion: AISuggestedControl): number {
-    if (suggestion.design_score === 0 || suggestion.implementation_score === 0) {
-      return 0;
-    }
-    return (
-      ((suggestion.design_score +
-        suggestion.implementation_score +
-        suggestion.monitoring_score +
-        suggestion.evaluation_score) /
-        12) *
-      100
+    // Use single source of truth from src/lib/controls.ts
+    const effectivenessFraction = calculateControlEffectiveness(
+      suggestion.design_score,
+      suggestion.implementation_score,
+      suggestion.monitoring_score,
+      suggestion.evaluation_score
     );
+    // Convert from fraction (0-1) to percentage (0-100)
+    return Math.round(effectivenessFraction * 100);
   }
 
   return (

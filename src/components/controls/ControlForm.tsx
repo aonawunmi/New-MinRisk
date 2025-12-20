@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { Control, DIMEScore, ControlType, ControlTarget } from '@/types/control';
+import { calculateControlEffectiveness } from '@/lib/controls';
 
 interface ControlFormProps {
   open: boolean;
@@ -34,6 +35,7 @@ interface ControlFormProps {
   editingControl?: Control | null;
   riskId?: string; // Optional - if creating control from risk context
   availableRisks?: Array<{ id: string; risk_code: string; risk_title: string }>; // For risk selection
+  isReadOnly?: boolean; // Read-only mode for non-owners
 }
 
 interface FormData {
@@ -82,6 +84,7 @@ export default function ControlForm({
   editingControl,
   riskId,
   availableRisks = [],
+  isReadOnly = false,
 }: ControlFormProps) {
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -189,7 +192,8 @@ export default function ControlForm({
             <button
               key={score}
               type="button"
-              onClick={() => onChange(score)}
+              onClick={() => !isReadOnly && onChange(score)}
+              disabled={isReadOnly}
               className={`
                 p-3 rounded-lg border-2 text-center transition-all
                 ${
@@ -197,6 +201,7 @@ export default function ControlForm({
                     ? 'border-blue-600 bg-blue-50 shadow-md'
                     : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
                 }
+                ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}
               `}
             >
               <div className="font-bold text-lg">{score}</div>
@@ -216,22 +221,22 @@ export default function ControlForm({
   const calculateEffectiveness = () => {
     const { design_score, implementation_score, monitoring_score, evaluation_score } = formData;
 
-    if (
-      design_score === null ||
-      implementation_score === null ||
-      monitoring_score === null ||
-      evaluation_score === null
-    ) {
+    // Return null if we don't have enough data to calculate
+    // Note: M and E can be null, but D and I must be present for any effectiveness
+    if (design_score === null || implementation_score === null) {
       return null;
     }
 
-    if (design_score === 0 || implementation_score === 0) {
-      return 0;
-    }
-
-    return (
-      ((design_score + implementation_score + monitoring_score + evaluation_score) / 12) * 100
+    // Use single source of truth from src/lib/controls.ts
+    const effectivenessFraction = calculateControlEffectiveness(
+      design_score,
+      implementation_score,
+      monitoring_score,
+      evaluation_score
     );
+
+    // Convert from fraction (0-1) to percentage (0-100)
+    return effectivenessFraction * 100;
   };
 
   const effectiveness = calculateEffectiveness();
@@ -241,10 +246,12 @@ export default function ControlForm({
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {editingControl ? 'Edit Control' : 'Add New Control'}
+            {isReadOnly ? 'View Control (Read-Only)' : editingControl ? 'Edit Control' : 'Add New Control'}
           </DialogTitle>
           <DialogDescription>
-            {editingControl
+            {isReadOnly
+              ? 'You can only view this control. Only the control owner can edit or delete it.'
+              : editingControl
               ? 'Update control details and DIME scores.'
               : 'Create a new risk control with DIME framework assessment.'}
           </DialogDescription>
@@ -278,6 +285,7 @@ export default function ControlForm({
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="e.g., Daily reconciliation of accounts"
                 required
+                disabled={isReadOnly}
               />
             </div>
 
@@ -288,6 +296,7 @@ export default function ControlForm({
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Detailed description of how this control works..."
                 rows={3}
+                disabled={isReadOnly}
               />
             </div>
 
@@ -298,6 +307,7 @@ export default function ControlForm({
                 <Select
                   value={formData.risk_id}
                   onValueChange={(value) => setFormData({ ...formData, risk_id: value })}
+                  disabled={isReadOnly}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a risk" />
@@ -344,6 +354,7 @@ export default function ControlForm({
                   onValueChange={(value) =>
                     setFormData({ ...formData, control_type: value as ControlType })
                   }
+                  disabled={isReadOnly}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select type" />
@@ -363,6 +374,7 @@ export default function ControlForm({
                   onValueChange={(value) =>
                     setFormData({ ...formData, target: value as ControlTarget })
                   }
+                  disabled={isReadOnly}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -448,12 +460,20 @@ export default function ControlForm({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? (editingControl ? 'Updating...' : 'Creating...') : (editingControl ? 'Update Control' : 'Create Control')}
-            </Button>
+            {isReadOnly ? (
+              <Button type="button" onClick={() => onOpenChange(false)}>
+                Close
+              </Button>
+            ) : (
+              <>
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? (editingControl ? 'Updating...' : 'Creating...') : (editingControl ? 'Update Control' : 'Create Control')}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
