@@ -156,6 +156,7 @@ export default function App() {
             <TabsTrigger value="risks">📋 Risks</TabsTrigger>
             <TabsTrigger value="controls">🛡️ Controls</TabsTrigger>
             <TabsTrigger value="incidents">🚨 Incidents</TabsTrigger>
+            <TabsTrigger value="ai">✨ AI Assistant</TabsTrigger>
 
             {/* Tabs visible only to ADMIN (Second/Third Line of Defense) */}
             {authState.isAdmin && (
@@ -163,7 +164,6 @@ export default function App() {
                 <TabsTrigger value="analytics">📈 Analytics</TabsTrigger>
                 <TabsTrigger value="kri">📉 KRI</TabsTrigger>
                 <TabsTrigger value="intelligence">🧠 Intelligence</TabsTrigger>
-                <TabsTrigger value="ai">✨ AI Assistant</TabsTrigger>
                 <TabsTrigger value="admin">⚙️ Admin</TabsTrigger>
               </>
             )}
@@ -250,16 +250,14 @@ export default function App() {
             </Tabs>
           </TabsContent>
 
-          {authState.isAdmin && (
-            <>
-              <TabsContent value="ai">
-                <AIAssistant />
-              </TabsContent>
+          <TabsContent value="ai">
+            <AIAssistant />
+          </TabsContent>
 
-              <TabsContent value="admin">
-                <AdminPanel />
-              </TabsContent>
-            </>
+          {authState.isAdmin && (
+            <TabsContent value="admin">
+              <AdminPanel />
+            </TabsContent>
           )}
         </Tabs>
       </main>
