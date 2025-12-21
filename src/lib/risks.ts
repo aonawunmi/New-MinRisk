@@ -77,9 +77,9 @@ async function generateRiskCode(
 }
 
 /**
- * Get all risks for the current user's organization with owner email
+ * Get all risks for the current user's organization with owner information
  * RLS automatically filters by organization_id
- * Fetches owner email from auth.users via admin client
+ * Enriches risks with owner full_name from user_profiles
  */
 export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | null }> {
   try {
@@ -110,13 +110,33 @@ export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | 
       return { data: risks, error: null };
     }
 
-    // TODO: Owner email enrichment requires Edge Function (Security Hardening)
-    // Emails are in auth.users table which requires service role access
-    // Cannot fetch from user_profiles (no email column there)
-    // For now, skip email enrichment - risks load successfully without emails
-    // Future: Create Edge Function to fetch user emails server-side
+    // Fetch owner names from user_profiles
+    const { data: profiles, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('id, full_name')
+      .in('id', ownerIds);
 
-    return { data: risks, error: null };
+    if (profileError) {
+      console.error('Error fetching owner profiles:', profileError.message);
+      // Return risks without owner enrichment rather than failing
+      return { data: risks, error: null };
+    }
+
+    // Create a map of owner_id -> full_name
+    const ownerMap = new Map<string, string>();
+    profiles?.forEach(profile => {
+      if (profile.full_name) {
+        ownerMap.set(profile.id, profile.full_name);
+      }
+    });
+
+    // Enrich risks with owner_email (using full_name as fallback)
+    const enrichedRisks = risks.map(risk => ({
+      ...risk,
+      owner_email: risk.owner_id ? ownerMap.get(risk.owner_id) || 'Unknown' : 'Unassigned'
+    }));
+
+    return { data: enrichedRisks, error: null };
   } catch (err) {
     console.error('Unexpected get risks error:', err);
     return {
