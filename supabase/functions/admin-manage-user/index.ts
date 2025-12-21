@@ -1,0 +1,232 @@
+// Edge Function: admin-manage-user
+// Replaces client-side supabaseAdmin operations for managing users
+// Operations: approve, reject, update role, update status, delete user
+// Security: Verifies admin role before executing, uses service role internally
+// Created: 2025-12-21 (Security Hardening - Remove service role from client)
+
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
+};
+
+type UserRole = 'super_admin' | 'secondary_admin' | 'user';
+type UserStatus = 'pending' | 'approved' | 'suspended';
+
+interface ManageUserRequest {
+  action: 'approve' | 'reject' | 'update_role' | 'update_status' | 'delete' | 'get_by_id';
+  userId: string;
+
+  // Optional fields depending on action
+  approvedBy?: string; // For approve action
+  newRole?: UserRole; // For update_role action
+  newStatus?: UserStatus; // For update_status action
+}
+
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    // Get authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Initialize Supabase clients
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+    // Client with user's auth token (for verification)
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    // Admin client with service role (for privileged operations)
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    // 1. Verify user is authenticated
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError || !user) {
+      console.error('Auth verification failed:', userError);
+      return new Response(
+        JSON.stringify({ error: 'Authentication failed' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // 2. Verify user is admin
+    const { data: adminProfile, error: profileError } = await supabaseClient
+      .from('user_profiles')
+      .select('role, organization_id')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !adminProfile) {
+      console.error('Profile lookup failed:', profileError);
+      return new Response(
+        JSON.stringify({ error: 'User profile not found' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const isAdmin = adminProfile.role === 'super_admin' || adminProfile.role === 'secondary_admin';
+    if (!isAdmin) {
+      return new Response(
+        JSON.stringify({ error: 'Admin access required' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // 3. Parse request body
+    const requestData: ManageUserRequest = await req.json();
+    const { action, userId, approvedBy, newRole, newStatus } = requestData;
+
+    // 4. Get target user's profile to verify same organization
+    const { data: targetProfile, error: targetError } = await supabaseAdmin
+      .from('user_profiles')
+      .select('organization_id')
+      .eq('id', userId)
+      .single();
+
+    if (targetError || !targetProfile) {
+      return new Response(
+        JSON.stringify({ error: 'Target user not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // 5. Verify admin is managing users in their own organization (or super_admin)
+    if (adminProfile.role !== 'super_admin' && adminProfile.organization_id !== targetProfile.organization_id) {
+      return new Response(
+        JSON.stringify({ error: 'Cannot manage users from different organization' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // 6. Execute the requested action
+    let result: any;
+    let error: any;
+
+    switch (action) {
+      case 'approve':
+        ({ data: result, error } = await supabaseAdmin
+          .from('user_profiles')
+          .update({
+            status: 'approved',
+            approved_at: new Date().toISOString(),
+            approved_by: approvedBy || user.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', userId)
+          .select()
+          .single());
+        console.log(`✅ User approved: ${userId}`);
+        break;
+
+      case 'reject':
+        ({ data: result, error } = await supabaseAdmin
+          .from('user_profiles')
+          .update({
+            status: 'suspended',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', userId)
+          .select()
+          .single());
+        console.log(`✅ User rejected: ${userId}`);
+        break;
+
+      case 'update_role':
+        if (!newRole) {
+          return new Response(
+            JSON.stringify({ error: 'newRole is required for update_role action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        ({ data: result, error } = await supabaseAdmin
+          .from('user_profiles')
+          .update({
+            role: newRole,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', userId)
+          .select()
+          .single());
+        console.log(`✅ User role updated: ${userId} → ${newRole}`);
+        break;
+
+      case 'update_status':
+        if (!newStatus) {
+          return new Response(
+            JSON.stringify({ error: 'newStatus is required for update_status action' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        ({ data: result, error } = await supabaseAdmin
+          .from('user_profiles')
+          .update({
+            status: newStatus,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', userId)
+          .select()
+          .single());
+        console.log(`✅ User status updated: ${userId} → ${newStatus}`);
+        break;
+
+      case 'delete':
+        ({ data: result, error } = await supabaseAdmin
+          .from('user_profiles')
+          .delete()
+          .eq('id', userId));
+        console.log(`✅ User deleted: ${userId}`);
+        break;
+
+      case 'get_by_id':
+        ({ data: result, error } = await supabaseAdmin
+          .from('user_profiles')
+          .select('*')
+          .eq('id', userId)
+          .single());
+        console.log(`✅ User retrieved: ${userId}`);
+        break;
+
+      default:
+        return new Response(
+          JSON.stringify({ error: `Unknown action: ${action}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+
+    if (error) {
+      console.error(`❌ ${action} error:`, error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({ data: result, error: null }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (error) {
+    console.error('❌ Unexpected error:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});

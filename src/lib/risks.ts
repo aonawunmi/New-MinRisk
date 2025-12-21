@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import { supabaseAdmin } from './supabase';
 import type { Risk, RiskWithControls, Control } from '@/types/risk';
 
 /**
@@ -111,23 +110,21 @@ export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | 
       return { data: risks, error: null };
     }
 
-    // Fetch owner emails from auth.users using admin client (bypasses RLS)
-    if (!supabaseAdmin) {
-      console.warn('Admin client not available - returning risks without owner emails');
-      return { data: risks, error: null };
-    }
+    // Fetch owner emails from user_profiles table (uses RLS, no service role needed)
+    const { data: profiles, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('id, email')
+      .in('id', ownerIds);
 
-    const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers();
-
-    if (authError) {
-      console.warn('Failed to fetch owner emails:', authError.message);
+    if (profileError) {
+      console.warn('Failed to fetch owner profiles:', profileError.message);
       // Return risks without emails rather than failing completely
       return { data: risks, error: null };
     }
 
-    // Create email lookup map
+    // Create email lookup map from profiles
     const emailMap = new Map(
-      authUsers.users.map(u => [u.id, u.email || ''])
+      (profiles || []).map(profile => [profile.id, profile.email || ''])
     );
 
     // Merge owner emails into risks

@@ -15,7 +15,7 @@
  * - Revoke unused invitations
  */
 
-import { supabase, supabaseAdmin } from './supabase';
+import { supabase } from './supabase';
 import type { UserRole } from './profiles';
 
 // =====================================================
@@ -367,21 +367,19 @@ export async function getInvitationByCode(
  *
  * Use revoke instead unless you need to completely remove the record.
  *
+ * TODO: Implement via Edge Function (Security Hardening - Dec 2025)
+ * Currently not used in the application. Will rely on RLS policies for deletion.
+ *
  * @param invitationId - Invitation ID
  * @returns Success or error
  */
 export async function deleteInvitation(
   invitationId: string
 ): Promise<{ success: boolean; error: Error | null }> {
-  if (!supabaseAdmin) {
-    return {
-      success: false,
-      error: new Error('Admin client not configured'),
-    };
-  }
-
+  // TODO: Call Edge Function for secure deletion
+  // For now, use regular Supabase client with RLS
   try {
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from('user_invitations')
       .delete()
       .eq('id', invitationId);
@@ -410,6 +408,9 @@ export async function deleteInvitation(
  *
  * Call this from a scheduled job (e.g., daily cron).
  *
+ * TODO: Implement via Edge Function or Database Cron Job (Security Hardening - Dec 2025)
+ * Currently not used in the application.
+ *
  * @returns Number of invitations expired
  *
  * @example
@@ -420,15 +421,10 @@ export async function cleanupExpiredInvitations(): Promise<{
   count: number;
   error: Error | null;
 }> {
-  if (!supabaseAdmin) {
-    return {
-      count: 0,
-      error: new Error('Admin client not configured'),
-    };
-  }
-
+  // TODO: Create Edge Function or Database Cron for this operation
+  // For now, use regular Supabase client (will fail if RLS doesn't allow)
   try {
-    const { data, error } = await supabaseAdmin.rpc('cleanup_expired_invitations');
+    const { data, error } = await supabase.rpc('cleanup_expired_invitations');
 
     if (error) {
       console.error('Cleanup expired invitations error:', error.message);
