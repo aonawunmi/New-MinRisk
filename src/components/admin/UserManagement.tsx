@@ -184,6 +184,13 @@ export default function UserManagement() {
 
   function getRoleBadge(role: string) {
     switch (role) {
+      case 'super_admin':
+        return (
+          <Badge className="bg-red-600">
+            <Shield className="h-3 w-3 mr-1" />
+            Super Admin
+          </Badge>
+        );
       case 'primary_admin':
         return (
           <Badge className="bg-purple-600">
@@ -195,7 +202,7 @@ export default function UserManagement() {
         return (
           <Badge className="bg-blue-600">
             <Shield className="h-3 w-3 mr-1" />
-            Admin
+            Secondary Admin
           </Badge>
         );
       case 'user':
@@ -213,7 +220,13 @@ export default function UserManagement() {
           </Badge>
         );
       default:
-        return <Badge variant="outline">{role}</Badge>;
+        // Invalid role - show warning badge
+        return (
+          <Badge variant="destructive" className="bg-orange-600">
+            <AlertCircle className="h-3 w-3 mr-1" />
+            Invalid: {role}
+          </Badge>
+        );
     }
   }
 
@@ -368,10 +381,15 @@ export default function UserManagement() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="super_admin">
+                            Super Admin
+                          </SelectItem>
                           <SelectItem value="primary_admin">
                             Primary Admin
                           </SelectItem>
-                          <SelectItem value="secondary_admin">Admin</SelectItem>
+                          <SelectItem value="secondary_admin">
+                            Secondary Admin
+                          </SelectItem>
                           <SelectItem value="user">User</SelectItem>
                           <SelectItem value="viewer">Viewer</SelectItem>
                         </SelectContent>
