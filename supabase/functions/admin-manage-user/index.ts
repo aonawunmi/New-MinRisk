@@ -1,8 +1,8 @@
 // Edge Function: admin-manage-user
 // Replaces client-side supabaseAdmin operations for managing users
 // Operations: approve, reject, update role, update status, delete user
-// Security: Verifies admin role before executing, uses service role internally
-// Created: 2025-12-21 (Security Hardening - Remove service role from client)
+// Security: Uses stored procedures with auth.uid() for audit trail
+// Updated: 2025-12-21 (Phase 4 - Use stored procedures instead of direct UPDATEs)
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -15,50 +15,17 @@ const corsHeaders = {
 };
 
 type UserRole = 'super_admin' | 'primary_admin' | 'secondary_admin' | 'user' | 'viewer';
-type UserStatus = 'pending' | 'approved' | 'suspended';
+type UserStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 
 interface ManageUserRequest {
   action: 'approve' | 'reject' | 'update_role' | 'update_status' | 'delete' | 'get_by_id';
   userId: string;
 
   // Optional fields depending on action
-  approvedBy?: string; // For approve action
+  approvedBy?: string; // For approve action (legacy, not used anymore)
   newRole?: UserRole; // For update_role action
   newStatus?: UserStatus; // For update_status action
-}
-
-/**
- * Get role hierarchy level (higher number = higher privilege)
- * MUST match client-side implementation in UserManagement.tsx
- */
-function getRoleLevel(role: UserRole): number {
-  switch (role) {
-    case 'super_admin':
-      return 4;
-    case 'primary_admin':
-      return 3;
-    case 'secondary_admin':
-      return 2;
-    case 'user':
-      return 1;
-    case 'viewer':
-      return 0;
-    default:
-      return -1;
-  }
-}
-
-/**
- * Check if current user can manage (view/edit) a target user
- * Rule: You can only manage users with STRICTLY LOWER privilege than yours
- * You CANNOT manage users at your level or above
- */
-function canManageUser(currentUserRole: UserRole, targetUserRole: UserRole): boolean {
-  const currentLevel = getRoleLevel(currentUserRole);
-  const targetLevel = getRoleLevel(targetUserRole);
-
-  // Can only manage users with STRICTLY LOWER privilege
-  return currentLevel > targetLevel;
+  reason?: string; // Reason for the change (for audit trail)
 }
 
 serve(async (req) => {
@@ -82,12 +49,13 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    // Client with user's auth token (for verification)
+    // Client with user's auth token (for RPC calls and verification)
+    // IMPORTANT: Use this for RPC calls so auth.uid() works in stored procedures
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
-    // Admin client with service role (for privileged operations)
+    // Admin client with service role (for privileged operations like delete)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     // 1. Verify user is authenticated
@@ -115,7 +83,9 @@ serve(async (req) => {
       );
     }
 
-    const isAdmin = adminProfile.role === 'super_admin' || adminProfile.role === 'primary_admin' || adminProfile.role === 'secondary_admin';
+    const isAdmin = adminProfile.role === 'super_admin' ||
+                   adminProfile.role === 'primary_admin' ||
+                   adminProfile.role === 'secondary_admin';
     if (!isAdmin) {
       return new Response(
         JSON.stringify({ error: 'Admin access required' }),
@@ -125,76 +95,65 @@ serve(async (req) => {
 
     // 3. Parse request body
     const requestData: ManageUserRequest = await req.json();
-    const { action, userId, approvedBy, newRole, newStatus } = requestData;
+    const { action, userId, newRole, newStatus, reason } = requestData;
 
-    // 4. Get target user's profile to verify same organization AND role (for RBAC)
-    const { data: targetProfile, error: targetError } = await supabaseAdmin
-      .from('user_profiles')
-      .select('organization_id, role')
-      .eq('id', userId)
-      .single();
+    // Generate request ID for correlation
+    const requestId = crypto.randomUUID();
 
-    if (targetError || !targetProfile) {
-      return new Response(
-        JSON.stringify({ error: 'Target user not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    console.log(`📋 Admin action: ${action} by ${user.id} on user ${userId} (request: ${requestId})`);
 
-    // 5. Verify admin is managing users in their own organization (or super_admin)
-    if (adminProfile.role !== 'super_admin' && adminProfile.organization_id !== targetProfile.organization_id) {
-      return new Response(
-        JSON.stringify({ error: 'Cannot manage users from different organization' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 6. RBAC: Verify admin can manage target user (privilege hierarchy check)
-    if (!canManageUser(adminProfile.role, targetProfile.role)) {
-      console.error(`❌ RBAC violation: ${adminProfile.role} (level ${getRoleLevel(adminProfile.role)}) attempted to manage ${targetProfile.role} (level ${getRoleLevel(targetProfile.role)})`);
-      return new Response(
-        JSON.stringify({
-          error: 'You cannot manage users with equal or higher privileges than your own',
-          details: {
-            yourRole: adminProfile.role,
-            targetRole: targetProfile.role,
-          }
-        }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 7. Execute the requested action
+    // 4. Execute the requested action
     let result: any;
     let error: any;
 
     switch (action) {
       case 'approve':
-        ({ data: result, error } = await supabaseAdmin
-          .from('user_profiles')
-          .update({
-            status: 'approved',
-            approved_at: new Date().toISOString(),
-            approved_by: approvedBy || user.id,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', userId)
-          .select()
-          .single());
-        console.log(`✅ User approved: ${userId}`);
+        // Call stored procedure to approve user
+        // The procedure will:
+        // - Get actor from auth.uid()
+        // - Verify authorization (admin, same org, RBAC)
+        // - Update status to 'approved'
+        // - Write audit log
+        ({ data: result, error } = await supabaseClient.rpc('change_user_status', {
+          p_user_id: userId,
+          p_new_status: 'approved',
+          p_reason: reason || 'User approved by admin',
+          p_request_id: requestId,
+        }));
+
+        if (error) {
+          console.error(`❌ Approve failed:`, error);
+        } else if (result && !result.success) {
+          console.error(`❌ Approve rejected by stored procedure:`, result);
+          return new Response(
+            JSON.stringify({ error: result.error, code: result.code, details: result.details }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } else {
+          console.log(`✅ User approved: ${userId} → ${result.email}`);
+        }
         break;
 
       case 'reject':
-        ({ data: result, error } = await supabaseAdmin
-          .from('user_profiles')
-          .update({
-            status: 'suspended',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', userId)
-          .select()
-          .single());
-        console.log(`✅ User rejected: ${userId}`);
+        // Call stored procedure to reject user (set to 'rejected' status)
+        ({ data: result, error } = await supabaseClient.rpc('change_user_status', {
+          p_user_id: userId,
+          p_new_status: 'rejected',
+          p_reason: reason || 'User rejected by admin',
+          p_request_id: requestId,
+        }));
+
+        if (error) {
+          console.error(`❌ Reject failed:`, error);
+        } else if (result && !result.success) {
+          console.error(`❌ Reject rejected by stored procedure:`, result);
+          return new Response(
+            JSON.stringify({ error: result.error, code: result.code, details: result.details }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } else {
+          console.log(`✅ User rejected: ${userId} → ${result.email}`);
+        }
         break;
 
       case 'update_role':
@@ -205,34 +164,30 @@ serve(async (req) => {
           );
         }
 
-        // RBAC: Verify admin can only assign roles LOWER than their own
-        const newRoleLevel = getRoleLevel(newRole);
-        const adminRoleLevel = getRoleLevel(adminProfile.role);
+        // Call stored procedure to change role
+        // The procedure will:
+        // - Get actor from auth.uid()
+        // - Verify authorization (admin, same org, RBAC, privilege escalation)
+        // - Update role
+        // - Write audit log
+        ({ data: result, error } = await supabaseClient.rpc('change_user_role', {
+          p_user_id: userId,
+          p_new_role: newRole,
+          p_reason: reason || `Role changed to ${newRole} by admin`,
+          p_request_id: requestId,
+        }));
 
-        if (newRoleLevel >= adminRoleLevel) {
-          console.error(`❌ RBAC violation: ${adminProfile.role} (level ${adminRoleLevel}) attempted to assign ${newRole} (level ${newRoleLevel})`);
+        if (error) {
+          console.error(`❌ Update role failed:`, error);
+        } else if (result && !result.success) {
+          console.error(`❌ Update role rejected by stored procedure:`, result);
           return new Response(
-            JSON.stringify({
-              error: 'You can only assign roles with lower privileges than your own',
-              details: {
-                yourRole: adminProfile.role,
-                attemptedRole: newRole,
-              }
-            }),
+            JSON.stringify({ error: result.error, code: result.code, details: result.details }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
+        } else {
+          console.log(`✅ User role updated: ${userId} → ${newRole}`);
         }
-
-        ({ data: result, error } = await supabaseAdmin
-          .from('user_profiles')
-          .update({
-            role: newRole,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', userId)
-          .select()
-          .single());
-        console.log(`✅ User role updated: ${userId} → ${newRole}`);
         break;
 
       case 'update_status':
@@ -242,19 +197,31 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        ({ data: result, error } = await supabaseAdmin
-          .from('user_profiles')
-          .update({
-            status: newStatus,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', userId)
-          .select()
-          .single());
-        console.log(`✅ User status updated: ${userId} → ${newStatus}`);
+
+        // Call stored procedure to change status
+        ({ data: result, error } = await supabaseClient.rpc('change_user_status', {
+          p_user_id: userId,
+          p_new_status: newStatus,
+          p_reason: reason || `Status changed to ${newStatus} by admin`,
+          p_request_id: requestId,
+        }));
+
+        if (error) {
+          console.error(`❌ Update status failed:`, error);
+        } else if (result && !result.success) {
+          console.error(`❌ Update status rejected by stored procedure:`, result);
+          return new Response(
+            JSON.stringify({ error: result.error, code: result.code, details: result.details }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } else {
+          console.log(`✅ User status updated: ${userId} → ${newStatus}`);
+        }
         break;
 
       case 'delete':
+        // Delete still uses service role (no audit trail needed for hard deletes)
+        // TODO: Consider soft delete with audit trail in future
         ({ data: result, error } = await supabaseAdmin
           .from('user_profiles')
           .delete()
@@ -263,7 +230,8 @@ serve(async (req) => {
         break;
 
       case 'get_by_id':
-        ({ data: result, error } = await supabaseAdmin
+        // Read operation - no audit needed
+        ({ data: result, error } = await supabaseClient
           .from('user_profiles')
           .select('*')
           .eq('id', userId)

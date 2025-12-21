@@ -8,8 +8,8 @@ import { getCurrentUser } from './auth';
  * All operations respect multi-tenant isolation via RLS policies.
  */
 
-export type UserRole = 'super_user' | 'primary_admin' | 'secondary_admin' | 'user';
-export type UserStatus = 'pending' | 'approved' | 'suspended';
+export type UserRole = 'super_admin' | 'primary_admin' | 'secondary_admin' | 'user' | 'viewer';
+export type UserStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 
 export interface UserProfile {
   id: string;
