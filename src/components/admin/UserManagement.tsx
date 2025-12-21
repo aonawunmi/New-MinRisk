@@ -191,7 +191,8 @@ export default function UserManagement() {
       setError(error.message);
     } else {
       const userEmail = targetUser?.email || 'User';
-      setSuccess(`${userEmail} role updated to ${newRole}`);
+      const roleLabel = getRoleLabel(newRole);
+      setSuccess(`${userEmail} role updated to ${roleLabel}`);
       await loadUsers();
     }
   }
@@ -217,7 +218,8 @@ export default function UserManagement() {
       setError(error.message);
     } else {
       const userEmail = targetUser?.email || 'User';
-      setSuccess(`${userEmail} status updated to ${newStatus}`);
+      const statusLabel = getStatusLabel(newStatus);
+      setSuccess(`${userEmail} status updated to ${statusLabel}`);
       await loadUsers();
     }
   }
@@ -280,6 +282,22 @@ export default function UserManagement() {
         return <Badge className="bg-red-600">Suspended</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
+    }
+  }
+
+  /**
+   * Get user-friendly status label for display
+   */
+  function getStatusLabel(status: UserStatus): string {
+    switch (status) {
+      case 'approved':
+        return 'Active';
+      case 'pending':
+        return 'Pending';
+      case 'suspended':
+        return 'Suspended';
+      default:
+        return status;
     }
   }
 
