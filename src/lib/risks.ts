@@ -110,30 +110,13 @@ export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | 
       return { data: risks, error: null };
     }
 
-    // Fetch owner emails from user_profiles table (uses RLS, no service role needed)
-    const { data: profiles, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('id, email')
-      .in('id', ownerIds);
+    // TODO: Owner email enrichment requires Edge Function (Security Hardening)
+    // Emails are in auth.users table which requires service role access
+    // Cannot fetch from user_profiles (no email column there)
+    // For now, skip email enrichment - risks load successfully without emails
+    // Future: Create Edge Function to fetch user emails server-side
 
-    if (profileError) {
-      console.warn('Failed to fetch owner profiles:', profileError.message);
-      // Return risks without emails rather than failing completely
-      return { data: risks, error: null };
-    }
-
-    // Create email lookup map from profiles
-    const emailMap = new Map(
-      (profiles || []).map(profile => [profile.id, profile.email || ''])
-    );
-
-    // Merge owner emails into risks
-    const risksWithEmails = risks.map(risk => ({
-      ...risk,
-      owner_email: risk.owner_id ? emailMap.get(risk.owner_id) || null : null,
-    }));
-
-    return { data: risksWithEmails, error: null };
+    return { data: risks, error: null };
   } catch (err) {
     console.error('Unexpected get risks error:', err);
     return {
