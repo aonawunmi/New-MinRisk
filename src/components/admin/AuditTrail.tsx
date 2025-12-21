@@ -41,12 +41,15 @@ export default function AuditTrail() {
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
 
   // Filter state
+  // NOTE: Excluding 'user' entity type by default since user management
+  // has its own dedicated audit trail in User Management > Audit Trail
   const [filters, setFilters] = useState<AuditFilters>({
     search: '',
     riskCode: '',
     userEmail: '',
     actionType: '',
     entityType: '',
+    excludeEntityTypes: ['user'], // Exclude user management events
     startDate: '',
     endDate: '',
     limit: 100,
@@ -82,6 +85,7 @@ export default function AuditTrail() {
       userEmail: '',
       actionType: '',
       entityType: '',
+      excludeEntityTypes: ['user'], // Keep excluding user events after reset
       startDate: '',
       endDate: '',
       limit: 100,
@@ -138,10 +142,10 @@ export default function AuditTrail() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <ScrollText className="h-5 w-5" />
-                Audit Trail
+                System Audit Trail
               </CardTitle>
               <CardDescription>
-                Complete log of all system actions and changes
+                System operations and configuration changes (User management audit trail is in User Management tab)
               </CardDescription>
             </div>
             <div className="flex gap-2">
@@ -240,10 +244,10 @@ export default function AuditTrail() {
                   <SelectItem value="all">All entities</SelectItem>
                   <SelectItem value="risk">Risk</SelectItem>
                   <SelectItem value="control">Control</SelectItem>
-                  <SelectItem value="user">User</SelectItem>
                   <SelectItem value="incident">Incident</SelectItem>
                   <SelectItem value="kri">KRI</SelectItem>
                   <SelectItem value="config">Configuration</SelectItem>
+                  {/* User entity type removed - use User Management > Audit Trail instead */}
                 </SelectContent>
               </Select>
             </div>

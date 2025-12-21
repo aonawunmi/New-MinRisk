@@ -47,6 +47,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import InvitationManagement from './InvitationManagement';
+import UserAuditTrail from './UserAuditTrail';
 import {
   CheckCircle,
   XCircle,
@@ -58,6 +59,7 @@ import {
   Eye,
   Users,
   Mail,
+  History,
 } from 'lucide-react';
 
 export default function UserManagement() {
@@ -278,6 +280,8 @@ export default function UserManagement() {
         return <Badge className="bg-green-600">Active</Badge>;
       case 'pending':
         return <Badge className="bg-yellow-600">Pending</Badge>;
+      case 'rejected':
+        return <Badge className="bg-orange-600">Rejected</Badge>;
       case 'suspended':
         return <Badge className="bg-red-600">Suspended</Badge>;
       default:
@@ -294,6 +298,8 @@ export default function UserManagement() {
         return 'Active';
       case 'pending':
         return 'Pending';
+      case 'rejected':
+        return 'Rejected';
       case 'suspended':
         return 'Suspended';
       default:
@@ -378,7 +384,7 @@ export default function UserManagement() {
 
   return (
     <Tabs defaultValue="users" className="w-full">
-      <TabsList className="grid w-full grid-cols-2">
+      <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="users" className="flex items-center gap-2">
           <Users className="h-4 w-4" />
           User Management
@@ -386,6 +392,10 @@ export default function UserManagement() {
         <TabsTrigger value="invitations" className="flex items-center gap-2">
           <Mail className="h-4 w-4" />
           Invitations
+        </TabsTrigger>
+        <TabsTrigger value="audit" className="flex items-center gap-2">
+          <History className="h-4 w-4" />
+          Audit Trail
         </TabsTrigger>
       </TabsList>
 
@@ -546,6 +556,7 @@ export default function UserManagement() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="approved">Active</SelectItem>
+                          <SelectItem value="rejected">Rejected</SelectItem>
                           <SelectItem value="suspended">Suspended</SelectItem>
                         </SelectContent>
                       </Select>
@@ -567,6 +578,10 @@ export default function UserManagement() {
 
       <TabsContent value="invitations" className="mt-6">
         <InvitationManagement />
+      </TabsContent>
+
+      <TabsContent value="audit" className="mt-6">
+        <UserAuditTrail />
       </TabsContent>
     </Tabs>
   );
