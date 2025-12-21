@@ -14,7 +14,7 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400',
 };
 
-type UserRole = 'super_admin' | 'secondary_admin' | 'user';
+type UserRole = 'super_admin' | 'primary_admin' | 'secondary_admin' | 'user' | 'viewer';
 type UserStatus = 'pending' | 'approved' | 'suspended';
 
 interface ManageUserRequest {
@@ -25,6 +25,40 @@ interface ManageUserRequest {
   approvedBy?: string; // For approve action
   newRole?: UserRole; // For update_role action
   newStatus?: UserStatus; // For update_status action
+}
+
+/**
+ * Get role hierarchy level (higher number = higher privilege)
+ * MUST match client-side implementation in UserManagement.tsx
+ */
+function getRoleLevel(role: UserRole): number {
+  switch (role) {
+    case 'super_admin':
+      return 4;
+    case 'primary_admin':
+      return 3;
+    case 'secondary_admin':
+      return 2;
+    case 'user':
+      return 1;
+    case 'viewer':
+      return 0;
+    default:
+      return -1;
+  }
+}
+
+/**
+ * Check if current user can manage (view/edit) a target user
+ * Rule: You can only manage users with STRICTLY LOWER privilege than yours
+ * You CANNOT manage users at your level or above
+ */
+function canManageUser(currentUserRole: UserRole, targetUserRole: UserRole): boolean {
+  const currentLevel = getRoleLevel(currentUserRole);
+  const targetLevel = getRoleLevel(targetUserRole);
+
+  // Can only manage users with STRICTLY LOWER privilege
+  return currentLevel > targetLevel;
 }
 
 serve(async (req) => {
@@ -93,10 +127,10 @@ serve(async (req) => {
     const requestData: ManageUserRequest = await req.json();
     const { action, userId, approvedBy, newRole, newStatus } = requestData;
 
-    // 4. Get target user's profile to verify same organization
+    // 4. Get target user's profile to verify same organization AND role (for RBAC)
     const { data: targetProfile, error: targetError } = await supabaseAdmin
       .from('user_profiles')
-      .select('organization_id')
+      .select('organization_id, role')
       .eq('id', userId)
       .single();
 
@@ -115,7 +149,22 @@ serve(async (req) => {
       );
     }
 
-    // 6. Execute the requested action
+    // 6. RBAC: Verify admin can manage target user (privilege hierarchy check)
+    if (!canManageUser(adminProfile.role, targetProfile.role)) {
+      console.error(`❌ RBAC violation: ${adminProfile.role} (level ${getRoleLevel(adminProfile.role)}) attempted to manage ${targetProfile.role} (level ${getRoleLevel(targetProfile.role)})`);
+      return new Response(
+        JSON.stringify({
+          error: 'You cannot manage users with equal or higher privileges than your own',
+          details: {
+            yourRole: adminProfile.role,
+            targetRole: targetProfile.role,
+          }
+        }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // 7. Execute the requested action
     let result: any;
     let error: any;
 
@@ -155,6 +204,25 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
+
+        // RBAC: Verify admin can only assign roles LOWER than their own
+        const newRoleLevel = getRoleLevel(newRole);
+        const adminRoleLevel = getRoleLevel(adminProfile.role);
+
+        if (newRoleLevel >= adminRoleLevel) {
+          console.error(`❌ RBAC violation: ${adminProfile.role} (level ${adminRoleLevel}) attempted to assign ${newRole} (level ${newRoleLevel})`);
+          return new Response(
+            JSON.stringify({
+              error: 'You can only assign roles with lower privileges than your own',
+              details: {
+                yourRole: adminProfile.role,
+                attemptedRole: newRole,
+              }
+            }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         ({ data: result, error } = await supabaseAdmin
           .from('user_profiles')
           .update({
