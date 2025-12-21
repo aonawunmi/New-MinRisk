@@ -76,7 +76,7 @@ serve(async (req) => {
       );
     }
 
-    const isAdmin = adminProfile.role === 'super_admin' || adminProfile.role === 'secondary_admin';
+    const isAdmin = adminProfile.role === 'super_admin' || adminProfile.role === 'primary_admin' || adminProfile.role === 'secondary_admin';
     if (!isAdmin) {
       return new Response(
         JSON.stringify({ error: 'Admin access required' }),

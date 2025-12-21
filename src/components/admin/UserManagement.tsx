@@ -84,6 +84,13 @@ export default function UserManagement() {
         return;
       }
 
+      console.log('🔍 DEBUG - Current user profile:', {
+        id: profile.id,
+        email: profile.email,
+        role: profile.role,
+        status: profile.status,
+      });
+
       setCurrentUserId(profile.id);
 
       // Get all users

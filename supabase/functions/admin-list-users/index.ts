@@ -72,10 +72,14 @@ serve(async (req) => {
       );
     }
 
-    const isAdmin = profile.role === 'super_admin' || profile.role === 'secondary_admin';
+    const isAdmin = profile.role === 'super_admin' || profile.role === 'primary_admin' || profile.role === 'secondary_admin';
     if (!isAdmin) {
+      console.error(`❌ Admin check failed - User role: "${profile.role}" (expected: super_admin, primary_admin, or secondary_admin)`);
       return new Response(
-        JSON.stringify({ error: 'Admin access required' }),
+        JSON.stringify({
+          error: 'Admin access required',
+          debug: `Current role: ${profile.role}, expected: super_admin, primary_admin, or secondary_admin`
+        }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
