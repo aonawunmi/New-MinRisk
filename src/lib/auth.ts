@@ -30,6 +30,10 @@ export interface AuthResult<T = User> {
 /**
  * Sign in with email and password
  *
+ * SECURITY: Validates user status after authentication.
+ * Only users with status='approved' can sign in.
+ * Suspended, rejected, or pending users are immediately signed out.
+ *
  * @param credentials - User email and password
  * @returns Auth result with user data or error
  *
@@ -57,6 +61,48 @@ export async function signIn(
       return {
         data: null,
         error: new Error('Sign in failed - no user returned'),
+      };
+    }
+
+    // ⚠️ SECURITY: Check user status in user_profiles table
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('status')
+      .eq('id', data.user.id)
+      .single();
+
+    if (profileError) {
+      console.error('Failed to load user profile:', profileError.message);
+      await supabase.auth.signOut();
+      return {
+        data: null,
+        error: new Error('Account verification failed. Please contact support.'),
+      };
+    }
+
+    // Block login for non-approved users
+    if (profile.status !== 'approved') {
+      console.warn(`Login blocked - user status: ${profile.status}`, data.user.email);
+      await supabase.auth.signOut();
+
+      let errorMessage: string;
+      switch (profile.status) {
+        case 'pending':
+          errorMessage = 'Your account is pending approval. Please wait for an administrator to approve your access.';
+          break;
+        case 'suspended':
+          errorMessage = 'Your account has been suspended. Please contact your administrator for assistance.';
+          break;
+        case 'rejected':
+          errorMessage = 'Your account access has been denied. Please contact your administrator.';
+          break;
+        default:
+          errorMessage = 'Account access is restricted. Please contact support.';
+      }
+
+      return {
+        data: null,
+        error: new Error(errorMessage),
       };
     }
 
@@ -383,6 +429,12 @@ export async function getCurrentProfileId(): Promise<string | null> {
 /**
  * React hook for accessing authentication state
  * Returns current user and their profile
+ *
+ * SECURITY: Automatically signs out users if their status is not 'approved'.
+ * This protects against:
+ * - Admin suspending a user while they're actively logged in
+ * - Admin rejecting a pending user while they're logged in
+ * - Any status changes that should revoke access
  */
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -422,6 +474,33 @@ export function useAuth() {
       .select('*')
       .eq('id', userId)
       .single();
+
+    // ⚠️ SECURITY: Auto-logout if user status is not approved
+    if (data && data.status !== 'approved') {
+      console.warn(`User status changed to '${data.status}' - logging out`, data.email);
+      await supabase.auth.signOut();
+      setUser(null);
+      setProfile(null);
+      setLoading(false);
+
+      // Show user-friendly message
+      let message: string;
+      switch (data.status) {
+        case 'suspended':
+          message = 'Your account has been suspended. You have been logged out.';
+          break;
+        case 'rejected':
+          message = 'Your account access has been revoked. You have been logged out.';
+          break;
+        case 'pending':
+          message = 'Your account is pending approval. You have been logged out.';
+          break;
+        default:
+          message = 'Your account access has changed. You have been logged out.';
+      }
+      alert(message); // Simple alert for now - can be improved with toast notifications
+      return;
+    }
 
     setProfile(data);
     setLoading(false);

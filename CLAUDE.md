@@ -571,11 +571,26 @@ Dashboard > Edge Functions > analyze-intelligence > Logs
 - `risks` - Organizational risk register
 - `user_profiles` - User accounts with organization_id
 
+### User Roles (user_profiles.role column):
+MinRisk uses a three-tier admin structure:
+
+- **`super_admin`** - Full system access, can manage all organizations
+- **`primary_admin`** - Organization admin with full privileges within their org
+- **`secondary_admin`** - Organization admin with full privileges within their org
+- **`user`** - Standard user with operational access (Dashboard, Risks, Controls, Incidents)
+
+**IMPORTANT:** Edge Functions and admin checks must verify against ALL three admin roles:
+```typescript
+const isAdmin = role === 'super_admin' || role === 'primary_admin' || role === 'secondary_admin';
+```
+
 ### Important Columns:
 - `external_events.relevance_checked` - Whether event was analyzed by AI
 - `risk_intelligence_alerts.status` - pending | accepted | rejected | archived
 - `risk_intelligence_alerts.applied_to_risk` - Whether alert updated risk
 - `risk_intelligence_treatments.is_undone` - Whether treatment was reversed
+- `user_profiles.role` - User's role (super_admin, primary_admin, secondary_admin, or user)
+- `user_profiles.status` - User's account status (pending, approved, suspended)
 
 ---
 

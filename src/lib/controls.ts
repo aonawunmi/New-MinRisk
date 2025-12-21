@@ -113,6 +113,16 @@ export async function getControlsForRisk(
 
     if (error) {
       console.error('Error fetching controls:', error);
+
+      // Check if it's a JSON parsing error (corrupted data in database)
+      if (error.message?.includes('JSON') || error.message?.includes('parse')) {
+        console.error('⚠️ CORRUPTED DATA: Controls table contains malformed JSON. Run SQL query in Supabase to identify and fix.');
+        return {
+          data: [],
+          error: new Error('Database contains corrupted control data. Please contact support.')
+        };
+      }
+
       return { data: null, error };
     }
 

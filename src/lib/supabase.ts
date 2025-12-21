@@ -3,7 +3,6 @@ import { createClient } from '@supabase/supabase-js';
 // Environment variables
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim();
 const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
-const supabaseServiceRoleKey = (import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
 
 // Validation
 if (!supabaseUrl || !supabaseAnonKey) {
@@ -12,8 +11,17 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 /**
- * Regular Supabase client - Uses RLS policies
- * Use this for all user-facing operations
+ * Supabase client - Uses RLS policies for security
+ *
+ * Security Model (Updated Dec 2025):
+ * - All queries go through Row-Level Security (RLS) policies
+ * - Admin operations now handled via secure Edge Functions
+ * - Service role key NEVER exposed to browser
+ *
+ * Use this for ALL operations:
+ * - Reading user data (filtered by RLS)
+ * - Creating/updating resources (validated by RLS)
+ * - Calling Edge Functions (admin operations verified server-side)
  */
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -31,26 +39,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 /**
- * Admin Supabase client - BYPASSES RLS policies
- * Use ONLY for admin operations like:
- * - Listing all users in an organization
- * - Approving/rejecting pending users
- * - Changing user roles
- * - Inviting users
+ * ❌ REMOVED: supabaseAdmin client (Security Hardening - Dec 2025)
  *
- * IMPORTANT: Never expose this client to the frontend!
- * Only use in controlled admin functions.
+ * Previously exposed service role key to browser - CRITICAL SECURITY RISK
+ *
+ * Admin operations now use Edge Functions:
+ * - admin-list-users: List users in organization
+ * - admin-manage-user: Approve/reject/role changes
+ * - admin-invite-user: Create user invitations
+ *
+ * See src/lib/admin.ts for updated API
  */
-export const supabaseAdmin = supabaseServiceRoleKey
-  ? createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
-  : null;
-
-// Warn if service role key is missing (needed for admin operations)
-if (!supabaseServiceRoleKey) {
-  console.warn('Service role key not found - admin operations will not work');
-}

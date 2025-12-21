@@ -480,8 +480,8 @@ export default function InvitationManagement() {
                     <SelectItem value="primary_admin">
                       Primary Admin (Full Access)
                     </SelectItem>
-                    <SelectItem value="super_user">
-                      Super User (System Admin)
+                    <SelectItem value="super_admin">
+                      Super Admin (System Admin)
                     </SelectItem>
                   </SelectContent>
                 </Select>

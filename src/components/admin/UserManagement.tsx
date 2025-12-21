@@ -47,6 +47,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import InvitationManagement from './InvitationManagement';
+import UserAuditTrail from './UserAuditTrail';
 import {
   CheckCircle,
   XCircle,
@@ -58,6 +59,7 @@ import {
   Eye,
   Users,
   Mail,
+  History,
 } from 'lucide-react';
 
 export default function UserManagement() {
@@ -65,6 +67,7 @@ export default function UserManagement() {
   const [pendingUsers, setPendingUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [currentUserRole, setCurrentUserRole] = useState<UserRole | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -84,7 +87,15 @@ export default function UserManagement() {
         return;
       }
 
+      console.log('🔍 DEBUG - Current user profile:', {
+        id: profile.id,
+        email: profile.email,
+        role: profile.role,
+        status: profile.status,
+      });
+
       setCurrentUserId(profile.id);
+      setCurrentUserRole(profile.role);
 
       // Get all users
       const { data: allUsers, error: usersError } =
@@ -110,6 +121,13 @@ export default function UserManagement() {
   }
 
   async function handleApproveUser(userId: string) {
+    // Security check: Find the target user and verify we can manage them
+    const targetUser = pendingUsers.find(u => u.id === userId);
+    if (targetUser && !canManageUser(targetUser.role)) {
+      setError('You cannot approve users with equal or higher privileges');
+      return;
+    }
+
     setError(null);
     setSuccess(null);
 
@@ -117,12 +135,20 @@ export default function UserManagement() {
     if (error) {
       setError(error.message);
     } else {
-      setSuccess('User approved successfully');
+      const userEmail = targetUser?.email || 'User';
+      setSuccess(`${userEmail} approved successfully`);
       await loadUsers();
     }
   }
 
   async function handleRejectUser(userId: string) {
+    // Security check: Find the target user and verify we can manage them
+    const targetUser = pendingUsers.find(u => u.id === userId);
+    if (targetUser && !canManageUser(targetUser.role)) {
+      setError('You cannot reject users with equal or higher privileges');
+      return;
+    }
+
     if (!confirm('Reject this user? They will be marked as suspended.')) {
       return;
     }
@@ -134,7 +160,8 @@ export default function UserManagement() {
     if (error) {
       setError(error.message);
     } else {
-      setSuccess('User rejected successfully');
+      const userEmail = targetUser?.email || 'User';
+      setSuccess(`${userEmail} rejected successfully`);
       await loadUsers();
     }
   }
@@ -145,6 +172,19 @@ export default function UserManagement() {
       return;
     }
 
+    // Security check: Find the target user and verify we can manage them
+    const targetUser = users.find(u => u.id === userId);
+    if (targetUser && !canManageUser(targetUser.role)) {
+      setError('You cannot change the role of users with equal or higher privileges');
+      return;
+    }
+
+    // Security check: Verify the new role is lower than current user's role
+    if (!getAvailableRoles().includes(newRole)) {
+      setError('You cannot assign a role equal to or higher than your own');
+      return;
+    }
+
     setError(null);
     setSuccess(null);
 
@@ -152,7 +192,9 @@ export default function UserManagement() {
     if (error) {
       setError(error.message);
     } else {
-      setSuccess(`Role updated to ${newRole}`);
+      const userEmail = targetUser?.email || 'User';
+      const roleLabel = getRoleLabel(newRole);
+      setSuccess(`${userEmail} role updated to ${roleLabel}`);
       await loadUsers();
     }
   }
@@ -163,6 +205,13 @@ export default function UserManagement() {
       return;
     }
 
+    // Security check: Find the target user and verify we can manage them
+    const targetUser = users.find(u => u.id === userId);
+    if (targetUser && !canManageUser(targetUser.role)) {
+      setError('You cannot change the status of users with equal or higher privileges');
+      return;
+    }
+
     setError(null);
     setSuccess(null);
 
@@ -170,13 +219,22 @@ export default function UserManagement() {
     if (error) {
       setError(error.message);
     } else {
-      setSuccess(`Status updated to ${newStatus}`);
+      const userEmail = targetUser?.email || 'User';
+      const statusLabel = getStatusLabel(newStatus);
+      setSuccess(`${userEmail} status updated to ${statusLabel}`);
       await loadUsers();
     }
   }
 
   function getRoleBadge(role: string) {
     switch (role) {
+      case 'super_admin':
+        return (
+          <Badge className="bg-red-600">
+            <Shield className="h-3 w-3 mr-1" />
+            Super Admin
+          </Badge>
+        );
       case 'primary_admin':
         return (
           <Badge className="bg-purple-600">
@@ -188,7 +246,7 @@ export default function UserManagement() {
         return (
           <Badge className="bg-blue-600">
             <Shield className="h-3 w-3 mr-1" />
-            Admin
+            Secondary Admin
           </Badge>
         );
       case 'user':
@@ -206,7 +264,13 @@ export default function UserManagement() {
           </Badge>
         );
       default:
-        return <Badge variant="outline">{role}</Badge>;
+        // Invalid role - show warning badge
+        return (
+          <Badge variant="destructive" className="bg-orange-600">
+            <AlertCircle className="h-3 w-3 mr-1" />
+            Invalid: {role}
+          </Badge>
+        );
     }
   }
 
@@ -216,10 +280,101 @@ export default function UserManagement() {
         return <Badge className="bg-green-600">Active</Badge>;
       case 'pending':
         return <Badge className="bg-yellow-600">Pending</Badge>;
+      case 'rejected':
+        return <Badge className="bg-orange-600">Rejected</Badge>;
       case 'suspended':
         return <Badge className="bg-red-600">Suspended</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
+    }
+  }
+
+  /**
+   * Get user-friendly status label for display
+   */
+  function getStatusLabel(status: UserStatus): string {
+    switch (status) {
+      case 'approved':
+        return 'Active';
+      case 'pending':
+        return 'Pending';
+      case 'rejected':
+        return 'Rejected';
+      case 'suspended':
+        return 'Suspended';
+      default:
+        return status;
+    }
+  }
+
+  /**
+   * Get role hierarchy level (higher number = higher privilege)
+   */
+  function getRoleLevel(role: UserRole): number {
+    switch (role) {
+      case 'super_admin':
+        return 4;
+      case 'primary_admin':
+        return 3;
+      case 'secondary_admin':
+        return 2;
+      case 'user':
+        return 1;
+      case 'viewer':
+        return 0;
+      default:
+        return -1;
+    }
+  }
+
+  /**
+   * Check if current user can manage (view/edit) a target user
+   * Rule: You can only manage users with LOWER privilege than yours
+   * You CANNOT manage users at your level or above
+   */
+  function canManageUser(targetUserRole: UserRole): boolean {
+    if (!currentUserRole) return false;
+
+    const currentLevel = getRoleLevel(currentUserRole);
+    const targetLevel = getRoleLevel(targetUserRole);
+
+    // Can only manage users with STRICTLY LOWER privilege
+    return currentLevel > targetLevel;
+  }
+
+  /**
+   * Get available roles for the role dropdown based on current user's role
+   * Rule: You can only assign roles LOWER than yours
+   */
+  function getAvailableRoles(): UserRole[] {
+    if (!currentUserRole) {
+      return ['user', 'viewer']; // Fallback - minimal permissions
+    }
+
+    const currentLevel = getRoleLevel(currentUserRole);
+    const allRoles: UserRole[] = ['super_admin', 'primary_admin', 'secondary_admin', 'user', 'viewer'];
+
+    // Only return roles with LOWER privilege level
+    return allRoles.filter(role => getRoleLevel(role) < currentLevel);
+  }
+
+  /**
+   * Get display label for a role value
+   */
+  function getRoleLabel(role: UserRole): string {
+    switch (role) {
+      case 'super_admin':
+        return 'Super Admin';
+      case 'primary_admin':
+        return 'Primary Admin';
+      case 'secondary_admin':
+        return 'Secondary Admin';
+      case 'user':
+        return 'User';
+      case 'viewer':
+        return 'Viewer';
+      default:
+        return role;
     }
   }
 
@@ -229,7 +384,7 @@ export default function UserManagement() {
 
   return (
     <Tabs defaultValue="users" className="w-full">
-      <TabsList className="grid w-full grid-cols-2">
+      <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="users" className="flex items-center gap-2">
           <Users className="h-4 w-4" />
           User Management
@@ -237,6 +392,10 @@ export default function UserManagement() {
         <TabsTrigger value="invitations" className="flex items-center gap-2">
           <Mail className="h-4 w-4" />
           Invitations
+        </TabsTrigger>
+        <TabsTrigger value="audit" className="flex items-center gap-2">
+          <History className="h-4 w-4" />
+          Audit Trail
         </TabsTrigger>
       </TabsList>
 
@@ -279,7 +438,12 @@ export default function UserManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pendingUsers.map((user) => (
+                {pendingUsers
+                  .filter((user) => {
+                    // Only show pending users you can manage (lower privilege level)
+                    return canManageUser(user.role);
+                  })
+                  .map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">
                       {user.full_name}
@@ -338,7 +502,14 @@ export default function UserManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((user) => (
+              {users
+                .filter((user) => {
+                  // Always show current user (yourself)
+                  if (user.id === currentUserId) return true;
+                  // Only show users you can manage (lower privilege level)
+                  return canManageUser(user.role);
+                })
+                .map((user) => (
                 <TableRow key={user.id}>
                   <TableCell className="font-medium">
                     {user.full_name}
@@ -361,12 +532,11 @@ export default function UserManagement() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="primary_admin">
-                            Primary Admin
-                          </SelectItem>
-                          <SelectItem value="secondary_admin">Admin</SelectItem>
-                          <SelectItem value="user">User</SelectItem>
-                          <SelectItem value="viewer">Viewer</SelectItem>
+                          {getAvailableRoles().map((role) => (
+                            <SelectItem key={role} value={role}>
+                              {getRoleLabel(role)}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     )}
@@ -386,6 +556,7 @@ export default function UserManagement() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="approved">Active</SelectItem>
+                          <SelectItem value="rejected">Rejected</SelectItem>
                           <SelectItem value="suspended">Suspended</SelectItem>
                         </SelectContent>
                       </Select>
@@ -407,6 +578,10 @@ export default function UserManagement() {
 
       <TabsContent value="invitations" className="mt-6">
         <InvitationManagement />
+      </TabsContent>
+
+      <TabsContent value="audit" className="mt-6">
+        <UserAuditTrail />
       </TabsContent>
     </Tabs>
   );

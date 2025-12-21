@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import { supabaseAdmin } from './supabase';
 import type { Risk, RiskWithControls, Control } from '@/types/risk';
 
 /**
@@ -111,32 +110,13 @@ export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | 
       return { data: risks, error: null };
     }
 
-    // Fetch owner emails from auth.users using admin client (bypasses RLS)
-    if (!supabaseAdmin) {
-      console.warn('Admin client not available - returning risks without owner emails');
-      return { data: risks, error: null };
-    }
+    // TODO: Owner email enrichment requires Edge Function (Security Hardening)
+    // Emails are in auth.users table which requires service role access
+    // Cannot fetch from user_profiles (no email column there)
+    // For now, skip email enrichment - risks load successfully without emails
+    // Future: Create Edge Function to fetch user emails server-side
 
-    const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers();
-
-    if (authError) {
-      console.warn('Failed to fetch owner emails:', authError.message);
-      // Return risks without emails rather than failing completely
-      return { data: risks, error: null };
-    }
-
-    // Create email lookup map
-    const emailMap = new Map(
-      authUsers.users.map(u => [u.id, u.email || ''])
-    );
-
-    // Merge owner emails into risks
-    const risksWithEmails = risks.map(risk => ({
-      ...risk,
-      owner_email: risk.owner_id ? emailMap.get(risk.owner_id) || null : null,
-    }));
-
-    return { data: risksWithEmails, error: null };
+    return { data: risks, error: null };
   } catch (err) {
     console.error('Unexpected get risks error:', err);
     return {

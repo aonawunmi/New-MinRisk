@@ -41,6 +41,7 @@ export type AuditFilters = {
   userEmail?: string; // Filter by specific user
   actionType?: string; // Filter by action type
   entityType?: string; // Filter by entity type
+  excludeEntityTypes?: string[]; // Exclude specific entity types (e.g., ['user'] for system audit)
   startDate?: string; // ISO date
   endDate?: string; // ISO date
   limit?: number; // Max entries to return (default 100)
@@ -64,6 +65,7 @@ export async function loadAuditTrail(filters: AuditFilters = {}): Promise<AuditT
       userEmail,
       actionType,
       entityType,
+      excludeEntityTypes,
       startDate,
       endDate,
       limit = 100,
@@ -87,6 +89,11 @@ export async function loadAuditTrail(filters: AuditFilters = {}): Promise<AuditT
 
     if (entityType) {
       query = query.eq('entity_type', entityType);
+    }
+
+    // Exclude specific entity types (e.g., exclude 'user' for system audit)
+    if (excludeEntityTypes && excludeEntityTypes.length > 0) {
+      query = query.not('entity_type', 'in', `(${excludeEntityTypes.join(',')})`);
     }
 
     if (startDate) {
