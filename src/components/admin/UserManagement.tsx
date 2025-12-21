@@ -65,6 +65,7 @@ export default function UserManagement() {
   const [pendingUsers, setPendingUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [currentUserRole, setCurrentUserRole] = useState<UserRole | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -92,6 +93,7 @@ export default function UserManagement() {
       });
 
       setCurrentUserId(profile.id);
+      setCurrentUserRole(profile.role);
 
       // Get all users
       const { data: allUsers, error: usersError } =
@@ -243,6 +245,54 @@ export default function UserManagement() {
     }
   }
 
+  /**
+   * Get available roles for the role dropdown based on current user's role
+   * Role hierarchy (what each role can assign):
+   * - super_admin: can assign any role (super_admin, primary_admin, secondary_admin, user, viewer)
+   * - primary_admin: can assign primary_admin, secondary_admin, user, viewer (NOT super_admin)
+   * - secondary_admin: can assign secondary_admin, user, viewer (NOT super_admin or primary_admin)
+   */
+  function getAvailableRoles(): UserRole[] {
+    if (!currentUserRole) {
+      return ['user', 'viewer']; // Fallback - minimal permissions
+    }
+
+    switch (currentUserRole) {
+      case 'super_admin':
+        // Super admin can assign any role
+        return ['super_admin', 'primary_admin', 'secondary_admin', 'user', 'viewer'];
+      case 'primary_admin':
+        // Primary admin cannot create super admins
+        return ['primary_admin', 'secondary_admin', 'user', 'viewer'];
+      case 'secondary_admin':
+        // Secondary admin cannot create super admins or primary admins
+        return ['secondary_admin', 'user', 'viewer'];
+      default:
+        // Other roles shouldn't have access to user management, but be safe
+        return ['user', 'viewer'];
+    }
+  }
+
+  /**
+   * Get display label for a role value
+   */
+  function getRoleLabel(role: UserRole): string {
+    switch (role) {
+      case 'super_admin':
+        return 'Super Admin';
+      case 'primary_admin':
+        return 'Primary Admin';
+      case 'secondary_admin':
+        return 'Secondary Admin';
+      case 'user':
+        return 'User';
+      case 'viewer':
+        return 'Viewer';
+      default:
+        return role;
+    }
+  }
+
   if (loading) {
     return <div className="text-center py-8">Loading users...</div>;
   }
@@ -381,17 +431,11 @@ export default function UserManagement() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="super_admin">
-                            Super Admin
-                          </SelectItem>
-                          <SelectItem value="primary_admin">
-                            Primary Admin
-                          </SelectItem>
-                          <SelectItem value="secondary_admin">
-                            Secondary Admin
-                          </SelectItem>
-                          <SelectItem value="user">User</SelectItem>
-                          <SelectItem value="viewer">Viewer</SelectItem>
+                          {getAvailableRoles().map((role) => (
+                            <SelectItem key={role} value={role}>
+                              {getRoleLabel(role)}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     )}
