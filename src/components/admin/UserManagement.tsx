@@ -133,7 +133,8 @@ export default function UserManagement() {
     if (error) {
       setError(error.message);
     } else {
-      setSuccess('User approved successfully');
+      const userEmail = targetUser?.email || 'User';
+      setSuccess(`${userEmail} approved successfully`);
       await loadUsers();
     }
   }
@@ -157,7 +158,8 @@ export default function UserManagement() {
     if (error) {
       setError(error.message);
     } else {
-      setSuccess('User rejected successfully');
+      const userEmail = targetUser?.email || 'User';
+      setSuccess(`${userEmail} rejected successfully`);
       await loadUsers();
     }
   }
@@ -188,7 +190,8 @@ export default function UserManagement() {
     if (error) {
       setError(error.message);
     } else {
-      setSuccess(`Role updated to ${newRole}`);
+      const userEmail = targetUser?.email || 'User';
+      setSuccess(`${userEmail} role updated to ${newRole}`);
       await loadUsers();
     }
   }
@@ -213,7 +216,8 @@ export default function UserManagement() {
     if (error) {
       setError(error.message);
     } else {
-      setSuccess(`Status updated to ${newStatus}`);
+      const userEmail = targetUser?.email || 'User';
+      setSuccess(`${userEmail} status updated to ${newStatus}`);
       await loadUsers();
     }
   }
