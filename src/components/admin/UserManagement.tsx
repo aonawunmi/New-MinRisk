@@ -119,6 +119,13 @@ export default function UserManagement() {
   }
 
   async function handleApproveUser(userId: string) {
+    // Security check: Find the target user and verify we can manage them
+    const targetUser = pendingUsers.find(u => u.id === userId);
+    if (targetUser && !canManageUser(targetUser.role)) {
+      setError('You cannot approve users with equal or higher privileges');
+      return;
+    }
+
     setError(null);
     setSuccess(null);
 
@@ -132,6 +139,13 @@ export default function UserManagement() {
   }
 
   async function handleRejectUser(userId: string) {
+    // Security check: Find the target user and verify we can manage them
+    const targetUser = pendingUsers.find(u => u.id === userId);
+    if (targetUser && !canManageUser(targetUser.role)) {
+      setError('You cannot reject users with equal or higher privileges');
+      return;
+    }
+
     if (!confirm('Reject this user? They will be marked as suspended.')) {
       return;
     }
@@ -154,6 +168,19 @@ export default function UserManagement() {
       return;
     }
 
+    // Security check: Find the target user and verify we can manage them
+    const targetUser = users.find(u => u.id === userId);
+    if (targetUser && !canManageUser(targetUser.role)) {
+      setError('You cannot change the role of users with equal or higher privileges');
+      return;
+    }
+
+    // Security check: Verify the new role is lower than current user's role
+    if (!getAvailableRoles().includes(newRole)) {
+      setError('You cannot assign a role equal to or higher than your own');
+      return;
+    }
+
     setError(null);
     setSuccess(null);
 
@@ -169,6 +196,13 @@ export default function UserManagement() {
   async function handleChangeStatus(userId: string, newStatus: UserStatus) {
     if (userId === currentUserId) {
       setError('You cannot change your own status');
+      return;
+    }
+
+    // Security check: Find the target user and verify we can manage them
+    const targetUser = users.find(u => u.id === userId);
+    if (targetUser && !canManageUser(targetUser.role)) {
+      setError('You cannot change the status of users with equal or higher privileges');
       return;
     }
 
@@ -246,31 +280,54 @@ export default function UserManagement() {
   }
 
   /**
+   * Get role hierarchy level (higher number = higher privilege)
+   */
+  function getRoleLevel(role: UserRole): number {
+    switch (role) {
+      case 'super_admin':
+        return 4;
+      case 'primary_admin':
+        return 3;
+      case 'secondary_admin':
+        return 2;
+      case 'user':
+        return 1;
+      case 'viewer':
+        return 0;
+      default:
+        return -1;
+    }
+  }
+
+  /**
+   * Check if current user can manage (view/edit) a target user
+   * Rule: You can only manage users with LOWER privilege than yours
+   * You CANNOT manage users at your level or above
+   */
+  function canManageUser(targetUserRole: UserRole): boolean {
+    if (!currentUserRole) return false;
+
+    const currentLevel = getRoleLevel(currentUserRole);
+    const targetLevel = getRoleLevel(targetUserRole);
+
+    // Can only manage users with STRICTLY LOWER privilege
+    return currentLevel > targetLevel;
+  }
+
+  /**
    * Get available roles for the role dropdown based on current user's role
-   * Role hierarchy (what each role can assign):
-   * - super_admin: can assign any role (super_admin, primary_admin, secondary_admin, user, viewer)
-   * - primary_admin: can assign primary_admin, secondary_admin, user, viewer (NOT super_admin)
-   * - secondary_admin: can assign secondary_admin, user, viewer (NOT super_admin or primary_admin)
+   * Rule: You can only assign roles LOWER than yours
    */
   function getAvailableRoles(): UserRole[] {
     if (!currentUserRole) {
       return ['user', 'viewer']; // Fallback - minimal permissions
     }
 
-    switch (currentUserRole) {
-      case 'super_admin':
-        // Super admin can assign any role
-        return ['super_admin', 'primary_admin', 'secondary_admin', 'user', 'viewer'];
-      case 'primary_admin':
-        // Primary admin cannot create super admins
-        return ['primary_admin', 'secondary_admin', 'user', 'viewer'];
-      case 'secondary_admin':
-        // Secondary admin cannot create super admins or primary admins
-        return ['secondary_admin', 'user', 'viewer'];
-      default:
-        // Other roles shouldn't have access to user management, but be safe
-        return ['user', 'viewer'];
-    }
+    const currentLevel = getRoleLevel(currentUserRole);
+    const allRoles: UserRole[] = ['super_admin', 'primary_admin', 'secondary_admin', 'user', 'viewer'];
+
+    // Only return roles with LOWER privilege level
+    return allRoles.filter(role => getRoleLevel(role) < currentLevel);
   }
 
   /**
@@ -349,7 +406,12 @@ export default function UserManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pendingUsers.map((user) => (
+                {pendingUsers
+                  .filter((user) => {
+                    // Only show pending users you can manage (lower privilege level)
+                    return canManageUser(user.role);
+                  })
+                  .map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">
                       {user.full_name}
@@ -408,7 +470,14 @@ export default function UserManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((user) => (
+              {users
+                .filter((user) => {
+                  // Always show current user (yourself)
+                  if (user.id === currentUserId) return true;
+                  // Only show users you can manage (lower privilege level)
+                  return canManageUser(user.role);
+                })
+                .map((user) => (
                 <TableRow key={user.id}>
                   <TableCell className="font-medium">
                     {user.full_name}
