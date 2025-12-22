@@ -110,30 +110,51 @@ export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | 
       return { data: risks, error: null };
     }
 
-    // Fetch owner names from user_profiles
-    console.log('🔍 Fetching owner profiles for IDs:', ownerIds);
-    const { data: profiles, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('id, full_name')
-      .in('id', ownerIds);
+    // Fetch owner information via Edge Function (bypasses RLS, uses service role)
+    console.log('🔍 Fetching owner profiles for IDs via Edge Function:', ownerIds);
 
-    console.log('📊 Owner profiles query result:', {
-      profiles,
-      error: profileError,
-      count: profiles?.length || 0
-    });
-
-    if (profileError) {
-      console.error('❌ Error fetching owner profiles:', profileError.message);
-      // Return risks without owner enrichment rather than failing
-      return { data: risks, error: null };
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      console.error('❌ No session found for Edge Function call');
+      // Return risks with legacy owner fallback
+      return {
+        data: risks.map(risk => ({
+          ...risk,
+          owner_email: risk.owner || 'Unknown'
+        })),
+        error: null
+      };
     }
 
-    // Create a map of owner_id -> full_name
+    const { data: ownerData, error: ownerError } = await supabase.functions.invoke('get-risk-owners', {
+      body: { ownerIds },
+    });
+
+    console.log('📊 Owner profiles Edge Function result:', {
+      data: ownerData,
+      error: ownerError,
+      count: ownerData?.data ? Object.keys(ownerData.data).length : 0
+    });
+
+    if (ownerError) {
+      console.error('❌ Error fetching owner profiles:', ownerError.message);
+      // Return risks with legacy owner fallback
+      return {
+        data: risks.map(risk => ({
+          ...risk,
+          owner_email: risk.owner || 'Unknown'
+        })),
+        error: null
+      };
+    }
+
+    // Create a map of owner_id -> full_name from Edge Function response
+    const ownerInfoMap = ownerData?.data || {};
     const ownerMap = new Map<string, string>();
-    profiles?.forEach(profile => {
-      if (profile.full_name) {
-        ownerMap.set(profile.id, profile.full_name);
+
+    Object.values(ownerInfoMap).forEach((ownerInfo: any) => {
+      if (ownerInfo.full_name) {
+        ownerMap.set(ownerInfo.id, ownerInfo.full_name);
       }
     });
 
