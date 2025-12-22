@@ -130,10 +130,12 @@ export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | 
       }
     });
 
-    // Enrich risks with owner_email (using full_name as fallback)
+    // Enrich risks with owner_email (using full_name from user_profiles, fallback to legacy owner field)
     const enrichedRisks = risks.map(risk => ({
       ...risk,
-      owner_email: risk.owner_id ? ownerMap.get(risk.owner_id) || 'Unknown' : 'Unassigned'
+      owner_email: risk.owner_id
+        ? (ownerMap.get(risk.owner_id) || risk.owner || 'Unknown')  // Try user_profiles first, then legacy owner field
+        : (risk.owner || 'Unassigned')  // If no owner_id, use legacy owner field
     }));
 
     return { data: enrichedRisks, error: null };
