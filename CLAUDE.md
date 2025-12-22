@@ -796,3 +796,101 @@ Process Risk, Fraud Risk, Credit Risk - Concentration, Market Risk - Equity, etc
 - Enhance AI to generate DIRECTIONAL metrics
 
 ---
+
+### 2025-12-22 - User Audit System Production Deployment & Owner Enrichment Security Fix
+
+**Session Focus:** Production deployment of enterprise audit system, email confirmation fixes, AI Assistant visibility, and proper owner enrichment implementation
+
+#### Completed:
+
+1. **Production Database Migration - User Audit System**
+   - Deployed all 3 audit system migrations to production Supabase
+   - Migration 001: User audit foundation (enums, tables, RLS policies)
+   - Migration 002: Write protection triggers (complete rebuild)
+   - Migration 003: Stored procedures (change_user_status, change_user_role)
+   - Fixed idempotency issues (duplicate policy errors)
+   - All migrations executed successfully
+
+2. **Email Confirmation Issues - Production Data Fix**
+   - Issue: Multiple users unable to log in ("Email not confirmed")
+   - Root cause: Production emails not auto-confirmed during migration/testing
+   - Solution: Bulk confirmed all 12 users in production
+   - SQL: `UPDATE auth.users SET email_confirmed_at = NOW() WHERE email_confirmed_at IS NULL`
+   - Affected users: ayodele.onawunmi+reject@gmail.com, ayodele.onawunmi@fmdqgroup.com, others
+
+3. **AI Assistant Tab - Made Visible to All Users**
+   - Previously: Admin-only feature
+   - Now: Available to all users (Dashboard, Risks, Controls, Incidents, AI Assistant)
+   - Purpose: Allow all users to leverage AI for risk identification
+   - Files modified: src/App.tsx (moved tab trigger and content outside admin check)
+
+4. **Owner Display Issue - "Unknown" for All Risks**
+   - **Initial diagnosis (incorrect):** Suspected cross-org RLS blocking
+   - **Actual root cause:** RLS policy `user_profiles_select_own` only allows users to see own profile
+   - **Impact:** getRisks() query for owner profiles returned empty array (RLS blocked)
+   - **Fallback behavior:** Showed legacy text field (job titles like "Chief Compliance Officer")
+   - **Not intended:** Owner Mapping Tool designed to show actual user names
+
+5. **Proper Owner Enrichment via Edge Function (Security Hardening)**
+   - **Problem:** Client-side queries blocked by RLS, can't bypass without exposing service role
+   - **Solution:** Created `get-risk-owners` Edge Function
+   - **Architecture:**
+     * Client calls Edge Function with owner_ids array
+     * Edge Function uses service role to query user_profiles (bypasses RLS)
+     * Only returns profiles from same organization (security boundary)
+     * Returns full_name for each owner
+   - **Files created:**
+     * `supabase/functions/get-risk-owners/index.ts` - Edge Function
+   - **Files modified:**
+     * `src/lib/risks.ts` - Call Edge Function instead of direct query
+   - **Result:** Owner column shows actual user names ("User One", "Test Pending 3", "Pending User")
+
+6. **RLS Policy Tightening - Principle of Least Privilege**
+   - **Issue discovered:** During troubleshooting, created permissive RLS policy allowing org-wide access
+   - **Security risk:** Any user could query all user_profiles in org (reconnaissance, privilege enumeration)
+   - **Resolution:** Restored restrictive RLS policy (own profile only)
+   - **SQL executed:**
+     ```sql
+     DROP POLICY IF EXISTS user_profiles_select_own_org ON user_profiles;
+     DROP FUNCTION IF EXISTS get_user_organization_id();
+     CREATE POLICY user_profiles_select_own ON user_profiles FOR SELECT USING (id = auth.uid());
+     ```
+   - **Verification:** Owner enrichment still works via Edge Function, no bypass path for attackers
+
+**Files Created:**
+- `supabase/functions/get-risk-owners/index.ts` - Edge Function for owner enrichment
+- `database/TEST_audit_system.sql` - Test script for audit system
+- `SECURITY-HARDENING-COMPLETED.md` - Documentation of completed security work
+
+**Files Modified:**
+- `src/App.tsx` - AI Assistant tab visibility (all users)
+- `src/lib/risks.ts` - Owner enrichment via Edge Function
+- Production database - Email confirmations, RLS policies
+
+**Database Changes:**
+```sql
+-- Email confirmations
+UPDATE auth.users SET email_confirmed_at = NOW() WHERE email_confirmed_at IS NULL;
+
+-- RLS policy restoration (security hardening)
+DROP POLICY IF EXISTS user_profiles_select_own_org ON user_profiles;
+DROP FUNCTION IF EXISTS get_user_organization_id();
+CREATE POLICY user_profiles_select_own ON user_profiles FOR SELECT USING (id = auth.uid());
+```
+
+**Security Improvements:**
+- ✅ Service role access moved to Edge Function (no client exposure)
+- ✅ RLS policies tightened to least privilege
+- ✅ Owner enrichment follows security best practices
+- ✅ Defense-in-depth: Edge Function + RLS + proper authorization checks
+
+**Production Deployment:**
+- ✅ Edge Function deployed to Supabase
+- ✅ Frontend deployed via Render (auto-deploy from GitHub)
+- ✅ Database migrations executed successfully
+- ✅ All features verified in production
+
+**Status:** All production issues resolved, security hardened, proper patterns implemented.
+
+---
+

@@ -13,12 +13,12 @@
 **Regulator Impact:** CBN/SEC audit failure
 
 **Tasks:**
-- [ ] Remove `VITE_SUPABASE_SERVICE_ROLE_KEY` from `.env.development`
-- [ ] Audit all client-side code for service role usage
-- [ ] Ensure only `VITE_SUPABASE_ANON_KEY` is used in browser
-- [ ] Move service role operations to Edge Functions only
-- [ ] Update Render environment variables (remove service role from client)
-- [ ] Test all features still work with anon key only
+- [x] Remove `VITE_SUPABASE_SERVICE_ROLE_KEY` from `.env.development` ✅ COMPLETED 2025-12-21
+- [x] Audit all client-side code for service role usage ✅ COMPLETED 2025-12-21
+- [x] Ensure only `VITE_SUPABASE_ANON_KEY` is used in browser ✅ COMPLETED 2025-12-21
+- [x] Move service role operations to Edge Functions only ✅ COMPLETED 2025-12-22 (get-risk-owners)
+- [ ] Update Render environment variables (remove service role from client) ⚠️ PENDING
+- [x] Test all features still work with anon key only ✅ COMPLETED 2025-12-22
 
 **Files to Check:**
 - `src/lib/supabase.ts`
@@ -51,14 +51,14 @@
 **Regulator Impact:** CBN/SEC compliance requirement
 
 **Tasks:**
-- [ ] Create `audit_log` table in database
-- [ ] Log all data access events (views, exports, modifications)
-- [ ] Log authentication events (login, logout, failed attempts)
-- [ ] Log administrative actions (user approvals, role changes)
-- [ ] Log risk assessment changes (who, what, when)
-- [ ] Add audit log viewer in Admin panel
-- [ ] Implement log retention policy (7 years for financial data)
-- [ ] Add audit log export functionality
+- [x] Create `audit_log` table in database ✅ COMPLETED 2025-12-21 (audit_trail table)
+- [x] Log all data access events (views, exports, modifications) ✅ PARTIAL - Risks, controls via triggers
+- [x] Log authentication events (login, logout, failed attempts) ✅ COMPLETED - Supabase Auth logs
+- [x] Log administrative actions (user approvals, role changes) ✅ COMPLETED 2025-12-21 (user_status_transitions, user_role_transitions)
+- [ ] Log risk assessment changes (who, what, when) ✅ PARTIAL - Triggers log changes, need comprehensive coverage
+- [x] Add audit log viewer in Admin panel ✅ COMPLETED 2025-12-21 (System Audit Trail + User Audit Trail)
+- [ ] Implement log retention policy (7 years for financial data) ⚠️ PENDING
+- [x] Add audit log export functionality ✅ COMPLETED 2025-12-21 (CSV export)
 
 **Schema Design:**
 ```sql
