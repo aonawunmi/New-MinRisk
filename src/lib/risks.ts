@@ -111,13 +111,20 @@ export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | 
     }
 
     // Fetch owner names from user_profiles
+    console.log('🔍 Fetching owner profiles for IDs:', ownerIds);
     const { data: profiles, error: profileError } = await supabase
       .from('user_profiles')
       .select('id, full_name')
       .in('id', ownerIds);
 
+    console.log('📊 Owner profiles query result:', {
+      profiles,
+      error: profileError,
+      count: profiles?.length || 0
+    });
+
     if (profileError) {
-      console.error('Error fetching owner profiles:', profileError.message);
+      console.error('❌ Error fetching owner profiles:', profileError.message);
       // Return risks without owner enrichment rather than failing
       return { data: risks, error: null };
     }
@@ -128,6 +135,11 @@ export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | 
       if (profile.full_name) {
         ownerMap.set(profile.id, profile.full_name);
       }
+    });
+
+    console.log('🗺️ Owner map created:', {
+      size: ownerMap.size,
+      entries: Array.from(ownerMap.entries())
     });
 
     // Enrich risks with owner_email (using full_name from user_profiles, fallback to legacy owner field)
