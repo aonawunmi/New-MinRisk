@@ -153,25 +153,25 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold">Risk Dashboard</h2>
-          <p className="text-gray-600 text-sm mt-1">
+          <h2 className="text-xl sm:text-2xl font-bold">Risk Dashboard</h2>
+          <p className="text-gray-600 text-xs sm:text-sm mt-1">
             Executive overview of your organization's risk landscape
           </p>
         </div>
         <button
           onClick={loadDashboardData}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm touch-target self-start sm:self-auto"
         >
           🔄 Refresh
         </button>
       </div>
 
-      {/* Key Metrics Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Key Metrics Row - 2x2 on mobile, 4 across on desktop */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard
           title="Total Risks"
           value={metrics.total_risks}
@@ -195,21 +195,27 @@ export default function Dashboard() {
           value={`${metrics.avg_control_effectiveness}%`}
           icon="🛡️"
           color="green"
-          subtitle={`DIME Assessment • ${metrics.total_controls} controls`}
+          subtitle={`DIME • ${metrics.total_controls} controls`}
         />
       </div>
 
-      {/* 2. Risk Ranking Visualization & Drilldown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-6">
-          <RiskRankingHeatmap
-            data={riskProfileSummary}
-            onCategoryClick={setSelectedCategory}
-          />
+      {/* 2. Risk Ranking Visualization & Drilldown - stack on mobile */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="space-y-4 sm:space-y-6">
+          {/* Heatmap with horizontal scroll on mobile */}
+          <div className="mobile-scroll-x -mx-3 px-3 sm:mx-0 sm:px-0">
+            <RiskRankingHeatmap
+              data={riskProfileSummary}
+              onCategoryClick={setSelectedCategory}
+            />
+          </div>
         </div>
 
-        <div className="space-y-6">
-          <RiskProfileSummaryTable data={riskProfileSummary} />
+        <div className="space-y-4 sm:space-y-6">
+          {/* Summary table with horizontal scroll on mobile */}
+          <div className="mobile-scroll-x -mx-3 px-3 sm:mx-0 sm:px-0">
+            <RiskProfileSummaryTable data={riskProfileSummary} />
+          </div>
         </div>
       </div>
 
@@ -231,19 +237,19 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Secondary Distribution Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Secondary Distribution Charts - stack on mobile */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <Card>
-          <CardHeader>
-            <CardTitle>Risk Status Distribution</CardTitle>
+          <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-4">
+            <CardTitle className="text-base sm:text-lg">Risk Status Distribution</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
             <div className="space-y-3">
               {Object.entries(metrics.by_status).map(([status, count]) => {
                 const percentage = Math.round((count / metrics.total_risks) * 100);
                 return (
                   <div key={status} className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center justify-between text-xs sm:text-sm">
                       <span className="font-medium">{status}</span>
                       <span className="text-gray-600">
                         {count} ({percentage}%)
@@ -262,10 +268,10 @@ export default function Dashboard() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader>
-            <CardTitle>Risks by Division</CardTitle>
+          <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-4">
+            <CardTitle className="text-base sm:text-lg">Risks by Division</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
             <RiskDistributionChart
               data={divisionDistribution}
               emptyMessage="No division data available"
@@ -274,21 +280,24 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Top Risks Table */}
+      {/* Top Risks Table - horizontal scroll on mobile */}
       <Card>
-        <CardHeader>
-          <CardTitle>Top 10 Risks (by Inherent Score)</CardTitle>
+        <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-4">
+          <CardTitle className="text-base sm:text-lg">Top 10 Risks (by Inherent Score)</CardTitle>
         </CardHeader>
-        <CardContent>
-          {topRisks.length > 0 ? (
-            <TopRisksTable risks={topRisks} />
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              No risks to display
-            </div>
-          )}
+        <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+          <div className="mobile-scroll-x -mx-4 px-4 sm:mx-0 sm:px-0">
+            {topRisks.length > 0 ? (
+              <TopRisksTable risks={topRisks} />
+            ) : (
+              <div className="text-center py-8 text-gray-500 text-sm">
+                No risks to display
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
   );
 }
+

@@ -12,47 +12,46 @@ interface RiskProfileSummaryTableProps {
 export default function RiskProfileSummaryTable({ data }: RiskProfileSummaryTableProps) {
     return (
         <Card className="shadow-sm">
-            <CardHeader className="pb-2 bg-gray-50 border-b">
-                <CardTitle className="text-sm font-bold uppercase text-gray-700">Residual Risk Profile Summary Table</CardTitle>
+            <CardHeader className="pb-2 bg-gray-50 border-b px-3 sm:px-6 py-2 sm:py-4">
+                <CardTitle className="text-xs sm:text-sm font-bold uppercase text-gray-700">Residual Risk Profile Summary</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="text-xs text-gray-700 uppercase bg-gray-100 dark:bg-gray-700 dark:text-gray-400">
+                    <table className="w-full text-xs sm:text-sm text-left min-w-[500px]">
+                        <thead className="text-[10px] sm:text-xs text-gray-700 uppercase bg-gray-100 dark:bg-gray-700 dark:text-gray-400">
                             <tr>
-                                <th className="px-4 py-3 border-b text-center w-12">S/N</th>
-                                <th className="px-4 py-3 border-b">Risk Category</th>
-                                <th className="px-4 py-3 border-b text-center">Count</th>
-                                <th className="px-4 py-3 border-b text-center">Probability</th>
-                                <th className="px-4 py-3 border-b text-center">Impact</th>
-                                <th className="px-4 py-3 border-b text-center">Severity</th>
-                                <th className="px-4 py-3 border-b text-center">Trend</th>
-                                <th className="px-4 py-3 border-b">Comments</th>
+                                <th className="px-2 sm:px-4 py-2 sm:py-3 border-b text-center w-10 sm:w-12">#</th>
+                                <th className="px-2 sm:px-4 py-2 sm:py-3 border-b">Category</th>
+                                <th className="px-2 sm:px-4 py-2 sm:py-3 border-b text-center">Count</th>
+                                <th className="px-2 sm:px-4 py-2 sm:py-3 border-b text-center">Prob</th>
+                                <th className="px-2 sm:px-4 py-2 sm:py-3 border-b text-center">Impact</th>
+                                <th className="px-2 sm:px-4 py-2 sm:py-3 border-b text-center">Severity</th>
+                                <th className="px-2 sm:px-4 py-2 sm:py-3 border-b text-center">Trend</th>
+                                <th className="px-2 sm:px-4 py-2 sm:py-3 border-b hidden sm:table-cell">Comments</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {data.map((item, index) => (
                                 <tr key={item.category} className="hover:bg-gray-50">
-                                    <td className="px-4 py-3 text-center font-medium text-gray-900">{index + 1}</td>
-                                    <td className="px-4 py-3 font-medium text-gray-900">{item.category}</td>
-                                    <td className="px-4 py-3 text-center">{item.risk_count}</td>
-                                    <td className="px-4 py-3 text-center">{item.avg_likelihood}</td>
-                                    <td className="px-4 py-3 text-center">{item.avg_impact}</td>
-                                    <td className="px-4 py-3 text-center font-bold">
+                                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center font-medium text-gray-900">{index + 1}</td>
+                                    <td className="px-2 sm:px-4 py-2 sm:py-3 font-medium text-gray-900">{item.category}</td>
+                                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center">{item.risk_count}</td>
+                                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center">{item.avg_likelihood}</td>
+                                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center">{item.avg_impact}</td>
+                                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center font-bold">
                                         {item.avg_severity}
                                     </td>
-                                    <td className="px-4 py-3 text-center">
+                                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-center">
                                         {getTrendIcon(item.trend)}
                                     </td>
-                                    <td className="px-4 py-3 text-gray-500 italic text-xs">
-                                        {/* Placeholder for manual comments later */}
+                                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-500 italic text-xs hidden sm:table-cell">
                                         No major changes.
                                     </td>
                                 </tr>
                             ))}
                             {data.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                                    <td colSpan={8} className="px-4 py-6 sm:py-8 text-center text-gray-500 text-xs sm:text-sm">
                                         No risk data available to generate profile.
                                     </td>
                                 </tr>

@@ -3,14 +3,44 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================
+   MOBILE-FIRST RESPONSIVE DESIGN SYSTEM
+   ============================================ */
+
 :root {
   --background: 0 0% 100%;
   --foreground: 222.2 47.4% 11.2%;
+  
+  /* Touch target minimum */
+  --min-touch-target: 44px;
+  
+  /* Safe area insets for notched phones */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
 }
 
-body { @apply bg-white text-slate-900; }
+/* Responsive base font size */
+html {
+  font-size: clamp(14px, 2.5vw, 16px);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
 
+body { 
+  @apply bg-white text-slate-900;
+  padding-top: var(--safe-area-inset-top);
+  padding-bottom: var(--safe-area-inset-bottom);
+  padding-left: var(--safe-area-inset-left);
+  padding-right: var(--safe-area-inset-right);
+}
 
+/* Responsive typography */
+h1 { font-size: clamp(1.5rem, 5vw, 2.25rem); }
+h2 { font-size: clamp(1.25rem, 4vw, 1.875rem); }
+h3 { font-size: clamp(1.1rem, 3.5vw, 1.5rem); }
+h4 { font-size: clamp(1rem, 3vw, 1.25rem); }
 
 @layer base {
   :root {
@@ -68,14 +98,83 @@ body { @apply bg-white text-slate-900; }
   }
 }
 
-
-
 @layer base {
   * {
     @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* ============================================
+   MOBILE UTILITY CLASSES
+   ============================================ */
+
+@layer utilities {
+  /* Mobile-specific visibility */
+  @media (max-width: 639px) {
+    .mobile-hidden { display: none !important; }
+    .mobile-block { display: block !important; }
+    .mobile-flex { display: flex !important; }
+  }
+  
+  @media (min-width: 640px) {
+    .desktop-hidden { display: none !important; }
+  }
+  
+  /* Mobile-specific layout */
+  @media (max-width: 639px) {
+    .mobile-full-width { width: 100% !important; }
+    .mobile-p-2 { padding: 0.5rem !important; }
+    .mobile-p-3 { padding: 0.75rem !important; }
+    .mobile-p-4 { padding: 1rem !important; }
+    .mobile-px-2 { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
+    .mobile-px-4 { padding-left: 1rem !important; padding-right: 1rem !important; }
+    .mobile-py-2 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+    .mobile-stack { flex-direction: column !important; }
+    .mobile-gap-2 { gap: 0.5rem !important; }
+    .mobile-gap-3 { gap: 0.75rem !important; }
+    .mobile-text-sm { font-size: 0.875rem !important; }
+    .mobile-text-base { font-size: 1rem !important; }
+  }
+  
+  /* Touch-friendly targets */
+  .touch-target {
+    min-height: var(--min-touch-target);
+    min-width: var(--min-touch-target);
+  }
+  
+  /* Safe area padding */
+  .safe-area-top { padding-top: var(--safe-area-inset-top); }
+  .safe-area-bottom { padding-bottom: var(--safe-area-inset-bottom); }
+  .safe-area-left { padding-left: var(--safe-area-inset-left); }
+  .safe-area-right { padding-right: var(--safe-area-inset-right); }
+  .safe-area-x { 
+    padding-left: var(--safe-area-inset-left); 
+    padding-right: var(--safe-area-inset-right); 
+  }
+  .safe-area-y { 
+    padding-top: var(--safe-area-inset-top); 
+    padding-bottom: var(--safe-area-inset-bottom); 
+  }
+  
+  /* Horizontal scroll container for tables/charts on mobile */
+  .mobile-scroll-x {
+    @apply overflow-x-auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  
+  /* Card stack layout for mobile tables */
+  .mobile-card-stack {
+    @apply flex flex-col gap-3;
+  }
+  
+  /* Mobile sticky footer for forms */
+  .mobile-sticky-footer {
+    @apply sticky bottom-0 bg-white border-t p-4;
+    padding-bottom: calc(1rem + var(--safe-area-inset-bottom));
   }
 }
 
@@ -86,4 +185,61 @@ body { @apply bg-white text-slate-900; }
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Mobile drawer overlay */
+.mobile-drawer-overlay {
+  @apply fixed inset-0 bg-black/50 z-40 transition-opacity;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* Mobile drawer panel */
+.mobile-drawer {
+  @apply fixed top-0 left-0 h-full w-72 bg-white shadow-xl z-50 transform transition-transform;
+  padding-top: var(--safe-area-inset-top);
+}
+
+.mobile-drawer.closed {
+  transform: translateX(-100%);
+}
+
+.mobile-drawer.open {
+  transform: translateX(0);
+}
+
+/* Bottom navigation bar */
+.mobile-bottom-nav {
+  @apply fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around items-center z-30;
+  height: calc(60px + var(--safe-area-inset-bottom));
+  padding-bottom: var(--safe-area-inset-bottom);
+}
+
+.mobile-bottom-nav-item {
+  @apply flex flex-col items-center justify-center py-2 px-4 text-slate-500;
+  min-height: var(--min-touch-target);
+}
+
+.mobile-bottom-nav-item.active {
+  @apply text-blue-600;
+}
+
+/* Improve touch targets for buttons and links */
+@media (max-width: 639px) {
+  button, 
+  a, 
+  [role="button"] {
+    min-height: var(--min-touch-target);
+  }
+  
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  select,
+  textarea {
+    min-height: var(--min-touch-target);
+    font-size: 16px; /* Prevents iOS zoom on focus */
+  }
 }

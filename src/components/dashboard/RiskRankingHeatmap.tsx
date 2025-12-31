@@ -32,17 +32,17 @@ export default function RiskRankingHeatmap({ data, onCategoryClick }: RiskRankin
     };
 
     return (
-        <Card className="p-6 bg-white overflow-hidden">
-            <h3 className="text-center font-bold text-lg mb-6 uppercase">Risk Ranking</h3>
+        <Card className="p-3 sm:p-6 bg-white overflow-hidden">
+            <h3 className="text-center font-bold text-base sm:text-lg mb-4 sm:mb-6 uppercase">Risk Ranking</h3>
 
-            <div className="relative w-full aspect-[1.2] max-w-2xl mx-auto">
-                {/* Y-Axis Label */}
-                <div className="absolute -left-10 top-1/2 -translate-y-1/2 -rotate-90 font-bold text-sm text-gray-700">
+            <div className="relative w-full aspect-[1.2] max-w-2xl mx-auto min-w-[280px]">
+                {/* Y-Axis Label - hidden on mobile to save space */}
+                <div className="absolute -left-10 top-1/2 -translate-y-1/2 -rotate-90 font-bold text-xs sm:text-sm text-gray-700 hidden sm:block">
                     Severity of Impact
                 </div>
 
                 {/* X-Axis Label */}
-                <div className="absolute bottom-[-40px] left-1/2 -translate-x-1/2 font-bold text-sm text-gray-700">
+                <div className="absolute bottom-[-30px] sm:bottom-[-40px] left-1/2 -translate-x-1/2 font-bold text-xs sm:text-sm text-gray-700">
                     Occurrence
                 </div>
 
@@ -118,7 +118,7 @@ export default function RiskRankingHeatmap({ data, onCategoryClick }: RiskRankin
                                         <TooltipTrigger asChild>
                                             <div
                                                 onClick={() => onCategoryClick && onCategoryClick(item.category)}
-                                                className="w-10 h-10 rounded-full bg-orange-600 border-2 border-white shadow-lg flex items-center justify-center text-white font-bold text-xs cursor-pointer hover:scale-110 transition-transform z-10 hover:bg-orange-500 active:scale-95"
+                                                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-orange-600 border-2 border-white shadow-lg flex items-center justify-center text-white font-bold text-[10px] sm:text-xs cursor-pointer hover:scale-110 transition-transform z-10 hover:bg-orange-500 active:scale-95 touch-target"
                                                 style={{
                                                     // Distinct colors per category? Or uniform? Screen shows orange.
                                                 }}

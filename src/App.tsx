@@ -3,16 +3,18 @@
  *
  * Phase 2: Auth & Layout
  * Using new auth system with proper admin tab visibility.
+ * Mobile-optimized with responsive navigation.
  */
 
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, signOut } from '@/lib/auth';
 import { getCurrentUserProfile, isUserAdmin, isSuperAdmin } from '@/lib/profiles';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import LoginForm from '@/components/auth/LoginForm';
 import SignupForm from '@/components/auth/SignupForm';
 import UserMenu from '@/components/auth/UserMenu';
+import MobileNav from '@/components/layout/MobileNav';
 import Dashboard from '@/components/dashboard/Dashboard';
 import Analytics from '@/components/analytics/Analytics';
 import RiskHistoryView from '@/components/analytics/RiskHistoryView';
@@ -26,7 +28,7 @@ import ImportExportManager from '@/components/importExport/ImportExportManager';
 import AIAssistant from '@/components/ai/AIAssistant';
 import AdminPanel from '@/components/admin/AdminPanel';
 import AdminCheck from '@/components/debug/AdminCheck';
-import type { AuthState} from '@/types/auth';
+import type { AuthState } from '@/types/auth';
 
 export default function App() {
   const [authState, setAuthState] = useState<AuthState>({
@@ -105,18 +107,36 @@ export default function App() {
     );
   }
 
+  // Handle logout
+  async function handleLogout() {
+    await signOut();
+    setAuthState({
+      user: null,
+      profile: null,
+      isAdmin: false,
+      isSuperAdmin: false,
+      loading: false,
+    });
+  }
+
   // Logged in - show main app
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
+      {/* Mobile Navigation */}
+      <MobileNav
+        isAdmin={authState.isAdmin}
+        onLogout={handleLogout}
+      />
+
+      {/* Desktop Header - hidden on mobile */}
+      <header className="mobile-hidden bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">MinRisk</h1>
-            <p className="text-sm text-gray-600">Enterprise Risk Management</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">MinRisk</h1>
+            <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Enterprise Risk Management</p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-right">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="text-sm text-right hidden sm:block">
               <div className="font-medium">{authState.profile.full_name}</div>
               <div className="text-gray-600">{authState.profile.role}</div>
             </div>
@@ -129,8 +149,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-6 py-6">
+      {/* Main Content - with mobile padding adjustments */}
+      <main className="container mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-20 sm:pb-6">
         {/* USER Role Context Banner */}
         {!authState.isAdmin && (
           <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -150,24 +170,45 @@ export default function App() {
         )}
 
         <Tabs defaultValue="dashboard" className="w-full">
-          <TabsList className="mb-6">
-            {/* Tabs visible to all users (First Line of Defense) */}
-            <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
-            <TabsTrigger value="risks">📋 Risks</TabsTrigger>
-            <TabsTrigger value="controls">🛡️ Controls</TabsTrigger>
-            <TabsTrigger value="incidents">🚨 Incidents</TabsTrigger>
-            <TabsTrigger value="ai">✨ AI Assistant</TabsTrigger>
+          {/* Horizontally scrollable tabs container for mobile */}
+          <div className="mobile-scroll-x -mx-3 px-3 sm:mx-0 sm:px-0">
+            <TabsList className="mb-4 sm:mb-6 inline-flex sm:flex w-max sm:w-auto">
+              {/* Tabs visible to all users (First Line of Defense) */}
+              <TabsTrigger value="dashboard" className="text-xs sm:text-sm whitespace-nowrap">
+                <span className="hidden sm:inline">📊 </span>Dashboard
+              </TabsTrigger>
+              <TabsTrigger value="risks" className="text-xs sm:text-sm whitespace-nowrap">
+                <span className="hidden sm:inline">📋 </span>Risks
+              </TabsTrigger>
+              <TabsTrigger value="controls" className="text-xs sm:text-sm whitespace-nowrap">
+                <span className="hidden sm:inline">🛡️ </span>Controls
+              </TabsTrigger>
+              <TabsTrigger value="incidents" className="text-xs sm:text-sm whitespace-nowrap">
+                <span className="hidden sm:inline">🚨 </span>Incidents
+              </TabsTrigger>
+              <TabsTrigger value="ai" className="text-xs sm:text-sm whitespace-nowrap">
+                <span className="hidden sm:inline">✨ </span>AI
+              </TabsTrigger>
 
-            {/* Tabs visible only to ADMIN (Second/Third Line of Defense) */}
-            {authState.isAdmin && (
-              <>
-                <TabsTrigger value="analytics">📈 Analytics</TabsTrigger>
-                <TabsTrigger value="kri">📉 KRI</TabsTrigger>
-                <TabsTrigger value="intelligence">🧠 Intelligence</TabsTrigger>
-                <TabsTrigger value="admin">⚙️ Admin</TabsTrigger>
-              </>
-            )}
-          </TabsList>
+              {/* Tabs visible only to ADMIN (Second/Third Line of Defense) */}
+              {authState.isAdmin && (
+                <>
+                  <TabsTrigger value="analytics" className="text-xs sm:text-sm whitespace-nowrap">
+                    <span className="hidden sm:inline">📈 </span>Analytics
+                  </TabsTrigger>
+                  <TabsTrigger value="kri" className="text-xs sm:text-sm whitespace-nowrap">
+                    <span className="hidden sm:inline">📉 </span>KRI
+                  </TabsTrigger>
+                  <TabsTrigger value="intelligence" className="text-xs sm:text-sm whitespace-nowrap">
+                    <span className="hidden sm:inline">🧠 </span>Intel
+                  </TabsTrigger>
+                  <TabsTrigger value="admin" className="text-xs sm:text-sm whitespace-nowrap">
+                    <span className="hidden sm:inline">⚙️ </span>Admin
+                  </TabsTrigger>
+                </>
+              )}
+            </TabsList>
+          </div>
 
           <TabsContent value="dashboard">
             <Dashboard />
