@@ -507,7 +507,7 @@ async function createRiskAlerts(
             };
 
             const { error } = await supabase
-              .from('intelligence_alerts')
+              .from('risk_intelligence_alerts')
               .insert(alert);
 
             if (!error) {
