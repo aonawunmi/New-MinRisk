@@ -115,8 +115,8 @@ SELECT
   ls.use_case_example,
   ls.status,
   -- Submitter
-  sub.email as submitted_by_email,
-  sub.name as submitted_by_name,
+  -- sub.email removed
+  sub.full_name as submitted_by_name,
   ls.submitted_at,
   -- Days pending
   EXTRACT(DAY FROM (NOW() - ls.submitted_at)) as days_pending,
@@ -175,8 +175,8 @@ CREATE OR REPLACE VIEW user_contributions_view AS
 SELECT
   ls.organization_id,
   sub.id as user_id,
-  sub.email,
-  sub.name,
+  -- sub.email removed
+  sub.full_name as name,
   -- Contribution counts
   COUNT(*) as total_suggestions,
   COUNT(*) FILTER (WHERE ls.status = 'approved') as approved_suggestions,
@@ -200,7 +200,7 @@ SELECT
   MAX(ls.submitted_at) as latest_suggestion_date
 FROM library_suggestions ls
 LEFT JOIN user_profiles sub ON ls.submitted_by = sub.id
-GROUP BY ls.organization_id, sub.id, sub.email, sub.name
+GROUP BY ls.organization_id, sub.id, sub.full_name
 HAVING COUNT(*) > 0
 ORDER BY approved_suggestions DESC, total_suggestions DESC;
 
@@ -212,7 +212,7 @@ SELECT
   ls.suggestion_type,
   ls.suggested_data,
   -- Original review
-  rev.email as original_reviewer_email,
+  -- rev.email removed
   ls.reviewed_at,
   ls.rejection_reason,
   -- Appeal
@@ -220,11 +220,11 @@ SELECT
   ls.appeal_submitted_at,
   EXTRACT(DAY FROM (NOW() - ls.appeal_submitted_at)) as days_since_appeal,
   -- Appeal review
-  app_rev.email as appeal_reviewer_email,
+  -- app_rev.email removed
   ls.appeal_reviewed_at,
-  ls.appeal_decision,
+  ls.appeal_decision
   -- Submitter
-  sub.email as submitter_email
+  -- sub.email removed
 FROM library_suggestions ls
 LEFT JOIN user_profiles sub ON ls.submitted_by = sub.id
 LEFT JOIN user_profiles rev ON ls.reviewed_by = rev.id
@@ -284,6 +284,7 @@ CREATE OR REPLACE FUNCTION approve_suggestion(
 RETURNS BOOLEAN AS $$
 DECLARE
   v_updated BOOLEAN;
+  v_row_count INTEGER;
 BEGIN
   UPDATE library_suggestions
   SET
@@ -294,7 +295,8 @@ BEGIN
     updated_at = NOW()
   WHERE id = p_suggestion_id AND status = 'pending';
 
-  GET DIAGNOSTICS v_updated = ROW_COUNT > 0;
+  GET DIAGNOSTICS v_row_count = ROW_COUNT;
+  v_updated := (v_row_count > 0);
   RETURN v_updated;
 END;
 $$ LANGUAGE plpgsql;
@@ -308,6 +310,7 @@ CREATE OR REPLACE FUNCTION reject_suggestion(
 RETURNS BOOLEAN AS $$
 DECLARE
   v_updated BOOLEAN;
+  v_row_count INTEGER;
 BEGIN
   UPDATE library_suggestions
   SET
@@ -318,7 +321,8 @@ BEGIN
     updated_at = NOW()
   WHERE id = p_suggestion_id AND status = 'pending';
 
-  GET DIAGNOSTICS v_updated = ROW_COUNT > 0;
+  GET DIAGNOSTICS v_row_count = ROW_COUNT;
+  v_updated := (v_row_count > 0);
   RETURN v_updated;
 END;
 $$ LANGUAGE plpgsql;
@@ -331,6 +335,7 @@ CREATE OR REPLACE FUNCTION submit_appeal(
 RETURNS BOOLEAN AS $$
 DECLARE
   v_updated BOOLEAN;
+  v_row_count INTEGER;
 BEGIN
   UPDATE library_suggestions
   SET
@@ -341,7 +346,8 @@ BEGIN
     updated_at = NOW()
   WHERE id = p_suggestion_id AND status = 'rejected';
 
-  GET DIAGNOSTICS v_updated = ROW_COUNT > 0;
+  GET DIAGNOSTICS v_row_count = ROW_COUNT;
+  v_updated := (v_row_count > 0);
   RETURN v_updated;
 END;
 $$ LANGUAGE plpgsql;
@@ -355,6 +361,7 @@ CREATE OR REPLACE FUNCTION mark_suggestion_implemented(
 RETURNS BOOLEAN AS $$
 DECLARE
   v_updated BOOLEAN;
+  v_row_count INTEGER;
 BEGIN
   UPDATE library_suggestions
   SET
@@ -365,7 +372,8 @@ BEGIN
     updated_at = NOW()
   WHERE id = p_suggestion_id AND status = 'approved';
 
-  GET DIAGNOSTICS v_updated = ROW_COUNT > 0;
+  GET DIAGNOSTICS v_row_count = ROW_COUNT;
+  v_updated := (v_row_count > 0);
   RETURN v_updated;
 END;
 $$ LANGUAGE plpgsql;

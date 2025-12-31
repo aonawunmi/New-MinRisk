@@ -11,18 +11,21 @@ import {
   getTopRisks,
   getRiskDistribution,
   getAlertsSummary,
-  getRiskLevelColor,
+  getRiskProfileSummary,
   type DashboardMetrics,
   type TopRisk,
+  type RiskProfileSummary,
 } from '@/lib/analytics';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import MetricCard from './MetricCard';
 import RiskLevelChart from './RiskLevelChart';
 import RiskDistributionChart from './RiskDistributionChart';
 import TopRisksTable from './TopRisksTable';
 import AlertsSummary from './AlertsSummary';
+import RiskRankingHeatmap from './RiskRankingHeatmap';
+import RiskProfileSummaryTable from './RiskProfileSummaryTable';
+import RiskCategoryDrilldown from './RiskCategoryDrilldown';
 
 export default function Dashboard() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
@@ -42,6 +45,8 @@ export default function Dashboard() {
     total_alerts: number;
     kri_by_level: Record<string, number>;
   } | null>(null);
+  const [riskProfileSummary, setRiskProfileSummary] = useState<RiskProfileSummary[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +67,7 @@ export default function Dashboard() {
         divDistResult,
         catDistResult,
         alertsResult,
+        profileSummaryResult,
       ] = await Promise.all([
         getDashboardMetrics(),
         getTopRisks(10),
@@ -69,27 +75,17 @@ export default function Dashboard() {
         getRiskDistribution('division'),
         getRiskDistribution('category'),
         getAlertsSummary(),
+        getRiskProfileSummary(),
       ]);
 
       // Handle errors
-      if (metricsResult.error) {
-        throw new Error(metricsResult.error.message);
-      }
-      if (topRisksResult.error) {
-        throw new Error(topRisksResult.error.message);
-      }
-      if (levelDistResult.error) {
-        throw new Error(levelDistResult.error.message);
-      }
-      if (divDistResult.error) {
-        throw new Error(divDistResult.error.message);
-      }
-      if (catDistResult.error) {
-        throw new Error(catDistResult.error.message);
-      }
-      if (alertsResult.error) {
-        throw new Error(alertsResult.error.message);
-      }
+      if (metricsResult.error) throw new Error(metricsResult.error.message);
+      if (topRisksResult.error) throw new Error(topRisksResult.error.message);
+      if (levelDistResult.error) throw new Error(levelDistResult.error.message);
+      if (divDistResult.error) throw new Error(divDistResult.error.message);
+      if (catDistResult.error) throw new Error(catDistResult.error.message);
+      if (alertsResult.error) throw new Error(alertsResult.error.message);
+      if (profileSummaryResult.error) throw new Error(profileSummaryResult.error.message);
 
       // Set data
       setMetrics(metricsResult.data);
@@ -98,6 +94,7 @@ export default function Dashboard() {
       setDivisionDistribution(divDistResult.data || []);
       setCategoryDistribution(catDistResult.data || []);
       setAlertsSummary(alertsResult.data);
+      setRiskProfileSummary(profileSummaryResult.data || []);
     } catch (err) {
       console.error('Dashboard load error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load dashboard');
@@ -202,6 +199,28 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* 2. Risk Ranking Visualization & Drilldown */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-6">
+          <RiskRankingHeatmap
+            data={riskProfileSummary}
+            onCategoryClick={setSelectedCategory}
+          />
+        </div>
+
+        <div className="space-y-6">
+          <RiskProfileSummaryTable data={riskProfileSummary} />
+        </div>
+      </div>
+
+      {/* Drilldown Section */}
+      {selectedCategory && (
+        <RiskCategoryDrilldown
+          category={selectedCategory}
+          onClose={() => setSelectedCategory(null)}
+        />
+      )}
+
       {/* Alerts Summary */}
       {alertsSummary && (
         <AlertsSummary
@@ -212,9 +231,8 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Risk Status & Level Overview */}
+      {/* Secondary Distribution Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Risk by Status */}
         <Card>
           <CardHeader>
             <CardTitle>Risk Status Distribution</CardTitle>
@@ -243,21 +261,6 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Risk by Level */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Risk Level Distribution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <RiskLevelChart distribution={levelDistribution} />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Distribution Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* By Division */}
         <Card>
           <CardHeader>
             <CardTitle>Risks by Division</CardTitle>
@@ -266,19 +269,6 @@ export default function Dashboard() {
             <RiskDistributionChart
               data={divisionDistribution}
               emptyMessage="No division data available"
-            />
-          </CardContent>
-        </Card>
-
-        {/* By Category */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Risks by Category</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <RiskDistributionChart
-              data={categoryDistribution}
-              emptyMessage="No category data available"
             />
           </CardContent>
         </Card>

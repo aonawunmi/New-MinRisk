@@ -37,6 +37,7 @@ DROP POLICY IF EXISTS "Users can delete their own risks" ON risks;
 -- =====================================================
 
 -- SELECT Policy: All users see all risks in their organization
+DROP POLICY IF EXISTS "Users can view all org risks" ON risks;
 CREATE POLICY "Users can view all org risks"
 ON risks FOR SELECT TO authenticated
 USING (
@@ -47,19 +48,19 @@ USING (
   )
 );
 
--- UPDATE Policy: Only owner OR admin can edit
+-- UPDATE Policy: Only creator OR admin can edit
+DROP POLICY IF EXISTS "Owner or admin can update risks" ON risks;
 CREATE POLICY "Owner or admin can update risks"
 ON risks FOR UPDATE TO authenticated
 USING (
-  -- Must be in same org AND (is owner OR is admin)
+  -- Must be in same org AND (is creator OR is admin)
   organization_id IN (
     SELECT organization_id
     FROM user_profiles
     WHERE id = auth.uid()
   )
   AND (
-    owner_id = auth.uid() OR  -- Risk owner
-    user_id = auth.uid() OR   -- Original creator
+    user_id = auth.uid() OR   -- Risk creator
     EXISTS (                   -- OR is admin
       SELECT 1 FROM user_profiles
       WHERE id = auth.uid()
@@ -68,7 +69,8 @@ USING (
   )
 );
 
--- DELETE Policy: Only owner OR admin can delete
+-- DELETE Policy: Only creator OR admin can delete
+DROP POLICY IF EXISTS "Owner or admin can delete risks" ON risks;
 CREATE POLICY "Owner or admin can delete risks"
 ON risks FOR DELETE TO authenticated
 USING (
@@ -78,8 +80,7 @@ USING (
     WHERE id = auth.uid()
   )
   AND (
-    owner_id = auth.uid() OR  -- Risk owner
-    user_id = auth.uid() OR   -- Original creator
+    user_id = auth.uid() OR   -- Risk creator
     EXISTS (                   -- OR is admin
       SELECT 1 FROM user_profiles
       WHERE id = auth.uid()

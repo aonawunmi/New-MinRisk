@@ -248,10 +248,10 @@ export default function RiskForm({
         prevControls.map(c =>
           c.id === controlId
             ? {
-                ...c,
-                ...editingControlData,
-                updated_at: new Date().toISOString(),
-              }
+              ...c,
+              ...editingControlData,
+              updated_at: new Date().toISOString(),
+            }
             : c
         )
       );
@@ -455,18 +455,29 @@ export default function RiskForm({
       loadIntelligenceAlerts(editingRisk.risk_code);
 
       // Find and set category/subcategory from existing risk
-      // (category field currently stores subcategory name)
-      const subcategoryName = editingRisk.category;
-      setSelectedSubcategory(subcategoryName);
+      // Handle both legacy (subcategory in category field) and new (main category in category field) data
+      const storedCategory = editingRisk.category;
 
-      // Find the parent category for this subcategory
-      if (categories.length > 0 && subcategoryName) {
-        const parentCategory = categories.find((cat) =>
-          cat.subcategories.some((sub) => sub.name === subcategoryName)
-        );
-        if (parentCategory) {
-          setSelectedCategory(parentCategory.name);
-          console.log('Found category for editing:', parentCategory.name, '→', subcategoryName);
+      if (categories.length > 0 && storedCategory) {
+        // Check if stored value is a Main Category
+        const isMainCategory = categories.some(cat => cat.name === storedCategory);
+
+        if (isMainCategory) {
+          setSelectedCategory(storedCategory);
+          console.log('Found main category:', storedCategory);
+          // We don't have subcategory stored separately yet, so leave it empty
+          // unless we parse it from description later
+        } else {
+          // Check if it's a Subcategory (Legacy behavior)
+          const parentCategory = categories.find((cat) =>
+            cat.subcategories.some((sub) => sub.name === storedCategory)
+          );
+
+          if (parentCategory) {
+            setSelectedCategory(parentCategory.name);
+            setSelectedSubcategory(storedCategory);
+            console.log('Found legacy subcategory:', parentCategory.name, '→', storedCategory);
+          }
         }
       }
     } else {
@@ -544,7 +555,10 @@ export default function RiskForm({
       const dataToSave = {
         ...validFormData,
         risk_description: finalDescription,
-        category: selectedSubcategory, // Store subcategory in category field
+        category: selectedCategory, // Store Main Category (standardized)
+        // We currently don't have a separate subcategory field in the DB, 
+        // but strictly aligning 'category' to the main taxonomy fixes the dashboard aggregation issues.
+        // The specific subcategory context is preserved in the AI refinement or description if needed.
       };
 
       let riskId: string | null = null;
@@ -1083,7 +1097,7 @@ export default function RiskForm({
         control.monitoring_score +
         control.evaluation_score) /
         12) *
-        100
+      100
     );
   }
 
@@ -1097,982 +1111,981 @@ export default function RiskForm({
     rootCauseSearch.trim() === ''
       ? true
       : rc.cause_code.toLowerCase().includes(rootCauseSearch.toLowerCase()) ||
-        rc.cause_name.toLowerCase().includes(rootCauseSearch.toLowerCase()) ||
-        (rc.cause_description && rc.cause_description.toLowerCase().includes(rootCauseSearch.toLowerCase()))
+      rc.cause_name.toLowerCase().includes(rootCauseSearch.toLowerCase()) ||
+      (rc.cause_description && rc.cause_description.toLowerCase().includes(rootCauseSearch.toLowerCase()))
   );
 
   const filteredImpacts = impacts.filter((imp) =>
     impactSearch.trim() === ''
       ? true
       : imp.impact_code.toLowerCase().includes(impactSearch.toLowerCase()) ||
-        imp.impact_name.toLowerCase().includes(impactSearch.toLowerCase()) ||
-        (imp.impact_description && imp.impact_description.toLowerCase().includes(impactSearch.toLowerCase()))
+      imp.impact_name.toLowerCase().includes(impactSearch.toLowerCase()) ||
+      (imp.impact_description && imp.impact_description.toLowerCase().includes(impactSearch.toLowerCase()))
   );
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
-            {editingRisk ? 'Edit Risk' : 'Add New Risk'}
-          </DialogTitle>
-          <DialogDescription>
-            {editingRisk
-              ? 'Update the risk information below.'
-              : 'Fill in the details to create a new risk. You can optionally use AI to refine your risk statement.'}
-          </DialogDescription>
-        </DialogHeader>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingRisk ? 'Edit Risk' : 'Add New Risk'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingRisk
+                ? 'Update the risk information below.'
+                : 'Fill in the details to create a new risk. You can optionally use AI to refine your risk statement.'}
+            </DialogDescription>
+          </DialogHeader>
 
-        {/* Read-Only Mode Banner */}
-        {readOnly && editingRisk && (
-          <Alert className="bg-blue-50 border-blue-200">
-            <AlertCircle className="h-4 w-4 text-blue-600" />
-            <AlertDescription className="text-blue-900">
-              <strong>Read-only view.</strong> Owner: <strong>{editingRisk.owner_email || 'Unassigned'}</strong>.
-              Only the risk owner or administrators can edit this risk.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        <form
-          onSubmit={readOnly ? (e) => e.preventDefault() : handleSubmit}
-          className={`space-y-4 ${readOnly ? 'pointer-events-none opacity-70' : ''}`}
-        >
-          {/* Risk Code - only show when editing (read-only) */}
-          {editingRisk && (
-            <div className="space-y-2">
-              <Label htmlFor="risk_code">Risk Code</Label>
-              <Input
-                id="risk_code"
-                value={formData.risk_code || ''}
-                disabled
-                className="bg-gray-50"
-              />
-              <p className="text-xs text-gray-500">Risk codes cannot be changed</p>
-            </div>
-          )}
-
-          {/* Show auto-generation info when creating new risk */}
-          {!editingRisk && (
-            <Alert>
-              <AlertDescription>
-                Risk code will be auto-generated (e.g., STR-001, FIN-002)
+          {/* Read-Only Mode Banner */}
+          {readOnly && editingRisk && (
+            <Alert className="bg-blue-50 border-blue-200">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-900">
+                <strong>Read-only view.</strong> Owner: <strong>{editingRisk.owner_email || 'Unassigned'}</strong>.
+                Only the risk owner or administrators can edit this risk.
               </AlertDescription>
             </Alert>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="owner">Risk Owner *</Label>
-              <Select
-                value={selectedOwnerId}
-                onValueChange={(userId) => {
-                  setSelectedOwnerId(userId);
-                  // Find the selected user
-                  const selectedUser = orgUsers.find(u => u.id === userId);
-                  if (selectedUser) {
-                    // Update both owner (display name) and owner_id (UUID)
-                    handleChange('owner', selectedUser.full_name);
-                    setFormData(prev => ({
-                      ...prev,
-                      owner_id: userId,
-                    }));
-                  }
-                }}
-                disabled={loading || loadingUsers}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingUsers ? "Loading users..." : "Select risk owner"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {orgUsers.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.full_name} ({user.email})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {orgUsers.length === 0 && !loadingUsers && (
-                <p className="text-xs text-gray-500">No users available</p>
-              )}
-            </div>
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-            <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(value) => handleChange('status', value)}
-                disabled={loading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="OPEN">Open</SelectItem>
-                  <SelectItem value="CLOSED">Closed</SelectItem>
-                  <SelectItem value="ARCHIVED">Archived</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="risk_title">Risk Title *</Label>
-            <Input
-              id="risk_title"
-              value={formData.risk_title}
-              onChange={(e) => handleChange('risk_title', e.target.value)}
-              placeholder="e.g., Cybersecurity Breach"
-              required
-              disabled={loading}
-            />
-          </div>
-
-          {/* EVENT TEXT (Free text describing what's happening) */}
-          <div className="space-y-2">
-            <Label htmlFor="event_text">Event / Situation (Optional)</Label>
-            <Textarea
-              id="event_text"
-              value={formData.event_text || ''}
-              onChange={(e) => handleChange('event_text', e.target.value)}
-              placeholder="Describe the observable event or situation (e.g., 'An employee clicks on a phishing email link')"
-              rows={3}
-              disabled={loading}
-            />
-            <p className="text-xs text-gray-500">
-              Describe what is happening. This will be combined with root cause and impact to create a structured risk statement.
-            </p>
-          </div>
-
-          {/* ROOT CAUSE AND IMPACT DROPDOWNS (from global libraries) */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between mb-1">
-                <Label htmlFor="root_cause">Root Cause (Optional)</Label>
-                {/* Admin-only: Add custom root causes */}
-                {isAdmin && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowCustomRootCause(true)}
-                    className="h-7 text-xs"
-                    disabled={loading}
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    Add Custom
-                  </Button>
-                )}
+          <form
+            onSubmit={readOnly ? (e) => e.preventDefault() : handleSubmit}
+            className={`space-y-4 ${readOnly ? 'pointer-events-none opacity-70' : ''}`}
+          >
+            {/* Risk Code - only show when editing (read-only) */}
+            {editingRisk && (
+              <div className="space-y-2">
+                <Label htmlFor="risk_code">Risk Code</Label>
+                <Input
+                  id="risk_code"
+                  value={formData.risk_code || ''}
+                  disabled
+                  className="bg-gray-50"
+                />
+                <p className="text-xs text-gray-500">Risk codes cannot be changed</p>
               </div>
-              {loadingLibraries ? (
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading root causes...
-                </div>
-              ) : (
-                <Select
-                  value={selectedRootCauseId}
-                  onValueChange={setSelectedRootCauseId}
-                  disabled={loading}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select root cause" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[400px]">
-                    <div className="p-2 border-b sticky top-0 bg-white">
-                      <Input
-                        placeholder="Search root causes..."
-                        value={rootCauseSearch}
-                        onChange={(e) => setRootCauseSearch(e.target.value)}
-                        className="h-8"
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                    <div className="max-h-[300px] overflow-y-auto">
-                      {filteredRootCauses.length === 0 ? (
-                        <div className="p-4 text-center text-sm text-gray-500">
-                          No root causes found matching "{rootCauseSearch}"
-                        </div>
-                      ) : (
-                        filteredRootCauses.map((rc) => (
-                          <SelectItem key={rc.id} value={rc.id}>
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono text-xs text-gray-500">{rc.cause_code}</span>
-                                <span className="font-medium">{rc.cause_name}</span>
-                                {rc.source === 'global' && (
-                                  <span className="text-xs text-blue-600 bg-blue-50 px-1 rounded">Global</span>
-                                )}
-                              </div>
-                              {rc.cause_description && (
-                                <span className="text-xs text-gray-500">{rc.cause_description}</span>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))
-                      )}
-                    </div>
-                  </SelectContent>
-                </Select>
-              )}
-              {selectedRootCauseId && (
-                <p className="text-xs text-gray-500">
-                  {rootCauses.find((rc) => rc.id === selectedRootCauseId)?.cause_description}
-                </p>
-              )}
-            </div>
+            )}
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between mb-1">
-                <Label htmlFor="impact">Impact (Optional)</Label>
-                {/* Admin-only: Add custom impacts */}
-                {isAdmin && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowCustomImpact(true)}
-                    className="h-7 text-xs"
-                    disabled={loading}
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    Add Custom
-                  </Button>
-                )}
-              </div>
-              {loadingLibraries ? (
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading impacts...
-                </div>
-              ) : (
-                <Select
-                  value={selectedImpactId}
-                  onValueChange={setSelectedImpactId}
-                  disabled={loading}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select impact" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[400px]">
-                    <div className="p-2 border-b sticky top-0 bg-white">
-                      <Input
-                        placeholder="Search impacts..."
-                        value={impactSearch}
-                        onChange={(e) => setImpactSearch(e.target.value)}
-                        className="h-8"
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                    <div className="max-h-[300px] overflow-y-auto">
-                      {filteredImpacts.length === 0 ? (
-                        <div className="p-4 text-center text-sm text-gray-500">
-                          No impacts found matching "{impactSearch}"
-                        </div>
-                      ) : (
-                        filteredImpacts.map((imp) => (
-                          <SelectItem key={imp.id} value={imp.id}>
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono text-xs text-gray-500">{imp.impact_code}</span>
-                                <span className="font-medium">{imp.impact_name}</span>
-                                {imp.source === 'global' && (
-                                  <span className="text-xs text-blue-600 bg-blue-50 px-1 rounded">Global</span>
-                                )}
-                              </div>
-                              {imp.impact_description && (
-                                <span className="text-xs text-gray-500">{imp.impact_description}</span>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))
-                      )}
-                    </div>
-                  </SelectContent>
-                </Select>
-              )}
-              {selectedImpactId && (
-                <p className="text-xs text-gray-500">
-                  {impacts.find((imp) => imp.id === selectedImpactId)?.impact_description}
-                </p>
-              )}
-            </div>
-          </div>
+            {/* Show auto-generation info when creating new risk */}
+            {!editingRisk && (
+              <Alert>
+                <AlertDescription>
+                  Risk code will be auto-generated (e.g., STR-001, FIN-002)
+                </AlertDescription>
+              </Alert>
+            )}
 
-          {/* TAXONOMY DROPDOWNS */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="category">Risk Category *</Label>
-              {loadingTaxonomy ? (
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading categories...
-                </div>
-              ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="owner">Risk Owner *</Label>
                 <Select
-                  value={selectedCategory}
-                  onValueChange={handleCategoryChange}
-                  disabled={loading}
-                  required
+                  value={selectedOwnerId}
+                  onValueChange={(userId) => {
+                    setSelectedOwnerId(userId);
+                    // Find the selected user
+                    const selectedUser = orgUsers.find(u => u.id === userId);
+                    if (selectedUser) {
+                      // Update both owner (display name) and owner_id (UUID)
+                      handleChange('owner', selectedUser.full_name);
+                      setFormData(prev => ({
+                        ...prev,
+                        owner_id: userId,
+                      }));
+                    }
+                  }}
+                  disabled={loading || loadingUsers}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
+                    <SelectValue placeholder={loadingUsers ? "Loading users..." : "Select risk owner"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.name}>
-                        {cat.name}
+                    {orgUsers.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.full_name} ({user.email})
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              )}
-              {selectedCategory && (
-                <p className="text-xs text-gray-500">
-                  {categories.find((c) => c.name === selectedCategory)?.description}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="subcategory">Risk Sub-Category *</Label>
-              <Select
-                value={selectedSubcategory}
-                onValueChange={handleSubcategoryChange}
-                disabled={loading || !selectedCategory}
-                required
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={selectedCategory ? "Select sub-category" : "Select category first"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredSubcategories.map((subcat) => (
-                    <SelectItem key={subcat.id} value={subcat.name}>
-                      {subcat.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedSubcategory && (
-                <p className="text-xs text-gray-500">
-                  {filteredSubcategories.find((s) => s.name === selectedSubcategory)?.description}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* RISK DESCRIPTION WITH AI REFINEMENT */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="risk_description">Risk Statement *</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleRefineWithAI}
-                disabled={isRefining || loading || !formData.risk_description.trim() || !selectedCategory || !selectedSubcategory}
-                className="text-purple-600 border-purple-600 hover:bg-purple-50"
-              >
-                {isRefining ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Refining...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    Fine-tune with AI
-                  </>
+                {orgUsers.length === 0 && !loadingUsers && (
+                  <p className="text-xs text-gray-500">No users available</p>
                 )}
-              </Button>
-            </div>
-            <Textarea
-              id="risk_description"
-              value={formData.risk_description}
-              onChange={(e) => handleChange('risk_description', e.target.value)}
-              placeholder="Describe the risk in your own words... (AI can help refine this)"
-              rows={4}
-              required
-              disabled={loading}
-            />
-            <p className="text-xs text-gray-500">
-              Write your risk statement naturally, then optionally click "Fine-tune with AI" to improve it
-            </p>
-          </div>
+              </div>
 
-          {/* AI REFINEMENT SUGGESTION */}
-          {refinement && showRefinement && (
-            <Card className="border-green-200 bg-green-50">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                    <CardTitle className="text-sm text-green-900">
-                      AI-Refined Statement
-                    </CardTitle>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {!isEditingRefinement && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleStartEditingRefinement}
-                        title="Edit refined statement"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    )}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleRejectRefinement}
-                      title="Reject and use original"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {/* Display Mode */}
-                {!isEditingRefinement && (
-                  <>
-                    <div className="bg-white p-3 rounded border border-green-200">
-                      <p className="text-sm text-gray-900">{refinement.refined_statement}</p>
-                    </div>
-                    <div className="text-xs text-green-800">
-                      <strong>What was improved:</strong>
-                      <ul className="list-disc list-inside mt-1 space-y-1">
-                        {refinement.improvements_made.map((improvement, idx) => (
-                          <li key={idx}>{improvement}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div className="text-xs text-green-700 italic">
-                      {refinement.explanation}
-                    </div>
-                    <Alert className="bg-green-100 border-green-300">
-                      <AlertDescription className="text-green-900 text-xs">
-                        This refined version will be saved when you submit the form. Click the edit icon to make changes, or X to use your original version.
-                      </AlertDescription>
-                    </Alert>
-                  </>
-                )}
-
-                {/* Edit Mode */}
-                {isEditingRefinement && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="edited-refinement">Edit Refined Statement</Label>
-                      <Textarea
-                        id="edited-refinement"
-                        value={editedRefinedStatement}
-                        onChange={(e) => setEditedRefinedStatement(e.target.value)}
-                        rows={4}
-                        className="bg-white"
-                        placeholder="Edit the AI-refined statement..."
-                      />
-                      <p className="text-xs text-gray-600">
-                        Edit the statement as needed. Click "Revalidate" to check if the category/subcategory still fit.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        onClick={handleRevalidateEdit}
-                        disabled={isRevalidating || !editedRefinedStatement.trim()}
-                        size="sm"
-                        className="bg-purple-600 hover:bg-purple-700"
-                      >
-                        {isRevalidating ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Revalidating...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            Revalidate Category
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={handleCancelEditingRefinement}
-                        disabled={isRevalidating}
-                        size="sm"
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </>
-                )}
-
-                {/* Revalidation Results */}
-                {revalidation && !isEditingRefinement && (
-                  <Alert className={revalidation.category_still_valid && revalidation.subcategory_still_valid ? "bg-blue-50 border-blue-300" : "bg-yellow-50 border-yellow-300"}>
-                    <div className="flex items-start gap-2">
-                      {revalidation.category_still_valid && revalidation.subcategory_still_valid ? (
-                        <CheckCircle className="h-4 w-4 text-blue-600 mt-0.5" />
-                      ) : (
-                        <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5" />
-                      )}
-                      <div className="flex-1">
-                        <AlertDescription className="text-xs space-y-2">
-                          <p className="font-semibold">
-                            {revalidation.category_still_valid && revalidation.subcategory_still_valid
-                              ? '✓ Category and Subcategory Validated'
-                              : '⚠ Category/Subcategory Changed'}
-                          </p>
-                          <p>{revalidation.explanation}</p>
-                          {(!revalidation.category_still_valid || !revalidation.subcategory_still_valid) && (
-                            <div className="mt-2 p-2 bg-white rounded border">
-                              <p className="font-semibold text-gray-900">Updated Classification:</p>
-                              <p className="text-gray-700">
-                                Category: <strong>{revalidation.suggested_category}</strong>
-                              </p>
-                              <p className="text-gray-700">
-                                Sub-category: <strong>{revalidation.suggested_subcategory}</strong>
-                              </p>
-                              <p className="text-gray-600 text-xs mt-1">
-                                (The dropdowns above have been updated automatically)
-                              </p>
-                            </div>
-                          )}
-                        </AlertDescription>
-                      </div>
-                    </div>
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="division">Division *</Label>
-              <Select
-                value={formData.division}
-                onValueChange={(value) => handleChange('division', value)}
-                disabled={loading || !orgConfig?.divisions?.length}
-              >
-                <SelectTrigger id="division">
-                  <SelectValue placeholder={orgConfig?.divisions?.length ? "Select division" : "No divisions configured"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {orgConfig?.divisions?.filter(d => d && d.trim()).map((division) => (
-                    <SelectItem key={division} value={division}>
-                      {division}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {(!orgConfig?.divisions || orgConfig.divisions.length === 0) && (
-                <p className="text-sm text-amber-600">No divisions configured. Please configure in Admin panel.</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="department">Department *</Label>
-              <Select
-                value={formData.department}
-                onValueChange={(value) => handleChange('department', value)}
-                disabled={loading || !orgConfig?.departments?.length}
-              >
-                <SelectTrigger id="department">
-                  <SelectValue placeholder={orgConfig?.departments?.length ? "Select department" : "No departments configured"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {orgConfig?.departments?.filter(d => d && d.trim()).map((department) => (
-                    <SelectItem key={department} value={department}>
-                      {department}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {(!orgConfig?.departments || orgConfig.departments.length === 0) && (
-                <p className="text-sm text-amber-600">No departments configured. Please configure in Admin panel.</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label>&nbsp;</Label>
-              <div className="flex items-center space-x-2 h-10">
-                <input
-                  type="checkbox"
-                  id="is_priority"
-                  checked={formData.is_priority}
-                  onChange={(e) => handleChange('is_priority', e.target.checked)}
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) => handleChange('status', value)}
                   disabled={loading}
-                  className="rounded border-gray-300"
-                />
-                <Label htmlFor="is_priority" className="text-sm font-normal cursor-pointer">
-                  Priority Risk
-                </Label>
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="OPEN">Open</SelectItem>
+                    <SelectItem value="CLOSED">Closed</SelectItem>
+                    <SelectItem value="ARCHIVED">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="likelihood_inherent">
-                Inherent Likelihood *
-              </Label>
-              <Select
-                value={formData.likelihood_inherent.toString()}
-                onValueChange={(value) =>
-                  handleChange('likelihood_inherent', parseInt(value))
-                }
-                disabled={loading}
-              >
-                <SelectTrigger id="likelihood_inherent">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {getLikelihoodOptions(orgConfig).map((option) => (
-                    <SelectItem key={option.value} value={option.value.toString()}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="impact_inherent">
-                Inherent Impact *
-              </Label>
-              <Select
-                value={formData.impact_inherent.toString()}
-                onValueChange={(value) =>
-                  handleChange('impact_inherent', parseInt(value))
-                }
+              <Label htmlFor="risk_title">Risk Title *</Label>
+              <Input
+                id="risk_title"
+                value={formData.risk_title}
+                onChange={(e) => handleChange('risk_title', e.target.value)}
+                placeholder="e.g., Cybersecurity Breach"
+                required
                 disabled={loading}
-              >
-                <SelectTrigger id="impact_inherent">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {getImpactOptions(orgConfig).map((option) => (
-                    <SelectItem key={option.value} value={option.value.toString()}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* === CONTROLS SECTION === */}
-          <div className="space-y-4 pt-6 border-t mt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-blue-600" />
-                  Controls (Optional)
-                </h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  Add controls to mitigate this risk
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                {!showManualControl && !showAISuggestions && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-blue-200 text-blue-700 hover:bg-blue-50"
-                    onClick={() => setShowManualControl(true)}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Control
-                  </Button>
-                )}
-
-                {!showAISuggestions && !showManualControl && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-purple-200 text-purple-700 hover:bg-purple-50"
-                    onClick={handleGetAISuggestions}
-                    disabled={loadingAISuggestions}
-                  >
-                    {loadingAISuggestions ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Getting Suggestions...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        Get AI Suggestions
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
+              />
             </div>
 
-            {/* Manual Control Form */}
-            {showManualControl && (
-              <Card className="border-blue-200 bg-blue-50/50">
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center justify-between">
-                    <span>Add Control Manually</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowManualControl(false)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Control Name *</Label>
-                    <Input
-                      value={manualControl.name}
-                      onChange={(e) =>
-                        setManualControl({ ...manualControl, name: e.target.value })
-                      }
-                      placeholder="e.g., Multi-Factor Authentication"
-                    />
-                  </div>
+            {/* EVENT TEXT (Free text describing what's happening) */}
+            <div className="space-y-2">
+              <Label htmlFor="event_text">Event / Situation (Optional)</Label>
+              <Textarea
+                id="event_text"
+                value={formData.event_text || ''}
+                onChange={(e) => handleChange('event_text', e.target.value)}
+                placeholder="Describe the observable event or situation (e.g., 'An employee clicks on a phishing email link')"
+                rows={3}
+                disabled={loading}
+              />
+              <p className="text-xs text-gray-500">
+                Describe what is happening. This will be combined with root cause and impact to create a structured risk statement.
+              </p>
+            </div>
 
-                  <div className="space-y-2">
-                    <Label>Control Description *</Label>
-                    <Textarea
-                      value={manualControl.description}
-                      onChange={(e) =>
-                        setManualControl({ ...manualControl, description: e.target.value })
-                      }
-                      placeholder="Describe how this control works..."
-                      rows={3}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Control Type</Label>
-                      <Select
-                        value={manualControl.control_type}
-                        onValueChange={(value: 'preventive' | 'detective' | 'corrective') =>
-                          setManualControl({ ...manualControl, control_type: value })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="preventive">Preventive</SelectItem>
-                          <SelectItem value="detective">Detective</SelectItem>
-                          <SelectItem value="corrective">Corrective</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Target</Label>
-                      <Select
-                        value={manualControl.target}
-                        onValueChange={(value: 'Likelihood' | 'Impact') =>
-                          setManualControl({ ...manualControl, target: value })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Likelihood">Likelihood</SelectItem>
-                          <SelectItem value="Impact">Impact</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>DIME Scores (0-3)</Label>
-                    <div className="grid grid-cols-4 gap-3">
-                      <div>
-                        <Label className="text-xs">Design</Label>
-                        <Select
-                          value={manualControl.design_score.toString()}
-                          onValueChange={(value) =>
-                            setManualControl({ ...manualControl, design_score: parseInt(value) })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="0">0</SelectItem>
-                            <SelectItem value="1">1</SelectItem>
-                            <SelectItem value="2">2</SelectItem>
-                            <SelectItem value="3">3</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div>
-                        <Label className="text-xs">Implementation</Label>
-                        <Select
-                          value={manualControl.implementation_score.toString()}
-                          onValueChange={(value) =>
-                            setManualControl({
-                              ...manualControl,
-                              implementation_score: parseInt(value),
-                            })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="0">0</SelectItem>
-                            <SelectItem value="1">1</SelectItem>
-                            <SelectItem value="2">2</SelectItem>
-                            <SelectItem value="3">3</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div>
-                        <Label className="text-xs">Monitoring</Label>
-                        <Select
-                          value={manualControl.monitoring_score.toString()}
-                          onValueChange={(value) =>
-                            setManualControl({ ...manualControl, monitoring_score: parseInt(value) })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="0">0</SelectItem>
-                            <SelectItem value="1">1</SelectItem>
-                            <SelectItem value="2">2</SelectItem>
-                            <SelectItem value="3">3</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div>
-                        <Label className="text-xs">Evaluation</Label>
-                        <Select
-                          value={manualControl.evaluation_score.toString()}
-                          onValueChange={(value) =>
-                            setManualControl({ ...manualControl, evaluation_score: parseInt(value) })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="0">0</SelectItem>
-                            <SelectItem value="1">1</SelectItem>
-                            <SelectItem value="2">2</SelectItem>
-                            <SelectItem value="3">3</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2">
+            {/* ROOT CAUSE AND IMPACT DROPDOWNS (from global libraries) */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between mb-1">
+                  <Label htmlFor="root_cause">Root Cause (Optional)</Label>
+                  {/* Admin-only: Add custom root causes */}
+                  {isAdmin && (
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => setShowManualControl(false)}
+                      size="sm"
+                      onClick={() => setShowCustomRootCause(true)}
+                      className="h-7 text-xs"
+                      disabled={loading}
                     >
-                      Cancel
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add Custom
                     </Button>
-                    <Button type="button" onClick={handleAddManualControl}>
-                      Add Control
-                    </Button>
+                  )}
+                </div>
+                {loadingLibraries ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading root causes...
                   </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Display Added Manual Controls */}
-            {manualControls.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-700">
-                  Manual Controls ({manualControls.length})
-                </p>
-                {manualControls.map((control, index) => (
-                  <Card key={index} className="border-blue-200 bg-blue-50/30">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <CardTitle className="text-base">{control.name}</CardTitle>
-                          <div className="flex gap-2 mt-2">
-                            <span
-                              className={`text-xs px-2 py-1 rounded ${
-                                control.control_type === 'preventive'
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : control.control_type === 'detective'
-                                  ? 'bg-yellow-100 text-yellow-700'
-                                  : 'bg-green-100 text-green-700'
-                              }`}
-                            >
-                              {control.control_type.charAt(0).toUpperCase() +
-                                control.control_type.slice(1)}
-                            </span>
-                            <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
-                              {control.target}
-                            </span>
-                            <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-700">
-                              {calculateManualEffectiveness(control)}% Effective
-                            </span>
+                ) : (
+                  <Select
+                    value={selectedRootCauseId}
+                    onValueChange={setSelectedRootCauseId}
+                    disabled={loading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select root cause" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[400px]">
+                      <div className="p-2 border-b sticky top-0 bg-white">
+                        <Input
+                          placeholder="Search root causes..."
+                          value={rootCauseSearch}
+                          onChange={(e) => setRootCauseSearch(e.target.value)}
+                          className="h-8"
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto">
+                        {filteredRootCauses.length === 0 ? (
+                          <div className="p-4 text-center text-sm text-gray-500">
+                            No root causes found matching "{rootCauseSearch}"
                           </div>
-                        </div>
+                        ) : (
+                          filteredRootCauses.map((rc) => (
+                            <SelectItem key={rc.id} value={rc.id}>
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-xs text-gray-500">{rc.cause_code}</span>
+                                  <span className="font-medium">{rc.cause_name}</span>
+                                  {rc.source === 'global' && (
+                                    <span className="text-xs text-blue-600 bg-blue-50 px-1 rounded">Global</span>
+                                  )}
+                                </div>
+                                {rc.cause_description && (
+                                  <span className="text-xs text-gray-500">{rc.cause_description}</span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))
+                        )}
+                      </div>
+                    </SelectContent>
+                  </Select>
+                )}
+                {selectedRootCauseId && (
+                  <p className="text-xs text-gray-500">
+                    {rootCauses.find((rc) => rc.id === selectedRootCauseId)?.cause_description}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between mb-1">
+                  <Label htmlFor="impact">Impact (Optional)</Label>
+                  {/* Admin-only: Add custom impacts */}
+                  {isAdmin && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowCustomImpact(true)}
+                      className="h-7 text-xs"
+                      disabled={loading}
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add Custom
+                    </Button>
+                  )}
+                </div>
+                {loadingLibraries ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading impacts...
+                  </div>
+                ) : (
+                  <Select
+                    value={selectedImpactId}
+                    onValueChange={setSelectedImpactId}
+                    disabled={loading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select impact" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[400px]">
+                      <div className="p-2 border-b sticky top-0 bg-white">
+                        <Input
+                          placeholder="Search impacts..."
+                          value={impactSearch}
+                          onChange={(e) => setImpactSearch(e.target.value)}
+                          className="h-8"
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto">
+                        {filteredImpacts.length === 0 ? (
+                          <div className="p-4 text-center text-sm text-gray-500">
+                            No impacts found matching "{impactSearch}"
+                          </div>
+                        ) : (
+                          filteredImpacts.map((imp) => (
+                            <SelectItem key={imp.id} value={imp.id}>
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-xs text-gray-500">{imp.impact_code}</span>
+                                  <span className="font-medium">{imp.impact_name}</span>
+                                  {imp.source === 'global' && (
+                                    <span className="text-xs text-blue-600 bg-blue-50 px-1 rounded">Global</span>
+                                  )}
+                                </div>
+                                {imp.impact_description && (
+                                  <span className="text-xs text-gray-500">{imp.impact_description}</span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))
+                        )}
+                      </div>
+                    </SelectContent>
+                  </Select>
+                )}
+                {selectedImpactId && (
+                  <p className="text-xs text-gray-500">
+                    {impacts.find((imp) => imp.id === selectedImpactId)?.impact_description}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* TAXONOMY DROPDOWNS */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="category">Risk Category *</Label>
+                {loadingTaxonomy ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading categories...
+                  </div>
+                ) : (
+                  <Select
+                    value={selectedCategory}
+                    onValueChange={handleCategoryChange}
+                    disabled={loading}
+                    required
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.name}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {selectedCategory && (
+                  <p className="text-xs text-gray-500">
+                    {categories.find((c) => c.name === selectedCategory)?.description}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="subcategory">Risk Sub-Category *</Label>
+                <Select
+                  value={selectedSubcategory}
+                  onValueChange={handleSubcategoryChange}
+                  disabled={loading || !selectedCategory}
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={selectedCategory ? "Select sub-category" : "Select category first"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredSubcategories.map((subcat) => (
+                      <SelectItem key={subcat.id} value={subcat.name}>
+                        {subcat.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedSubcategory && (
+                  <p className="text-xs text-gray-500">
+                    {filteredSubcategories.find((s) => s.name === selectedSubcategory)?.description}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* RISK DESCRIPTION WITH AI REFINEMENT */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="risk_description">Risk Statement *</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefineWithAI}
+                  disabled={isRefining || loading || !formData.risk_description.trim() || !selectedCategory || !selectedSubcategory}
+                  className="text-purple-600 border-purple-600 hover:bg-purple-50"
+                >
+                  {isRefining ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Refining...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Fine-tune with AI
+                    </>
+                  )}
+                </Button>
+              </div>
+              <Textarea
+                id="risk_description"
+                value={formData.risk_description}
+                onChange={(e) => handleChange('risk_description', e.target.value)}
+                placeholder="Describe the risk in your own words... (AI can help refine this)"
+                rows={4}
+                required
+                disabled={loading}
+              />
+              <p className="text-xs text-gray-500">
+                Write your risk statement naturally, then optionally click "Fine-tune with AI" to improve it
+              </p>
+            </div>
+
+            {/* AI REFINEMENT SUGGESTION */}
+            {refinement && showRefinement && (
+              <Card className="border-green-200 bg-green-50">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      <CardTitle className="text-sm text-green-900">
+                        AI-Refined Statement
+                      </CardTitle>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!isEditingRefinement && (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRemoveManualControl(index)}
+                          onClick={handleStartEditingRefinement}
+                          title="Edit refined statement"
                         >
-                          <XCircle className="h-4 w-4 text-red-600" />
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRejectRefinement}
+                        title="Reject and use original"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* Display Mode */}
+                  {!isEditingRefinement && (
+                    <>
+                      <div className="bg-white p-3 rounded border border-green-200">
+                        <p className="text-sm text-gray-900">{refinement.refined_statement}</p>
+                      </div>
+                      <div className="text-xs text-green-800">
+                        <strong>What was improved:</strong>
+                        <ul className="list-disc list-inside mt-1 space-y-1">
+                          {refinement.improvements_made.map((improvement, idx) => (
+                            <li key={idx}>{improvement}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="text-xs text-green-700 italic">
+                        {refinement.explanation}
+                      </div>
+                      <Alert className="bg-green-100 border-green-300">
+                        <AlertDescription className="text-green-900 text-xs">
+                          This refined version will be saved when you submit the form. Click the edit icon to make changes, or X to use your original version.
+                        </AlertDescription>
+                      </Alert>
+                    </>
+                  )}
+
+                  {/* Edit Mode */}
+                  {isEditingRefinement && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="edited-refinement">Edit Refined Statement</Label>
+                        <Textarea
+                          id="edited-refinement"
+                          value={editedRefinedStatement}
+                          onChange={(e) => setEditedRefinedStatement(e.target.value)}
+                          rows={4}
+                          className="bg-white"
+                          placeholder="Edit the AI-refined statement..."
+                        />
+                        <p className="text-xs text-gray-600">
+                          Edit the statement as needed. Click "Revalidate" to check if the category/subcategory still fit.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          onClick={handleRevalidateEdit}
+                          disabled={isRevalidating || !editedRefinedStatement.trim()}
+                          size="sm"
+                          className="bg-purple-600 hover:bg-purple-700"
+                        >
+                          {isRevalidating ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Revalidating...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-4 w-4 mr-2" />
+                              Revalidate Category
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleCancelEditingRefinement}
+                          disabled={isRevalidating}
+                          size="sm"
+                        >
+                          Cancel
                         </Button>
                       </div>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <p className="text-sm text-gray-700 mb-3">{control.description}</p>
-                      <div className="grid grid-cols-4 gap-2 text-xs">
-                        <div>
-                          <span className="font-medium">D:</span> {control.design_score}
-                        </div>
-                        <div>
-                          <span className="font-medium">I:</span> {control.implementation_score}
-                        </div>
-                        <div>
-                          <span className="font-medium">M:</span> {control.monitoring_score}
-                        </div>
-                        <div>
-                          <span className="font-medium">E:</span> {control.evaluation_score}
+                    </>
+                  )}
+
+                  {/* Revalidation Results */}
+                  {revalidation && !isEditingRefinement && (
+                    <Alert className={revalidation.category_still_valid && revalidation.subcategory_still_valid ? "bg-blue-50 border-blue-300" : "bg-yellow-50 border-yellow-300"}>
+                      <div className="flex items-start gap-2">
+                        {revalidation.category_still_valid && revalidation.subcategory_still_valid ? (
+                          <CheckCircle className="h-4 w-4 text-blue-600 mt-0.5" />
+                        ) : (
+                          <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5" />
+                        )}
+                        <div className="flex-1">
+                          <AlertDescription className="text-xs space-y-2">
+                            <p className="font-semibold">
+                              {revalidation.category_still_valid && revalidation.subcategory_still_valid
+                                ? '✓ Category and Subcategory Validated'
+                                : '⚠ Category/Subcategory Changed'}
+                            </p>
+                            <p>{revalidation.explanation}</p>
+                            {(!revalidation.category_still_valid || !revalidation.subcategory_still_valid) && (
+                              <div className="mt-2 p-2 bg-white rounded border">
+                                <p className="font-semibold text-gray-900">Updated Classification:</p>
+                                <p className="text-gray-700">
+                                  Category: <strong>{revalidation.suggested_category}</strong>
+                                </p>
+                                <p className="text-gray-700">
+                                  Sub-category: <strong>{revalidation.suggested_subcategory}</strong>
+                                </p>
+                                <p className="text-gray-600 text-xs mt-1">
+                                  (The dropdowns above have been updated automatically)
+                                </p>
+                              </div>
+                            )}
+                          </AlertDescription>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
             )}
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="division">Division *</Label>
+                <Select
+                  value={formData.division}
+                  onValueChange={(value) => handleChange('division', value)}
+                  disabled={loading || !orgConfig?.divisions?.length}
+                >
+                  <SelectTrigger id="division">
+                    <SelectValue placeholder={orgConfig?.divisions?.length ? "Select division" : "No divisions configured"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {orgConfig?.divisions?.filter(d => d && d.trim()).map((division) => (
+                      <SelectItem key={division} value={division}>
+                        {division}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {(!orgConfig?.divisions || orgConfig.divisions.length === 0) && (
+                  <p className="text-sm text-amber-600">No divisions configured. Please configure in Admin panel.</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="department">Department *</Label>
+                <Select
+                  value={formData.department}
+                  onValueChange={(value) => handleChange('department', value)}
+                  disabled={loading || !orgConfig?.departments?.length}
+                >
+                  <SelectTrigger id="department">
+                    <SelectValue placeholder={orgConfig?.departments?.length ? "Select department" : "No departments configured"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {orgConfig?.departments?.filter(d => d && d.trim()).map((department) => (
+                      <SelectItem key={department} value={department}>
+                        {department}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {(!orgConfig?.departments || orgConfig.departments.length === 0) && (
+                  <p className="text-sm text-amber-600">No departments configured. Please configure in Admin panel.</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>&nbsp;</Label>
+                <div className="flex items-center space-x-2 h-10">
+                  <input
+                    type="checkbox"
+                    id="is_priority"
+                    checked={formData.is_priority}
+                    onChange={(e) => handleChange('is_priority', e.target.checked)}
+                    disabled={loading}
+                    className="rounded border-gray-300"
+                  />
+                  <Label htmlFor="is_priority" className="text-sm font-normal cursor-pointer">
+                    Priority Risk
+                  </Label>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="likelihood_inherent">
+                  Inherent Likelihood *
+                </Label>
+                <Select
+                  value={formData.likelihood_inherent.toString()}
+                  onValueChange={(value) =>
+                    handleChange('likelihood_inherent', parseInt(value))
+                  }
+                  disabled={loading}
+                >
+                  <SelectTrigger id="likelihood_inherent">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getLikelihoodOptions(orgConfig).map((option) => (
+                      <SelectItem key={option.value} value={option.value.toString()}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="impact_inherent">
+                  Inherent Impact *
+                </Label>
+                <Select
+                  value={formData.impact_inherent.toString()}
+                  onValueChange={(value) =>
+                    handleChange('impact_inherent', parseInt(value))
+                  }
+                  disabled={loading}
+                >
+                  <SelectTrigger id="impact_inherent">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getImpactOptions(orgConfig).map((option) => (
+                      <SelectItem key={option.value} value={option.value.toString()}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* === CONTROLS SECTION === */}
+            <div className="space-y-4 pt-6 border-t mt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-blue-600" />
+                    Controls (Optional)
+                  </h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Add controls to mitigate this risk
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  {!showManualControl && !showAISuggestions && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                      onClick={() => setShowManualControl(true)}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Control
+                    </Button>
+                  )}
+
+                  {!showAISuggestions && !showManualControl && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                      onClick={handleGetAISuggestions}
+                      disabled={loadingAISuggestions}
+                    >
+                      {loadingAISuggestions ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Getting Suggestions...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Get AI Suggestions
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Manual Control Form */}
+              {showManualControl && (
+                <Card className="border-blue-200 bg-blue-50/50">
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center justify-between">
+                      <span>Add Control Manually</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowManualControl(false)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Control Name *</Label>
+                      <Input
+                        value={manualControl.name}
+                        onChange={(e) =>
+                          setManualControl({ ...manualControl, name: e.target.value })
+                        }
+                        placeholder="e.g., Multi-Factor Authentication"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Control Description *</Label>
+                      <Textarea
+                        value={manualControl.description}
+                        onChange={(e) =>
+                          setManualControl({ ...manualControl, description: e.target.value })
+                        }
+                        placeholder="Describe how this control works..."
+                        rows={3}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Control Type</Label>
+                        <Select
+                          value={manualControl.control_type}
+                          onValueChange={(value: 'preventive' | 'detective' | 'corrective') =>
+                            setManualControl({ ...manualControl, control_type: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="preventive">Preventive</SelectItem>
+                            <SelectItem value="detective">Detective</SelectItem>
+                            <SelectItem value="corrective">Corrective</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Target</Label>
+                        <Select
+                          value={manualControl.target}
+                          onValueChange={(value: 'Likelihood' | 'Impact') =>
+                            setManualControl({ ...manualControl, target: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Likelihood">Likelihood</SelectItem>
+                            <SelectItem value="Impact">Impact</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>DIME Scores (0-3)</Label>
+                      <div className="grid grid-cols-4 gap-3">
+                        <div>
+                          <Label className="text-xs">Design</Label>
+                          <Select
+                            value={manualControl.design_score.toString()}
+                            onValueChange={(value) =>
+                              setManualControl({ ...manualControl, design_score: parseInt(value) })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="0">0</SelectItem>
+                              <SelectItem value="1">1</SelectItem>
+                              <SelectItem value="2">2</SelectItem>
+                              <SelectItem value="3">3</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <Label className="text-xs">Implementation</Label>
+                          <Select
+                            value={manualControl.implementation_score.toString()}
+                            onValueChange={(value) =>
+                              setManualControl({
+                                ...manualControl,
+                                implementation_score: parseInt(value),
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="0">0</SelectItem>
+                              <SelectItem value="1">1</SelectItem>
+                              <SelectItem value="2">2</SelectItem>
+                              <SelectItem value="3">3</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <Label className="text-xs">Monitoring</Label>
+                          <Select
+                            value={manualControl.monitoring_score.toString()}
+                            onValueChange={(value) =>
+                              setManualControl({ ...manualControl, monitoring_score: parseInt(value) })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="0">0</SelectItem>
+                              <SelectItem value="1">1</SelectItem>
+                              <SelectItem value="2">2</SelectItem>
+                              <SelectItem value="3">3</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <Label className="text-xs">Evaluation</Label>
+                          <Select
+                            value={manualControl.evaluation_score.toString()}
+                            onValueChange={(value) =>
+                              setManualControl({ ...manualControl, evaluation_score: parseInt(value) })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="0">0</SelectItem>
+                              <SelectItem value="1">1</SelectItem>
+                              <SelectItem value="2">2</SelectItem>
+                              <SelectItem value="3">3</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowManualControl(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="button" onClick={handleAddManualControl}>
+                        Add Control
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Display Added Manual Controls */}
+              {manualControls.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700">
+                    Manual Controls ({manualControls.length})
+                  </p>
+                  {manualControls.map((control, index) => (
+                    <Card key={index} className="border-blue-200 bg-blue-50/30">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <CardTitle className="text-base">{control.name}</CardTitle>
+                            <div className="flex gap-2 mt-2">
+                              <span
+                                className={`text-xs px-2 py-1 rounded ${control.control_type === 'preventive'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : control.control_type === 'detective'
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : 'bg-green-100 text-green-700'
+                                  }`}
+                              >
+                                {control.control_type.charAt(0).toUpperCase() +
+                                  control.control_type.slice(1)}
+                              </span>
+                              <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
+                                {control.target}
+                              </span>
+                              <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-700">
+                                {calculateManualEffectiveness(control)}% Effective
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveManualControl(index)}
+                          >
+                            <XCircle className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        <p className="text-sm text-gray-700 mb-3">{control.description}</p>
+                        <div className="grid grid-cols-4 gap-2 text-xs">
+                          <div>
+                            <span className="font-medium">D:</span> {control.design_score}
+                          </div>
+                          <div>
+                            <span className="font-medium">I:</span> {control.implementation_score}
+                          </div>
+                          <div>
+                            <span className="font-medium">M:</span> {control.monitoring_score}
+                          </div>
+                          <div>
+                            <span className="font-medium">E:</span> {control.evaluation_score}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
 
               {/* AI Suggestions Error */}
               {aiSuggestionsError && (
@@ -2104,22 +2117,20 @@ export default function RiskForm({
                   {aiSuggestions.map((suggestion, index) => (
                     <Card
                       key={index}
-                      className={`cursor-pointer transition-all ${
-                        selectedSuggestions.has(index)
-                          ? 'border-green-500 bg-green-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                      className={`cursor-pointer transition-all ${selectedSuggestions.has(index)
+                        ? 'border-green-500 bg-green-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                        }`}
                       onClick={() => toggleSuggestion(index)}
                     >
                       <CardHeader className="pb-3">
                         <div className="flex items-start justify-between">
                           <div className="flex items-start gap-3 flex-1">
                             <div
-                              className={`mt-1 flex items-center justify-center w-5 h-5 rounded border-2 transition-colors ${
-                                selectedSuggestions.has(index)
-                                  ? 'bg-green-600 border-green-600'
-                                  : 'border-gray-300'
-                              }`}
+                              className={`mt-1 flex items-center justify-center w-5 h-5 rounded border-2 transition-colors ${selectedSuggestions.has(index)
+                                ? 'bg-green-600 border-green-600'
+                                : 'border-gray-300'
+                                }`}
                             >
                               {selectedSuggestions.has(index) && (
                                 <Check className="h-3 w-3 text-white" />
@@ -2131,13 +2142,12 @@ export default function RiskForm({
                               </CardTitle>
                               <div className="flex gap-2 mt-2">
                                 <span
-                                  className={`text-xs px-2 py-1 rounded ${
-                                    suggestion.control_type === 'preventive'
-                                      ? 'bg-blue-100 text-blue-700'
-                                      : suggestion.control_type === 'detective'
+                                  className={`text-xs px-2 py-1 rounded ${suggestion.control_type === 'preventive'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : suggestion.control_type === 'detective'
                                       ? 'bg-yellow-100 text-yellow-700'
                                       : 'bg-green-100 text-green-700'
-                                  }`}
+                                    }`}
                                 >
                                   {suggestion.control_type.charAt(0).toUpperCase() +
                                     suggestion.control_type.slice(1)}
@@ -2255,196 +2265,233 @@ export default function RiskForm({
                   )}
                 </div>
               )}
-          </div>
+            </div>
 
-          {/* Residual Risk Calculation - ALWAYS VISIBLE */}
-          <Card className="border-indigo-200 bg-indigo-50 mt-6">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-indigo-600" />
-                Residual Risk (Post-Controls)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {(() => {
-                const residual = calculateResidualRisk();
-                const inherent = formData.likelihood_inherent * formData.impact_inherent;
-                const totalControls = existingControls.length + manualControls.length + selectedSuggestions.size;
-                const reduction = inherent > 0
-                  ? Math.round(((inherent - residual.residual_score) / inherent) * 100)
-                  : 0;
-
-                return (
-                  <div className="space-y-4">
-                    {/* Warning when no controls exist */}
-                    {totalControls === 0 && (
-                      <Alert className="border-amber-300 bg-amber-50">
-                        <AlertCircle className="h-4 w-4 text-amber-600" />
-                        <AlertDescription className="text-amber-800">
-                          <strong>No controls are currently linked to this risk.</strong>
-                          <br />
-                          Residual risk equals inherent risk until controls are applied.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="bg-white p-4 rounded-lg border border-indigo-200">
-                        <p className="text-xs text-gray-600 mb-1">Inherent Risk</p>
-                        <p className="text-2xl font-bold text-gray-900">
-                          {formData.likelihood_inherent} × {formData.impact_inherent} = {inherent}
-                        </p>
-                      </div>
-                      <div className="bg-white p-4 rounded-lg border border-indigo-200">
-                        <p className="text-xs text-gray-600 mb-1">Residual Risk</p>
-                        <p className="text-2xl font-bold text-indigo-600">
-                          {residual.residual_likelihood} × {residual.residual_impact} ={' '}
-                          {residual.residual_score}
-                        </p>
-                      </div>
-                      <div className={`bg-white p-4 rounded-lg border ${totalControls === 0 ? 'border-gray-200' : 'border-green-200'}`}>
-                        <p className="text-xs text-gray-600 mb-1">Risk Reduction</p>
-                        <p className={`text-2xl font-bold ${totalControls === 0 ? 'text-gray-400' : 'text-green-600'}`}>
-                          {reduction}%
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="bg-white p-3 rounded-lg border border-indigo-200">
-                      <p className="text-xs text-gray-700 mb-2">
-                        <strong>DIME Framework Calculation:</strong>
-                      </p>
-                      {totalControls > 0 ? (
-                        <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
-                          <li>
-                            Control Effectiveness = (Design + Implementation + Monitoring + Evaluation) /
-                            12
-                          </li>
-                          <li>
-                            Using <strong>maximum</strong> effectiveness from controls targeting each
-                            dimension
-                          </li>
-                          <li>
-                            Residual = MAX(1, Inherent - ROUND((Inherent - 1) × Max Effectiveness))
-                          </li>
-                          <li>
-                            Total Controls: {totalControls} (
-                            {existingControls.length} existing + {manualControls.length} manual + {selectedSuggestions.size} AI)
-                          </li>
-                        </ul>
-                      ) : (
-                        <p className="text-xs text-gray-600">
-                          No controls applied. DIME effectiveness = 0. Residual risk unchanged from inherent risk.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
-
-          {/* Existing Controls Section - Only show when editing */}
-          {editingRisk && (
-            <Card className="border-blue-200 bg-blue-50 mt-6">
+            {/* Residual Risk Calculation - ALWAYS VISIBLE */}
+            <Card className="border-indigo-200 bg-indigo-50 mt-6">
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-blue-600" />
-                  Existing Controls ({existingControls.length})
+                  <AlertTriangle className="h-5 w-5 text-indigo-600" />
+                  Residual Risk (Post-Controls)
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {loadingControls ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-                    <span className="ml-2 text-sm text-gray-600">Loading controls...</span>
-                  </div>
-                ) : existingControls.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-gray-600">No controls have been applied to this risk yet.</p>
-                    <p className="text-xs text-gray-500 mt-2">Go to the Controls tab to add controls for this risk.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {existingControls.map((control) => {
-                      // Use single source of truth from src/lib/controls.ts
-                      const effectivenessFraction = calculateControlEffectiveness(
-                        control.design_score,
-                        control.implementation_score,
-                        control.monitoring_score,
-                        control.evaluation_score
-                      );
-                      const effectiveness = Math.round(effectivenessFraction * 100);
+                {(() => {
+                  const residual = calculateResidualRisk();
+                  const inherent = formData.likelihood_inherent * formData.impact_inherent;
+                  const totalControls = existingControls.length + manualControls.length + selectedSuggestions.size;
+                  const reduction = inherent > 0
+                    ? Math.round(((inherent - residual.residual_score) / inherent) * 100)
+                    : 0;
 
-                      // Calculate average for display purposes only (not used in residual calc)
-                      const d = control.design_score ?? 0;
-                      const i = control.implementation_score ?? 0;
-                      const m = control.monitoring_score ?? 0;
-                      const e = control.evaluation_score ?? 0;
-                      const avgDIME = ((d + i + m + e) / 4).toFixed(2);
+                  return (
+                    <div className="space-y-4">
+                      {/* Warning when no controls exist */}
+                      {totalControls === 0 && (
+                        <Alert className="border-amber-300 bg-amber-50">
+                          <AlertCircle className="h-4 w-4 text-amber-600" />
+                          <AlertDescription className="text-amber-800">
+                            <strong>No controls are currently linked to this risk.</strong>
+                            <br />
+                            Residual risk equals inherent risk until controls are applied.
+                          </AlertDescription>
+                        </Alert>
+                      )}
 
-                      const isEditing = editingControlId === control.id;
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="bg-white p-4 rounded-lg border border-indigo-200">
+                          <p className="text-xs text-gray-600 mb-1">Inherent Risk</p>
+                          <p className="text-2xl font-bold text-gray-900">
+                            {formData.likelihood_inherent} × {formData.impact_inherent} = {inherent}
+                          </p>
+                        </div>
+                        <div className="bg-white p-4 rounded-lg border border-indigo-200">
+                          <p className="text-xs text-gray-600 mb-1">Residual Risk</p>
+                          <p className="text-2xl font-bold text-indigo-600">
+                            {residual.residual_likelihood} × {residual.residual_impact} ={' '}
+                            {residual.residual_score}
+                          </p>
+                        </div>
+                        <div className={`bg-white p-4 rounded-lg border ${totalControls === 0 ? 'border-gray-200' : 'border-green-200'}`}>
+                          <p className="text-xs text-gray-600 mb-1">Risk Reduction</p>
+                          <p className={`text-2xl font-bold ${totalControls === 0 ? 'text-gray-400' : 'text-green-600'}`}>
+                            {reduction}%
+                          </p>
+                        </div>
+                      </div>
 
-                      return (
-                        <Card key={control.id} className="bg-white border border-blue-200">
-                          <CardContent className="pt-4">
-                            {isEditing && editingControlData ? (
-                              <div className="space-y-4">
-                                <div className="flex items-center justify-between mb-3">
-                                  <span className="font-mono text-xs font-semibold text-gray-600">
-                                    {control.control_code}
-                                  </span>
-                                  <div className="flex gap-2">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      onClick={() => handleSaveControl(control.id)}
-                                      disabled={updatingControl}
-                                    >
-                                      {updatingControl ? (
-                                        <>
-                                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                          Saving...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Check className="h-3 w-3 mr-1" />
-                                          Save
-                                        </>
-                                      )}
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={handleCancelEditControl}
-                                      disabled={updatingControl}
-                                    >
-                                      <X className="h-3 w-3 mr-1" />
-                                      Cancel
-                                    </Button>
+                      <div className="bg-white p-3 rounded-lg border border-indigo-200">
+                        <p className="text-xs text-gray-700 mb-2">
+                          <strong>DIME Framework Calculation:</strong>
+                        </p>
+                        {totalControls > 0 ? (
+                          <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
+                            <li>
+                              Control Effectiveness = (Design + Implementation + Monitoring + Evaluation) /
+                              12
+                            </li>
+                            <li>
+                              Using <strong>maximum</strong> effectiveness from controls targeting each
+                              dimension
+                            </li>
+                            <li>
+                              Residual = MAX(1, Inherent - ROUND((Inherent - 1) × Max Effectiveness))
+                            </li>
+                            <li>
+                              Total Controls: {totalControls} (
+                              {existingControls.length} existing + {manualControls.length} manual + {selectedSuggestions.size} AI)
+                            </li>
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-gray-600">
+                            No controls applied. DIME effectiveness = 0. Residual risk unchanged from inherent risk.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+
+            {/* Existing Controls Section - Only show when editing */}
+            {editingRisk && (
+              <Card className="border-blue-200 bg-blue-50 mt-6">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-blue-600" />
+                    Existing Controls ({existingControls.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {loadingControls ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                      <span className="ml-2 text-sm text-gray-600">Loading controls...</span>
+                    </div>
+                  ) : existingControls.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-gray-600">No controls have been applied to this risk yet.</p>
+                      <p className="text-xs text-gray-500 mt-2">Go to the Controls tab to add controls for this risk.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {existingControls.map((control) => {
+                        // Use single source of truth from src/lib/controls.ts
+                        const effectivenessFraction = calculateControlEffectiveness(
+                          control.design_score,
+                          control.implementation_score,
+                          control.monitoring_score,
+                          control.evaluation_score
+                        );
+                        const effectiveness = Math.round(effectivenessFraction * 100);
+
+                        // Calculate average for display purposes only (not used in residual calc)
+                        const d = control.design_score ?? 0;
+                        const i = control.implementation_score ?? 0;
+                        const m = control.monitoring_score ?? 0;
+                        const e = control.evaluation_score ?? 0;
+                        const avgDIME = ((d + i + m + e) / 4).toFixed(2);
+
+                        const isEditing = editingControlId === control.id;
+
+                        return (
+                          <Card key={control.id} className="bg-white border border-blue-200">
+                            <CardContent className="pt-4">
+                              {isEditing && editingControlData ? (
+                                <div className="space-y-4">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <span className="font-mono text-xs font-semibold text-gray-600">
+                                      {control.control_code}
+                                    </span>
+                                    <div className="flex gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={() => handleSaveControl(control.id)}
+                                        disabled={updatingControl}
+                                      >
+                                        {updatingControl ? (
+                                          <>
+                                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                            Saving...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Check className="h-3 w-3 mr-1" />
+                                            Save
+                                          </>
+                                        )}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={handleCancelEditControl}
+                                        disabled={updatingControl}
+                                      >
+                                        <X className="h-3 w-3 mr-1" />
+                                        Cancel
+                                      </Button>
+                                    </div>
                                   </div>
-                                </div>
 
-                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <Label className="text-xs">Control Name</Label>
+                                      <Input
+                                        value={editingControlData.name || ''}
+                                        onChange={(e) =>
+                                          setEditingControlData({ ...editingControlData, name: e.target.value })
+                                        }
+                                        className="h-8 text-sm"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label className="text-xs">Control Type</Label>
+                                      <Select
+                                        value={editingControlData.control_type || 'preventive'}
+                                        onValueChange={(value) =>
+                                          setEditingControlData({
+                                            ...editingControlData,
+                                            control_type: value as 'preventive' | 'detective' | 'corrective',
+                                          })
+                                        }
+                                      >
+                                        <SelectTrigger className="h-8 text-sm">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="preventive">Preventive</SelectItem>
+                                          <SelectItem value="detective">Detective</SelectItem>
+                                          <SelectItem value="corrective">Corrective</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </div>
+
                                   <div>
-                                    <Label className="text-xs">Control Name</Label>
-                                    <Input
-                                      value={editingControlData.name || ''}
+                                    <Label className="text-xs">Description</Label>
+                                    <Textarea
+                                      value={editingControlData.description || ''}
                                       onChange={(e) =>
-                                        setEditingControlData({ ...editingControlData, name: e.target.value })
+                                        setEditingControlData({
+                                          ...editingControlData,
+                                          description: e.target.value,
+                                        })
                                       }
-                                      className="h-8 text-sm"
+                                      className="text-sm h-16"
                                     />
                                   </div>
+
                                   <div>
-                                    <Label className="text-xs">Control Type</Label>
+                                    <Label className="text-xs">Target</Label>
                                     <Select
-                                      value={editingControlData.control_type || 'preventive'}
+                                      value={editingControlData.target || 'Likelihood'}
                                       onValueChange={(value) =>
                                         setEditingControlData({
                                           ...editingControlData,
-                                          control_type: value as 'preventive' | 'detective' | 'corrective',
+                                          target: value as 'Likelihood' | 'Impact',
                                         })
                                       }
                                     >
@@ -2452,650 +2499,605 @@ export default function RiskForm({
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="preventive">Preventive</SelectItem>
-                                        <SelectItem value="detective">Detective</SelectItem>
-                                        <SelectItem value="corrective">Corrective</SelectItem>
+                                        <SelectItem value="Likelihood">Likelihood</SelectItem>
+                                        <SelectItem value="Impact">Impact</SelectItem>
                                       </SelectContent>
                                     </Select>
                                   </div>
-                                </div>
 
-                                <div>
-                                  <Label className="text-xs">Description</Label>
-                                  <Textarea
-                                    value={editingControlData.description || ''}
-                                    onChange={(e) =>
-                                      setEditingControlData({
-                                        ...editingControlData,
-                                        description: e.target.value,
-                                      })
-                                    }
-                                    className="text-sm h-16"
-                                  />
-                                </div>
-
-                                <div>
-                                  <Label className="text-xs">Target</Label>
-                                  <Select
-                                    value={editingControlData.target || 'Likelihood'}
-                                    onValueChange={(value) =>
-                                      setEditingControlData({
-                                        ...editingControlData,
-                                        target: value as 'Likelihood' | 'Impact',
-                                      })
-                                    }
-                                  >
-                                    <SelectTrigger className="h-8 text-sm">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="Likelihood">Likelihood</SelectItem>
-                                      <SelectItem value="Impact">Impact</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-
-                                <div className="border-t pt-3">
-                                  <p className="text-xs font-semibold text-gray-700 mb-3">DIME Scores (0-3)</p>
-                                  <div className="grid grid-cols-4 gap-3">
-                                    <div>
-                                      <Label className="text-xs">Design</Label>
-                                      <Select
-                                        value={String(editingControlData.design_score ?? 0)}
-                                        onValueChange={(value) =>
-                                          setEditingControlData({
-                                            ...editingControlData,
-                                            design_score: parseInt(value) as 0 | 1 | 2 | 3,
-                                          })
-                                        }
-                                      >
-                                        <SelectTrigger className="h-8">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="0">0 - Not designed</SelectItem>
-                                          <SelectItem value="1">1 - Poorly designed</SelectItem>
-                                          <SelectItem value="2">2 - Partially designed</SelectItem>
-                                          <SelectItem value="3">3 - Well designed</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    <div>
-                                      <Label className="text-xs">Implementation</Label>
-                                      <Select
-                                        value={String(editingControlData.implementation_score ?? 0)}
-                                        onValueChange={(value) =>
-                                          setEditingControlData({
-                                            ...editingControlData,
-                                            implementation_score: parseInt(value) as 0 | 1 | 2 | 3,
-                                          })
-                                        }
-                                      >
-                                        <SelectTrigger className="h-8">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="0">0 - Not applied</SelectItem>
-                                          <SelectItem value="1">1 - Sometimes applied</SelectItem>
-                                          <SelectItem value="2">2 - Generally operational</SelectItem>
-                                          <SelectItem value="3">3 - Always applied</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    <div>
-                                      <Label className="text-xs">Monitoring</Label>
-                                      <Select
-                                        value={String(editingControlData.monitoring_score ?? 0)}
-                                        onValueChange={(value) =>
-                                          setEditingControlData({
-                                            ...editingControlData,
-                                            monitoring_score: parseInt(value) as 0 | 1 | 2 | 3,
-                                          })
-                                        }
-                                      >
-                                        <SelectTrigger className="h-8">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="0">0 - Not monitored</SelectItem>
-                                          <SelectItem value="1">1 - Ad-hoc monitoring</SelectItem>
-                                          <SelectItem value="2">2 - Usually monitored</SelectItem>
-                                          <SelectItem value="3">3 - Always monitored</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    <div>
-                                      <Label className="text-xs">Evaluation</Label>
-                                      <Select
-                                        value={String(editingControlData.evaluation_score ?? 0)}
-                                        onValueChange={(value) =>
-                                          setEditingControlData({
-                                            ...editingControlData,
-                                            evaluation_score: parseInt(value) as 0 | 1 | 2 | 3,
-                                          })
-                                        }
-                                      >
-                                        <SelectTrigger className="h-8">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="0">0 - Never evaluated</SelectItem>
-                                          <SelectItem value="1">1 - Infrequently evaluated</SelectItem>
-                                          <SelectItem value="2">2 - Occasionally evaluated</SelectItem>
-                                          <SelectItem value="3">3 - Regularly evaluated</SelectItem>
-                                        </SelectContent>
-                                      </Select>
+                                  <div className="border-t pt-3">
+                                    <p className="text-xs font-semibold text-gray-700 mb-3">DIME Scores (0-3)</p>
+                                    <div className="grid grid-cols-4 gap-3">
+                                      <div>
+                                        <Label className="text-xs">Design</Label>
+                                        <Select
+                                          value={String(editingControlData.design_score ?? 0)}
+                                          onValueChange={(value) =>
+                                            setEditingControlData({
+                                              ...editingControlData,
+                                              design_score: parseInt(value) as 0 | 1 | 2 | 3,
+                                            })
+                                          }
+                                        >
+                                          <SelectTrigger className="h-8">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="0">0 - Not designed</SelectItem>
+                                            <SelectItem value="1">1 - Poorly designed</SelectItem>
+                                            <SelectItem value="2">2 - Partially designed</SelectItem>
+                                            <SelectItem value="3">3 - Well designed</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div>
+                                        <Label className="text-xs">Implementation</Label>
+                                        <Select
+                                          value={String(editingControlData.implementation_score ?? 0)}
+                                          onValueChange={(value) =>
+                                            setEditingControlData({
+                                              ...editingControlData,
+                                              implementation_score: parseInt(value) as 0 | 1 | 2 | 3,
+                                            })
+                                          }
+                                        >
+                                          <SelectTrigger className="h-8">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="0">0 - Not applied</SelectItem>
+                                            <SelectItem value="1">1 - Sometimes applied</SelectItem>
+                                            <SelectItem value="2">2 - Generally operational</SelectItem>
+                                            <SelectItem value="3">3 - Always applied</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div>
+                                        <Label className="text-xs">Monitoring</Label>
+                                        <Select
+                                          value={String(editingControlData.monitoring_score ?? 0)}
+                                          onValueChange={(value) =>
+                                            setEditingControlData({
+                                              ...editingControlData,
+                                              monitoring_score: parseInt(value) as 0 | 1 | 2 | 3,
+                                            })
+                                          }
+                                        >
+                                          <SelectTrigger className="h-8">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="0">0 - Not monitored</SelectItem>
+                                            <SelectItem value="1">1 - Ad-hoc monitoring</SelectItem>
+                                            <SelectItem value="2">2 - Usually monitored</SelectItem>
+                                            <SelectItem value="3">3 - Always monitored</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div>
+                                        <Label className="text-xs">Evaluation</Label>
+                                        <Select
+                                          value={String(editingControlData.evaluation_score ?? 0)}
+                                          onValueChange={(value) =>
+                                            setEditingControlData({
+                                              ...editingControlData,
+                                              evaluation_score: parseInt(value) as 0 | 1 | 2 | 3,
+                                            })
+                                          }
+                                        >
+                                          <SelectTrigger className="h-8">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="0">0 - Never evaluated</SelectItem>
+                                            <SelectItem value="1">1 - Infrequently evaluated</SelectItem>
+                                            <SelectItem value="2">2 - Occasionally evaluated</SelectItem>
+                                            <SelectItem value="3">3 - Regularly evaluated</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
-                            ) : (
-                              <div className="space-y-3">
-                                {/* Control Header */}
-                                <div className="flex items-start justify-between">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-mono text-xs font-semibold text-gray-600">
-                                        {control.control_code}
-                                      </span>
-                                      <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700 capitalize">
-                                        {control.control_type || 'N/A'}
-                                      </span>
-                                      <span className={`text-xs px-2 py-1 rounded-full ${
-                                        control.target === 'Likelihood'
+                              ) : (
+                                <div className="space-y-3">
+                                  {/* Control Header */}
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-mono text-xs font-semibold text-gray-600">
+                                          {control.control_code}
+                                        </span>
+                                        <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700 capitalize">
+                                          {control.control_type || 'N/A'}
+                                        </span>
+                                        <span className={`text-xs px-2 py-1 rounded-full ${control.target === 'Likelihood'
                                           ? 'bg-purple-100 text-purple-700'
                                           : 'bg-orange-100 text-orange-700'
-                                      }`}>
-                                        ↓ {control.target}
+                                          }`}>
+                                          ↓ {control.target}
+                                        </span>
+                                      </div>
+                                      <h4 className="font-semibold text-sm text-gray-900 mt-1">{control.name}</h4>
+                                      {control.description && (
+                                        <p className="text-xs text-gray-600 mt-1">{control.description}</p>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-col items-end gap-2">
+                                      <div className="flex gap-2">
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => handleStartEditControl(control)}
+                                        >
+                                          <Edit className="h-3 w-3 mr-1" />
+                                          Edit
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                          onClick={() => handleDeleteControl(control.id, control.name)}
+                                          disabled={deletingControlId === control.id}
+                                        >
+                                          {deletingControlId === control.id ? (
+                                            <>
+                                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                              Deleting...
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Trash2 className="h-3 w-3 mr-1" />
+                                              Delete
+                                            </>
+                                          )}
+                                        </Button>
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="text-xs text-gray-500 mb-1">Effectiveness</p>
+                                        <p className="text-lg font-bold text-blue-600">{effectiveness}%</p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* DIME Scores Grid */}
+                                  <div className="grid grid-cols-4 gap-2 pt-2 border-t border-gray-200">
+                                    <div className="text-center">
+                                      <p className="text-xs text-gray-500 mb-1">Design</p>
+                                      <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${(control.design_score || 0) >= 2
+                                        ? 'bg-green-100 text-green-700'
+                                        : (control.design_score || 0) === 1
+                                          ? 'bg-yellow-100 text-yellow-700'
+                                          : 'bg-red-100 text-red-700'
+                                        }`}>
+                                        {control.design_score ?? '-'}
+                                      </div>
+                                    </div>
+                                    <div className="text-center">
+                                      <p className="text-xs text-gray-500 mb-1">Implement</p>
+                                      <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${(control.implementation_score || 0) >= 2
+                                        ? 'bg-green-100 text-green-700'
+                                        : (control.implementation_score || 0) === 1
+                                          ? 'bg-yellow-100 text-yellow-700'
+                                          : 'bg-red-100 text-red-700'
+                                        }`}>
+                                        {control.implementation_score ?? '-'}
+                                      </div>
+                                    </div>
+                                    <div className="text-center">
+                                      <p className="text-xs text-gray-500 mb-1">Monitor</p>
+                                      <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${(control.monitoring_score || 0) >= 2
+                                        ? 'bg-green-100 text-green-700'
+                                        : (control.monitoring_score || 0) === 1
+                                          ? 'bg-yellow-100 text-yellow-700'
+                                          : 'bg-red-100 text-red-700'
+                                        }`}>
+                                        {control.monitoring_score ?? '-'}
+                                      </div>
+                                    </div>
+                                    <div className="text-center">
+                                      <p className="text-xs text-gray-500 mb-1">Evaluate</p>
+                                      <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${(control.evaluation_score || 0) >= 2
+                                        ? 'bg-green-100 text-green-700'
+                                        : (control.evaluation_score || 0) === 1
+                                          ? 'bg-yellow-100 text-yellow-700'
+                                          : 'bg-red-100 text-red-700'
+                                        }`}>
+                                        {control.evaluation_score ?? '-'}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* DIME Legend */}
+                                  <div className="pt-2 border-t border-gray-200">
+                                    <p className="text-xs text-gray-500">
+                                      DIME Average: <span className="font-semibold text-gray-700">{avgDIME}</span> / 3.0
+                                      <span className="ml-2 text-gray-400">•</span>
+                                      <span className="ml-2">
+                                        Scale: 0-3 (dimension-specific criteria)
+                                      </span>
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Intelligence Alerts Section - Only show when editing */}
+            {editingRisk && (
+              <Card className="border-purple-200 bg-purple-50 mt-6">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <AlertCircle className="h-5 w-5 text-purple-600" />
+                    Intelligence Alerts ({intelligenceAlerts.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {loadingAlerts ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
+                      <span className="ml-2 text-sm text-gray-600">Loading intelligence alerts...</span>
+                    </div>
+                  ) : intelligenceAlerts.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-gray-600">No intelligence alerts for this risk yet.</p>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Intelligence alerts appear when external events are detected that may affect this risk.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {intelligenceAlerts.map((alert) => {
+                        const event = alert.external_events;
+                        const isExpanded = expandedAlertId === alert.id;
+
+                        // Status badge styling
+                        const statusColors = {
+                          pending: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+                          accepted: 'bg-green-100 text-green-700 border-green-300',
+                          rejected: 'bg-red-100 text-red-700 border-red-300',
+                          expired: 'bg-gray-100 text-gray-700 border-gray-300',
+                        };
+
+                        return (
+                          <Card key={alert.id} className="bg-white border border-purple-200">
+                            <CardContent className="pt-4">
+                              {/* Header row */}
+                              <div className="flex items-start justify-between mb-3">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span
+                                      className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${statusColors[alert.status]
+                                        }`}
+                                    >
+                                      {alert.status.toUpperCase()}
+                                    </span>
+                                    {alert.applied_to_risk && (
+                                      <span className="px-2 py-0.5 text-xs font-semibold rounded-full border bg-blue-100 text-blue-700 border-blue-300 flex items-center gap-1">
+                                        <CheckCircle className="h-3 w-3" />
+                                        Applied
+                                      </span>
+                                    )}
+                                    <span className="text-xs text-gray-500">
+                                      Confidence: {alert.confidence_score}%
+                                    </span>
+                                  </div>
+                                  <h4 className="text-sm font-semibold text-gray-900">{event.title}</h4>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    Source: {event.source} • {event.event_type} • {new Date(event.published_date).toLocaleDateString()}
+                                  </p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setExpandedAlertId(isExpanded ? null : alert.id)}
+                                  className="ml-2"
+                                >
+                                  {isExpanded ? (
+                                    <>
+                                      <AlertTriangle className="h-4 w-4 mr-1" />
+                                      Hide Details
+                                    </>
+                                  ) : (
+                                    <>
+                                      <AlertCircle className="h-4 w-4 mr-1" />
+                                      Show Details
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+
+                              {/* Change indicators */}
+                              {(alert.likelihood_change !== null && alert.likelihood_change !== 0) ||
+                                (alert.impact_change !== null && alert.impact_change !== 0) ? (
+                                <div className="flex gap-3 mb-3">
+                                  {alert.likelihood_change !== null && alert.likelihood_change !== 0 && (
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-xs text-gray-600">Likelihood:</span>
+                                      <span
+                                        className={`px-2 py-0.5 text-xs font-semibold rounded ${alert.likelihood_change > 0
+                                          ? 'bg-red-100 text-red-700'
+                                          : 'bg-green-100 text-green-700'
+                                          }`}
+                                      >
+                                        {alert.likelihood_change > 0 ? '+' : ''}
+                                        {alert.likelihood_change}
                                       </span>
                                     </div>
-                                    <h4 className="font-semibold text-sm text-gray-900 mt-1">{control.name}</h4>
-                                    {control.description && (
-                                      <p className="text-xs text-gray-600 mt-1">{control.description}</p>
-                                    )}
-                                  </div>
-                                  <div className="flex flex-col items-end gap-2">
-                                    <div className="flex gap-2">
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => handleStartEditControl(control)}
-                                      >
-                                        <Edit className="h-3 w-3 mr-1" />
-                                        Edit
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                        onClick={() => handleDeleteControl(control.id, control.name)}
-                                        disabled={deletingControlId === control.id}
-                                      >
-                                        {deletingControlId === control.id ? (
-                                          <>
-                                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                            Deleting...
-                                          </>
-                                        ) : (
-                                          <>
-                                            <Trash2 className="h-3 w-3 mr-1" />
-                                            Delete
-                                          </>
-                                        )}
-                                      </Button>
-                                    </div>
-                                    <div className="text-right">
-                                      <p className="text-xs text-gray-500 mb-1">Effectiveness</p>
-                                      <p className="text-lg font-bold text-blue-600">{effectiveness}%</p>
-                                    </div>
-                                  </div>
-                                </div>
-
-                              {/* DIME Scores Grid */}
-                              <div className="grid grid-cols-4 gap-2 pt-2 border-t border-gray-200">
-                                <div className="text-center">
-                                  <p className="text-xs text-gray-500 mb-1">Design</p>
-                                  <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
-                                    (control.design_score || 0) >= 2
-                                      ? 'bg-green-100 text-green-700'
-                                      : (control.design_score || 0) === 1
-                                      ? 'bg-yellow-100 text-yellow-700'
-                                      : 'bg-red-100 text-red-700'
-                                  }`}>
-                                    {control.design_score ?? '-'}
-                                  </div>
-                                </div>
-                                <div className="text-center">
-                                  <p className="text-xs text-gray-500 mb-1">Implement</p>
-                                  <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
-                                    (control.implementation_score || 0) >= 2
-                                      ? 'bg-green-100 text-green-700'
-                                      : (control.implementation_score || 0) === 1
-                                      ? 'bg-yellow-100 text-yellow-700'
-                                      : 'bg-red-100 text-red-700'
-                                  }`}>
-                                    {control.implementation_score ?? '-'}
-                                  </div>
-                                </div>
-                                <div className="text-center">
-                                  <p className="text-xs text-gray-500 mb-1">Monitor</p>
-                                  <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
-                                    (control.monitoring_score || 0) >= 2
-                                      ? 'bg-green-100 text-green-700'
-                                      : (control.monitoring_score || 0) === 1
-                                      ? 'bg-yellow-100 text-yellow-700'
-                                      : 'bg-red-100 text-red-700'
-                                  }`}>
-                                    {control.monitoring_score ?? '-'}
-                                  </div>
-                                </div>
-                                <div className="text-center">
-                                  <p className="text-xs text-gray-500 mb-1">Evaluate</p>
-                                  <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
-                                    (control.evaluation_score || 0) >= 2
-                                      ? 'bg-green-100 text-green-700'
-                                      : (control.evaluation_score || 0) === 1
-                                      ? 'bg-yellow-100 text-yellow-700'
-                                      : 'bg-red-100 text-red-700'
-                                  }`}>
-                                    {control.evaluation_score ?? '-'}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* DIME Legend */}
-                              <div className="pt-2 border-t border-gray-200">
-                                <p className="text-xs text-gray-500">
-                                  DIME Average: <span className="font-semibold text-gray-700">{avgDIME}</span> / 3.0
-                                  <span className="ml-2 text-gray-400">•</span>
-                                  <span className="ml-2">
-                                    Scale: 0-3 (dimension-specific criteria)
-                                  </span>
-                                </p>
-                              </div>
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Intelligence Alerts Section - Only show when editing */}
-          {editingRisk && (
-            <Card className="border-purple-200 bg-purple-50 mt-6">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-purple-600" />
-                  Intelligence Alerts ({intelligenceAlerts.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {loadingAlerts ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
-                    <span className="ml-2 text-sm text-gray-600">Loading intelligence alerts...</span>
-                  </div>
-                ) : intelligenceAlerts.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-gray-600">No intelligence alerts for this risk yet.</p>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Intelligence alerts appear when external events are detected that may affect this risk.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {intelligenceAlerts.map((alert) => {
-                      const event = alert.external_events;
-                      const isExpanded = expandedAlertId === alert.id;
-
-                      // Status badge styling
-                      const statusColors = {
-                        pending: 'bg-yellow-100 text-yellow-700 border-yellow-300',
-                        accepted: 'bg-green-100 text-green-700 border-green-300',
-                        rejected: 'bg-red-100 text-red-700 border-red-300',
-                        expired: 'bg-gray-100 text-gray-700 border-gray-300',
-                      };
-
-                      return (
-                        <Card key={alert.id} className="bg-white border border-purple-200">
-                          <CardContent className="pt-4">
-                            {/* Header row */}
-                            <div className="flex items-start justify-between mb-3">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span
-                                    className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${
-                                      statusColors[alert.status]
-                                    }`}
-                                  >
-                                    {alert.status.toUpperCase()}
-                                  </span>
-                                  {alert.applied_to_risk && (
-                                    <span className="px-2 py-0.5 text-xs font-semibold rounded-full border bg-blue-100 text-blue-700 border-blue-300 flex items-center gap-1">
-                                      <CheckCircle className="h-3 w-3" />
-                                      Applied
-                                    </span>
                                   )}
-                                  <span className="text-xs text-gray-500">
-                                    Confidence: {alert.confidence_score}%
-                                  </span>
+                                  {alert.impact_change !== null && alert.impact_change !== 0 && (
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-xs text-gray-600">Impact:</span>
+                                      <span
+                                        className={`px-2 py-0.5 text-xs font-semibold rounded ${alert.impact_change > 0
+                                          ? 'bg-red-100 text-red-700'
+                                          : 'bg-green-100 text-green-700'
+                                          }`}
+                                      >
+                                        {alert.impact_change > 0 ? '+' : ''}
+                                        {alert.impact_change}
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
-                                <h4 className="text-sm font-semibold text-gray-900">{event.title}</h4>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Source: {event.source} • {event.event_type} • {new Date(event.published_date).toLocaleDateString()}
-                                </p>
-                              </div>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setExpandedAlertId(isExpanded ? null : alert.id)}
-                                className="ml-2"
-                              >
-                                {isExpanded ? (
-                                  <>
-                                    <AlertTriangle className="h-4 w-4 mr-1" />
-                                    Hide Details
-                                  </>
-                                ) : (
-                                  <>
-                                    <AlertCircle className="h-4 w-4 mr-1" />
-                                    Show Details
-                                  </>
-                                )}
-                              </Button>
-                            </div>
+                              ) : null}
 
-                            {/* Change indicators */}
-                            {(alert.likelihood_change !== null && alert.likelihood_change !== 0) ||
-                            (alert.impact_change !== null && alert.impact_change !== 0) ? (
-                              <div className="flex gap-3 mb-3">
-                                {alert.likelihood_change !== null && alert.likelihood_change !== 0 && (
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs text-gray-600">Likelihood:</span>
-                                    <span
-                                      className={`px-2 py-0.5 text-xs font-semibold rounded ${
-                                        alert.likelihood_change > 0
-                                          ? 'bg-red-100 text-red-700'
-                                          : 'bg-green-100 text-green-700'
-                                      }`}
-                                    >
-                                      {alert.likelihood_change > 0 ? '+' : ''}
-                                      {alert.likelihood_change}
-                                    </span>
-                                  </div>
-                                )}
-                                {alert.impact_change !== null && alert.impact_change !== 0 && (
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs text-gray-600">Impact:</span>
-                                    <span
-                                      className={`px-2 py-0.5 text-xs font-semibold rounded ${
-                                        alert.impact_change > 0
-                                          ? 'bg-red-100 text-red-700'
-                                          : 'bg-green-100 text-green-700'
-                                      }`}
-                                    >
-                                      {alert.impact_change > 0 ? '+' : ''}
-                                      {alert.impact_change}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            ) : null}
+                              {/* Expanded details */}
+                              {isExpanded && (
+                                <div className="mt-3 pt-3 border-t border-purple-200 space-y-3">
+                                  {/* Event Summary */}
+                                  {event.summary && (
+                                    <div>
+                                      <p className="text-xs font-semibold text-gray-700 mb-1">Event Summary:</p>
+                                      <p className="text-xs text-gray-600">{event.summary}</p>
+                                    </div>
+                                  )}
 
-                            {/* Expanded details */}
-                            {isExpanded && (
-                              <div className="mt-3 pt-3 border-t border-purple-200 space-y-3">
-                                {/* Event Summary */}
-                                {event.summary && (
-                                  <div>
-                                    <p className="text-xs font-semibold text-gray-700 mb-1">Event Summary:</p>
-                                    <p className="text-xs text-gray-600">{event.summary}</p>
-                                  </div>
-                                )}
+                                  {/* AI Reasoning */}
+                                  {alert.ai_reasoning && (
+                                    <div>
+                                      <p className="text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                                        <Sparkles className="h-3 w-3 text-purple-600" />
+                                        AI Analysis:
+                                      </p>
+                                      <p className="text-xs text-gray-600 bg-purple-50 p-2 rounded border border-purple-200">
+                                        {alert.ai_reasoning}
+                                      </p>
+                                    </div>
+                                  )}
 
-                                {/* AI Reasoning */}
-                                {alert.ai_reasoning && (
-                                  <div>
-                                    <p className="text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
-                                      <Sparkles className="h-3 w-3 text-purple-600" />
-                                      AI Analysis:
-                                    </p>
-                                    <p className="text-xs text-gray-600 bg-purple-50 p-2 rounded border border-purple-200">
-                                      {alert.ai_reasoning}
-                                    </p>
-                                  </div>
-                                )}
+                                  {/* Event URL */}
+                                  {event.url && (
+                                    <div>
+                                      <a
+                                        href={event.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs text-blue-600 hover:text-blue-700 underline"
+                                      >
+                                        View original source →
+                                      </a>
+                                    </div>
+                                  )}
 
-                                {/* Event URL */}
-                                {event.url && (
-                                  <div>
-                                    <a
-                                      href={event.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-xs text-blue-600 hover:text-blue-700 underline"
-                                    >
-                                      View original source →
-                                    </a>
-                                  </div>
-                                )}
+                                  {/* Review info */}
+                                  {alert.reviewed_by && alert.reviewed_at && (
+                                    <div className="text-xs text-gray-500 pt-2 border-t border-gray-200">
+                                      Reviewed on {new Date(alert.reviewed_at).toLocaleDateString()}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
-                                {/* Review info */}
-                                {alert.reviewed_by && alert.reviewed_at && (
-                                  <div className="text-xs text-gray-500 pt-2 border-t border-gray-200">
-                                    Reviewed on {new Date(alert.reviewed_at).toLocaleDateString()}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+            {/* Treatment Log Section - Only show when editing and risk code exists */}
+            {editingRisk && editingRisk.risk_code && (
+              <div className="mt-6">
+                <TreatmentLogViewer riskCode={editingRisk.risk_code} />
+              </div>
+            )}
 
-          {/* Treatment Log Section - Only show when editing and risk code exists */}
-          {editingRisk && editingRisk.risk_code && (
-            <div className="mt-6">
-              <TreatmentLogViewer riskCode={editingRisk.risk_code} />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={loading}
+              >
+                {readOnly ? 'Close' : 'Cancel'}
+              </Button>
+              {!readOnly && (
+                <Button type="submit" disabled={loading || !selectedCategory || !selectedSubcategory}>
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {editingRisk ? 'Updating...' : 'Creating...'}
+                    </>
+                  ) : (
+                    <>{editingRisk ? 'Update Risk' : 'Create Risk'}</>
+                  )}
+                </Button>
+              )}
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Custom Root Cause Dialog */}
+      <Dialog open={showCustomRootCause} onOpenChange={setShowCustomRootCause}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Custom Root Cause</DialogTitle>
+            <DialogDescription>
+              Create a custom root cause for your organization
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="custom_cause_code">Code *</Label>
+              <Input
+                id="custom_cause_code"
+                placeholder="e.g., RC-ORG-001"
+                value={customRootCause.cause_code}
+                onChange={(e) => setCustomRootCause({ ...customRootCause, cause_code: e.target.value })}
+                disabled={savingCustom}
+              />
             </div>
-          )}
-
+            <div className="space-y-2">
+              <Label htmlFor="custom_cause_name">Name *</Label>
+              <Input
+                id="custom_cause_name"
+                placeholder="e.g., Legacy system vulnerability"
+                value={customRootCause.cause_name}
+                onChange={(e) => setCustomRootCause({ ...customRootCause, cause_name: e.target.value })}
+                disabled={savingCustom}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="custom_cause_description">Description</Label>
+              <Textarea
+                id="custom_cause_description"
+                placeholder="Detailed description of this root cause"
+                value={customRootCause.cause_description}
+                onChange={(e) => setCustomRootCause({ ...customRootCause, cause_description: e.target.value })}
+                disabled={savingCustom}
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="custom_cause_category">Category</Label>
+              <Input
+                id="custom_cause_category"
+                placeholder="e.g., Technology, Process"
+                value={customRootCause.category}
+                onChange={(e) => setCustomRootCause({ ...customRootCause, category: e.target.value })}
+                disabled={savingCustom}
+              />
+            </div>
+          </div>
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
+              onClick={() => setShowCustomRootCause(false)}
+              disabled={savingCustom}
             >
-              {readOnly ? 'Close' : 'Cancel'}
+              Cancel
             </Button>
-            {!readOnly && (
-              <Button type="submit" disabled={loading || !selectedCategory || !selectedSubcategory}>
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    {editingRisk ? 'Updating...' : 'Creating...'}
-                  </>
-                ) : (
-                  <>{editingRisk ? 'Update Risk' : 'Create Risk'}</>
-                )}
-              </Button>
-            )}
+            <Button
+              type="button"
+              onClick={handleSaveCustomRootCause}
+              disabled={savingCustom}
+            >
+              {savingCustom ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Custom Root Cause'
+              )}
+            </Button>
           </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
 
-    {/* Custom Root Cause Dialog */}
-    <Dialog open={showCustomRootCause} onOpenChange={setShowCustomRootCause}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add Custom Root Cause</DialogTitle>
-          <DialogDescription>
-            Create a custom root cause for your organization
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="custom_cause_code">Code *</Label>
-            <Input
-              id="custom_cause_code"
-              placeholder="e.g., RC-ORG-001"
-              value={customRootCause.cause_code}
-              onChange={(e) => setCustomRootCause({ ...customRootCause, cause_code: e.target.value })}
-              disabled={savingCustom}
-            />
+      {/* Custom Impact Dialog */}
+      <Dialog open={showCustomImpact} onOpenChange={setShowCustomImpact}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Custom Impact</DialogTitle>
+            <DialogDescription>
+              Create a custom impact for your organization
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="custom_impact_code">Code *</Label>
+              <Input
+                id="custom_impact_code"
+                placeholder="e.g., IMP-ORG-001"
+                value={customImpact.impact_code}
+                onChange={(e) => setCustomImpact({ ...customImpact, impact_code: e.target.value })}
+                disabled={savingCustom}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="custom_impact_name">Name *</Label>
+              <Input
+                id="custom_impact_name"
+                placeholder="e.g., Customer data exposure"
+                value={customImpact.impact_name}
+                onChange={(e) => setCustomImpact({ ...customImpact, impact_name: e.target.value })}
+                disabled={savingCustom}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="custom_impact_description">Description</Label>
+              <Textarea
+                id="custom_impact_description"
+                placeholder="Detailed description of this impact"
+                value={customImpact.impact_description}
+                onChange={(e) => setCustomImpact({ ...customImpact, impact_description: e.target.value })}
+                disabled={savingCustom}
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="custom_impact_category">Category</Label>
+              <Input
+                id="custom_impact_category"
+                placeholder="e.g., Financial, Operational"
+                value={customImpact.category}
+                onChange={(e) => setCustomImpact({ ...customImpact, category: e.target.value })}
+                disabled={savingCustom}
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="custom_cause_name">Name *</Label>
-            <Input
-              id="custom_cause_name"
-              placeholder="e.g., Legacy system vulnerability"
-              value={customRootCause.cause_name}
-              onChange={(e) => setCustomRootCause({ ...customRootCause, cause_name: e.target.value })}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowCustomImpact(false)}
               disabled={savingCustom}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="custom_cause_description">Description</Label>
-            <Textarea
-              id="custom_cause_description"
-              placeholder="Detailed description of this root cause"
-              value={customRootCause.cause_description}
-              onChange={(e) => setCustomRootCause({ ...customRootCause, cause_description: e.target.value })}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSaveCustomImpact}
               disabled={savingCustom}
-              rows={3}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="custom_cause_category">Category</Label>
-            <Input
-              id="custom_cause_category"
-              placeholder="e.g., Technology, Process"
-              value={customRootCause.category}
-              onChange={(e) => setCustomRootCause({ ...customRootCause, category: e.target.value })}
-              disabled={savingCustom}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setShowCustomRootCause(false)}
-            disabled={savingCustom}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSaveCustomRootCause}
-            disabled={savingCustom}
-          >
-            {savingCustom ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              'Save Custom Root Cause'
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    {/* Custom Impact Dialog */}
-    <Dialog open={showCustomImpact} onOpenChange={setShowCustomImpact}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add Custom Impact</DialogTitle>
-          <DialogDescription>
-            Create a custom impact for your organization
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="custom_impact_code">Code *</Label>
-            <Input
-              id="custom_impact_code"
-              placeholder="e.g., IMP-ORG-001"
-              value={customImpact.impact_code}
-              onChange={(e) => setCustomImpact({ ...customImpact, impact_code: e.target.value })}
-              disabled={savingCustom}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="custom_impact_name">Name *</Label>
-            <Input
-              id="custom_impact_name"
-              placeholder="e.g., Customer data exposure"
-              value={customImpact.impact_name}
-              onChange={(e) => setCustomImpact({ ...customImpact, impact_name: e.target.value })}
-              disabled={savingCustom}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="custom_impact_description">Description</Label>
-            <Textarea
-              id="custom_impact_description"
-              placeholder="Detailed description of this impact"
-              value={customImpact.impact_description}
-              onChange={(e) => setCustomImpact({ ...customImpact, impact_description: e.target.value })}
-              disabled={savingCustom}
-              rows={3}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="custom_impact_category">Category</Label>
-            <Input
-              id="custom_impact_category"
-              placeholder="e.g., Financial, Operational"
-              value={customImpact.category}
-              onChange={(e) => setCustomImpact({ ...customImpact, category: e.target.value })}
-              disabled={savingCustom}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setShowCustomImpact(false)}
-            disabled={savingCustom}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSaveCustomImpact}
-            disabled={savingCustom}
-          >
-            {savingCustom ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              'Save Custom Impact'
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            >
+              {savingCustom ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Custom Impact'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

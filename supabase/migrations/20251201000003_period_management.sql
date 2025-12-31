@@ -61,7 +61,7 @@ CREATE POLICY "Admins can commit period snapshots" ON risk_snapshots
     organization_id IN (
       SELECT organization_id
       FROM user_profiles
-      WHERE id = auth.uid() AND role = 'admin'
+      WHERE id = auth.uid() AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
     )
   );
 
@@ -75,7 +75,7 @@ CREATE POLICY "Admins can delete snapshots" ON risk_snapshots
     organization_id IN (
       SELECT organization_id
       FROM user_profiles
-      WHERE id = auth.uid() AND role = 'admin'
+      WHERE id = auth.uid() AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
     )
   );
 

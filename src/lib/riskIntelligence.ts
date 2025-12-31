@@ -275,8 +275,9 @@ export async function createExternalEventWithAutoScan(
     }
 
     // Call Edge Function to analyze this single event
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const response = await fetch(
-      `${supabase.supabaseUrl}/functions/v1/analyze-intelligence`,
+      `${supabaseUrl}/functions/v1/analyze-intelligence`,
       {
         method: 'POST',
         headers: {
@@ -602,9 +603,9 @@ export async function analyzeEventRelevance(
       };
     }
 
-    // Call Edge Function (server-side, secure)
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const response = await fetch(
-      `${supabase.supabaseUrl}/functions/v1/analyze-intelligence`,
+      `${supabaseUrl}/functions/v1/analyze-intelligence`,
       {
         method: 'POST',
         headers: {
@@ -1758,7 +1759,7 @@ export async function createRssSource(
     const { data: profile } = await supabase
       .from('user_profiles')
       .select('organization_id')
-      .eq('user_id', session.user.id)
+      .eq('id', session.user.id)
       .single();
 
     if (!profile) {
@@ -1870,6 +1871,133 @@ export async function toggleRssSourceStatus(id: string, isActive: boolean): Prom
     return {
       success: false,
       error: error instanceof Error ? error : new Error('Failed to toggle RSS source status')
+    };
+  }
+}
+// ============================================================================
+// RISK KEYWORD MANAGEMENT
+// ============================================================================
+
+export interface RiskKeyword {
+  id: string;
+  organization_id: string;
+  keyword: string;
+  category: 'cybersecurity' | 'regulatory' | 'market' | 'operational' | 'strategic';
+  weight: number;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface CreateRiskKeywordInput {
+  keyword: string;
+  category: 'cybersecurity' | 'regulatory' | 'market' | 'operational' | 'strategic';
+  weight?: number;
+}
+
+/**
+ * Get all risk keywords for the user's organization
+ */
+export async function getRiskKeywords(): Promise<{
+  data: RiskKeyword[] | null;
+  error: Error | null;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('risk_keywords')
+      .select('*')
+      .order('category')
+      .order('keyword');
+
+    if (error) throw error;
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error fetching risk keywords:', error);
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error('Failed to fetch risk keywords')
+    };
+  }
+}
+
+/**
+ * Create a new risk keyword (admin only)
+ */
+export async function createRiskKeyword(
+  input: CreateRiskKeywordInput
+): Promise<{
+  data: RiskKeyword | null;
+  error: Error | null;
+}> {
+  try {
+    // Get current user's profile to get organization_id
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error('Not authenticated');
+    }
+
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('organization_id')
+      .eq('id', session.user.id)
+      .single();
+
+    if (!profile) {
+      throw new Error('User profile not found');
+    }
+
+    const { data, error } = await supabase
+      .from('risk_keywords')
+      .insert({
+        organization_id: profile.organization_id,
+        keyword: input.keyword.trim(),
+        category: input.category,
+        weight: input.weight || 1.0,
+        created_by: session.user.id
+      })
+      .select()
+      .single();
+
+    if (error) {
+      // Handle unique constraint violation
+      if (error.code === '23505') {
+        throw new Error(`Keyword "${input.keyword}" already exists`);
+      }
+      throw error;
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error creating risk keyword:', error);
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error('Failed to create risk keyword')
+    };
+  }
+}
+
+/**
+ * Delete a risk keyword (admin only)
+ */
+export async function deleteRiskKeyword(id: string): Promise<{
+  success: boolean;
+  error: Error | null;
+}> {
+  try {
+    const { error } = await supabase
+      .from('risk_keywords')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    return { success: true, error: null };
+  } catch (error) {
+    console.error('Error deleting risk keyword:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error : new Error('Failed to delete risk keyword')
     };
   }
 }

@@ -101,7 +101,7 @@ CREATE POLICY risk_controls_update_policy ON risk_controls
     risk_id IN (
       SELECT id FROM risks r WHERE r.organization_id IN (
         SELECT organization_id FROM user_profiles
-        WHERE id = auth.uid() AND (assigned_by = auth.uid() OR role = 'admin')
+        WHERE id = auth.uid() AND (assigned_by = auth.uid() OR role IN ('primary_admin', 'secondary_admin', 'super_admin'))
       )
     )
   );
@@ -113,7 +113,7 @@ CREATE POLICY risk_controls_delete_policy ON risk_controls
     risk_id IN (
       SELECT id FROM risks r WHERE r.organization_id IN (
         SELECT organization_id FROM user_profiles
-        WHERE id = auth.uid() AND (assigned_by = auth.uid() OR role = 'admin')
+        WHERE id = auth.uid() AND (assigned_by = auth.uid() OR role IN ('primary_admin', 'secondary_admin', 'super_admin'))
       )
     )
   );

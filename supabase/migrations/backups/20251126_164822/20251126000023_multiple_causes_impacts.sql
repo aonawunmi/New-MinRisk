@@ -244,7 +244,7 @@ LEFT JOIN risk_impacts ri ON r.id = ri.risk_id
 LEFT JOIN impact_register imp ON ri.impact_id = imp.id
 
 -- Controls
-LEFT JOIN risk_controls ctrl ON r.id = ctrl.risk_id AND ctrl.status = 'active'
+LEFT JOIN risk_controls ctrl ON r.id = ctrl.risk_id
 
 GROUP BY
   r.id, r.title, r.event_description, r.organization_id, r.status,

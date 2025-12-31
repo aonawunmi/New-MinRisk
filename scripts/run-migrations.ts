@@ -37,7 +37,8 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 const MIGRATIONS = [
   'create-kri-tables.sql',
   'create-risk-intelligence-tables.sql',
-  'create-incidents-tables.sql'
+  'create-incidents-tables.sql',
+  'create-risk-keywords.sql'
 ];
 
 /**

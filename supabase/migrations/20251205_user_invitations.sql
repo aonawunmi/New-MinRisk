@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS user_invitations (
 
   -- Organization and role
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  role VARCHAR(50) NOT NULL CHECK (role IN ('user', 'secondary_admin', 'primary_admin', 'super_user')),
+  role VARCHAR(50) NOT NULL CHECK (role IN ('user', 'secondary_admin', 'primary_admin', 'super_admin')),
 
   -- Status tracking
   status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'used', 'revoked', 'expired')),
@@ -91,7 +91,7 @@ USING (
     SELECT organization_id
     FROM user_profiles
     WHERE id = auth.uid()
-      AND role IN ('primary_admin', 'secondary_admin', 'super_user')
+      AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
       AND status = 'approved'
   )
 );
@@ -106,7 +106,7 @@ WITH CHECK (
     SELECT organization_id
     FROM user_profiles
     WHERE id = auth.uid()
-      AND role IN ('primary_admin', 'secondary_admin', 'super_user')
+      AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
       AND status = 'approved'
   )
   AND created_by = auth.uid()
@@ -122,7 +122,7 @@ USING (
     SELECT organization_id
     FROM user_profiles
     WHERE id = auth.uid()
-      AND role IN ('primary_admin', 'secondary_admin', 'super_user')
+      AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
       AND status = 'approved'
   )
 );

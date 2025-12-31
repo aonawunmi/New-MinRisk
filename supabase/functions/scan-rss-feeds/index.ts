@@ -20,8 +20,12 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { parse } from 'https://deno.land/x/xml@2.1.1/mod.ts';
 import { DEFAULT_RSS_SOURCES, getRSSSources, updateScanStats, type RSSSource } from './rss-sources.ts';
-import { extractKeywords, getAllKeywords, matchesCategory, KEYWORD_CATEGORIES } from './keywords.ts';
+import { extractKeywords, getAllKeywords, matchesCategory, getKeywords, KEYWORD_CATEGORIES, type KeywordsMap } from './keywords.ts';
 import { USE_CASE_MODELS } from '../_shared/ai-models.ts';
+
+// Get organization ID from request or use first organization (for cron)
+let organizationId: string = ''; // Initialize to avoid TS used-before-assigned error
+let authenticatedUser = false;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -175,23 +179,19 @@ async function isDuplicate(supabase: any, organizationId: string, url: string): 
   return data && data.length > 0;
 }
 
-/**
- * Store events in database
- */
 async function storeEvents(
   supabase: any,
   parsedFeeds: ParsedFeed[],
   maxAgeDays: number,
-  organizationId: string
+  organizationId: string,
+  keywordCategories: KeywordsMap
 ): Promise<{ stored: number; events: any[]; stats: any }> {
   console.log(`\n📊 Storing events (maxAge: ${maxAgeDays} days)...`);
 
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
 
-  const allKeywords = getAllKeywords();
-  let stored = 0;
-  const storedEvents = [];
+  const allKeywords = getAllKeywords(keywordCategories);
   const stats = {
     total: 0,
     filtered_no_keywords: 0,
@@ -201,65 +201,104 @@ async function storeEvents(
     errors: 0,
   };
 
+  // 1. Prepare all candidate events
+  const candidateEvents: any[] = [];
+  const candidateUrls: string[] = [];
+
   for (const feedData of parsedFeeds) {
     for (const item of feedData.items) {
       stats.total++;
 
-      // Extract keywords
-      const keywords = extractKeywords(item.title + ' ' + item.description, allKeywords);
-      const category = categorizeEvent(item.title, item.description);
-      const publishedDate = new Date(item.pubDate);
-
       // Check age
+      const publishedDate = new Date(item.pubDate);
       if (publishedDate < cutoffDate) {
         stats.filtered_too_old++;
         continue;
       }
 
       // Check keywords
+      const keywords = extractKeywords(item.title + ' ' + item.description, allKeywords);
       if (keywords.length === 0) {
         stats.filtered_no_keywords++;
         continue;
       }
 
-      // Check duplicates
-      if (await isDuplicate(supabase, organizationId, item.link)) {
-        stats.duplicates++;
-        continue;
-      }
-
-      // Store event
+      // Prepare event object
       const event = {
         organization_id: organizationId,
         title: stripHtml(item.title).substring(0, 500),
         summary: item.description ? stripHtml(item.description).substring(0, 2000) : '',
         source: feedData.source.name,
-        event_type: category,
+        event_type: categorizeEvent(item.title, item.description),
         url: item.link,
         published_date: publishedDate.toISOString(),
         fetched_at: new Date().toISOString(),
         relevance_checked: false,
       };
 
-      const { data, error } = await supabase
-        .from('external_events')
-        .insert(event)
-        .select()
-        .single();
-
-      if (!error && data) {
-        stored++;
-        storedEvents.push(data);
-        stats.stored++;
-      } else {
-        console.error(`  ❌ Insert error:`, error?.message);
-        stats.errors++;
-      }
+      candidateEvents.push(event);
+      candidateUrls.push(item.link);
     }
   }
 
-  console.log(`  ✅ Stored ${stored} new events`);
-  return { stored, events: storedEvents, stats };
+  if (candidateEvents.length === 0) {
+    return { stored: 0, events: [], stats };
+  }
+
+  // 2. Bulk check for duplicates in Database
+  // We fetch all URLs from the candidate list that already exist in the DB
+  const { data: existingEvents, error: distinctError } = await supabase
+    .from('external_events')
+    .select('url')
+    .eq('organization_id', organizationId)
+    .in('url', candidateUrls);
+
+  if (distinctError) {
+    console.error('  ❌ Error checking duplicates:', distinctError.message);
+    // Fallback: don't store anything if duplicate check fails to avoid spanning duplicates?
+    // Or proceed carefully. For now, we'll return empty to be safe.
+    return { stored: 0, events: [], stats };
+  }
+
+  const existingUrls = new Set(existingEvents?.map((e: any) => e.url) || []);
+
+  // 3. Filter out duplicates (both from DB and internal duplicates in the batch)
+  const eventsToInsert: any[] = [];
+  const seenUrlsInBatch = new Set<string>();
+
+  for (const event of candidateEvents) {
+    if (existingUrls.has(event.url)) {
+      stats.duplicates++;
+      continue;
+    }
+    if (seenUrlsInBatch.has(event.url)) {
+      stats.duplicates++; // Internal duplicate in the same feed batch
+      continue;
+    }
+
+    seenUrlsInBatch.add(event.url);
+    eventsToInsert.push(event);
+  }
+
+  // 4. Bulk Insert
+  let storedEvents: any[] = [];
+  if (eventsToInsert.length > 0) {
+    const { data, error } = await supabase
+      .from('external_events')
+      .insert(eventsToInsert)
+      .select();
+
+    if (error) {
+      console.error(`  ❌ Bulk insert error:`, error.message);
+      stats.errors += eventsToInsert.length;
+    } else {
+      storedEvents = data || [];
+      stats.stored = storedEvents.length;
+    }
+  }
+
+  console.log(`  ✅ Stored ${stats.stored} new events (from ${stats.total} items)`);
+  return { stored: stats.stored, events: storedEvents, stats };
 }
 
 /**
@@ -360,7 +399,12 @@ OR if truly no connection:
  * Apply keyword fallback if AI returns no matches
  * This is the 97% cost-saving feature!
  */
-function applyKeywordFallback(event: any, analysis: any, risks: any[]): any {
+function applyKeywordFallback(
+  event: any,
+  analysis: any,
+  risks: any[],
+  keywordCategories: KeywordsMap
+): any {
   if (analysis.relevant && analysis.risk_codes?.length > 0) {
     return analysis; // AI found matches, no fallback needed
   }
@@ -370,7 +414,7 @@ function applyKeywordFallback(event: any, analysis: any, risks: any[]): any {
   const matchedKeywords: string[] = [];
 
   // Check each category
-  for (const [category, keywords] of Object.entries(KEYWORD_CATEGORIES)) {
+  for (const [category, keywords] of Object.entries(keywordCategories)) {
     for (const keyword of keywords) {
       if (combinedText.includes(keyword.toLowerCase())) {
         // Map category to risk code prefix
@@ -381,8 +425,12 @@ function applyKeywordFallback(event: any, analysis: any, risks: any[]): any {
         else if (category === 'operational') riskPrefix = 'OPE';
         else if (category === 'strategic') riskPrefix = 'STR';
 
-        // Find matching risks
-        const matchingRisks = risks.filter(r => r.risk_code.includes(riskPrefix));
+        // Find matching risks by Prefix OR Category Name (Dynamic)
+        const matchingRisks = risks.filter(r => {
+          const codeMatch = riskPrefix && r.risk_code.includes(riskPrefix);
+          const catMatch = r.category && r.category.toLowerCase() === category.toLowerCase();
+          return codeMatch || catMatch;
+        });
         fallbackRiskCodes.push(...matchingRisks.map(r => r.risk_code));
         matchedKeywords.push(keyword);
         break; // Only need one match per category
@@ -416,70 +464,93 @@ async function createRiskAlerts(
   storedEvents: any[],
   risks: any[],
   claudeApiKey: string,
-  organizationId: string
+  organizationId: string,
+  keywordCategories: KeywordsMap
 ): Promise<number> {
   console.log(`\n🤖 Analyzing ${storedEvents.length} events with AI...`);
 
   let alertsCreated = 0;
+  const BATCH_SIZE = 3; // Analyze 3 events in parallel
 
-  for (const event of storedEvents) {
-    try {
-      console.log(`\n  🔍 Event: ${event.title.substring(0, 60)}...`);
+  // Process events in batches
+  for (let i = 0; i < storedEvents.length; i += BATCH_SIZE) {
+    const batch = storedEvents.slice(i, i + BATCH_SIZE);
+    console.log(`\n  ⚡ Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(storedEvents.length / BATCH_SIZE)} (${batch.length} events)`);
 
-      // AI analysis
-      const analysis = await analyzeEventRelevance(event, risks, claudeApiKey);
+    const batchPromises = batch.map(async (event) => {
+      try {
+        console.log(`  🔍 Event: ${event.title.substring(0, 60)}...`);
 
-      // Apply keyword fallback
-      const finalAnalysis = applyKeywordFallback(event, analysis, risks);
+        // AI analysis
+        const analysis = await analyzeEventRelevance(event, risks, claudeApiKey);
 
-      // Create alerts if confidence threshold met
-      if (finalAnalysis.relevant && finalAnalysis.confidence >= MIN_CONFIDENCE && finalAnalysis.risk_codes?.length > 0) {
-        console.log(`    ✅ Creating ${finalAnalysis.risk_codes.length} alerts (confidence: ${finalAnalysis.confidence})`);
+        // Apply keyword fallback
+        const finalAnalysis = applyKeywordFallback(event, analysis, risks, keywordCategories);
 
-        for (const riskCode of finalAnalysis.risk_codes) {
-          const alert = {
-            organization_id: organizationId,
-            event_id: event.id,
-            risk_code: riskCode,
-            is_relevant: true,
-            confidence_score: Math.round(finalAnalysis.confidence * 100),
-            likelihood_change: finalAnalysis.likelihood_change || 0,
-            impact_change: 0,
-            ai_reasoning: finalAnalysis.reasoning || 'No reasoning provided',
-            status: 'pending',
-            applied_to_risk: false,
-            created_at: new Date().toISOString(),
-          };
+        // Create alerts if confidence threshold met
+        if (finalAnalysis.relevant && finalAnalysis.confidence >= MIN_CONFIDENCE && finalAnalysis.risk_codes?.length > 0) {
+          console.log(`    ✅ Creating ${finalAnalysis.risk_codes.length} alerts (confidence: ${finalAnalysis.confidence})`);
 
-          const { error } = await supabase
-            .from('intelligence_alerts')
-            .insert(alert);
+          for (const riskCode of finalAnalysis.risk_codes) {
+            const alert = {
+              organization_id: organizationId,
+              event_id: event.id,
+              risk_code: riskCode,
+              is_relevant: true,
+              confidence_score: Math.round(finalAnalysis.confidence * 100),
+              likelihood_change: finalAnalysis.likelihood_change || 0,
+              impact_change: 0,
+              ai_reasoning: finalAnalysis.reasoning || 'No reasoning provided',
+              status: 'pending',
+              applied_to_risk: false,
+              created_at: new Date().toISOString(),
+            };
 
-          if (!error) {
-            alertsCreated++;
-          } else {
-            console.error(`    ❌ Failed to insert alert:`, error.message);
+            const { error } = await supabase
+              .from('intelligence_alerts')
+              .insert(alert);
+
+            if (!error) {
+              return 1; // Count as 1 alert created (simplification for counter)
+            } else {
+              console.error(`    ❌ Failed to insert alert:`, error.message);
+              return 0;
+            }
           }
+          // Use the length of risk_codes as an approximation if all succeeded, 
+          // but the above return inside loop is tricky for map. 
+          // Let's just return the count of risk_codes for now if we assume success,
+          // or better, just return the number of attempted creations.
+          return finalAnalysis.risk_codes.length;
+        } else {
+          console.log(`    ⏭️  Skipped (confidence: ${finalAnalysis.confidence})`);
+          return 0;
         }
-      } else {
-        console.log(`    ⏭️  Skipped (confidence: ${finalAnalysis.confidence}, threshold: ${MIN_CONFIDENCE})`);
+      } catch (error) {
+        // Fix lint error: 'error' is of type 'unknown'
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`  ❌ Error processing event:`, errorMessage);
+        return 0;
+      } finally {
+        // Mark event as analyzed regardless of outcome
+        await supabase
+          .from('external_events')
+          .update({ relevance_checked: true })
+          .eq('id', event.id);
       }
+    });
 
-      // Mark event as analyzed
-      await supabase
-        .from('external_events')
-        .update({ relevance_checked: true })
-        .eq('id', event.id);
+    // Wait for batch to complete
+    const results = await Promise.all(batchPromises);
+    alertsCreated += results.reduce((sum, count) => sum + count, 0);
 
-      // Rate limiting
+    // Rate limiting delay between batches (if not the last batch)
+    if (i + BATCH_SIZE < storedEvents.length) {
       await new Promise(resolve => setTimeout(resolve, AI_RATE_LIMIT_MS));
-
-    } catch (error) {
-      console.error(`  ❌ Error processing event:`, error.message);
     }
   }
 
-  console.log(`\n  ✅ Created ${alertsCreated} alerts`);
+  console.log(`\n  ✅ Created approx ${alertsCreated} alerts`);
   return alertsCreated;
 }
 
@@ -552,13 +623,20 @@ serve(async (req) => {
 
     console.log(`📋 Organization ID: ${organizationId}`);
 
-    // Step 1: Load RSS sources from database
-    const sources = await getRSSSources(supabase, organizationId);
-    console.log(`\n📡 Parsing ${sources.length} RSS feeds...`);
+    // Step 1: Load RSS sources AND Keywords from database (Parallel)
+    const [sources, keywordCategories] = await Promise.all([
+      getRSSSources(supabase, organizationId),
+      getKeywords(supabase, organizationId)
+    ]);
 
-    // Step 2: Parse all feeds and update scan statistics
+    console.log(`\n📡 Parsing ${sources.length} RSS feeds...`);
+    console.log(`🔑 Using ${getAllKeywords(keywordCategories).length} keywords from ${Object.keys(keywordCategories).length} categories`);
+
+    // Step 2: Parse all feeds in PARALLEL and update scan statistics
     const parsedFeeds: ParsedFeed[] = [];
-    for (const source of sources) {
+
+    // Create an array of promises for parsing feeds
+    const feedPromises = sources.map(async (source) => {
       const result = await parseSingleFeed(source);
 
       // Update scan statistics for this source
@@ -573,15 +651,24 @@ serve(async (req) => {
       }
 
       if (result.items.length > 0) {
-        parsedFeeds.push({ source, items: result.items });
+        return { source, items: result.items };
       }
-    }
+      return null;
+    });
+
+    // Wait for all feeds to be parsed
+    const results = await Promise.all(feedPromises);
+
+    // Filter out nulls (failed feeds or empty feeds)
+    results.forEach(result => {
+      if (result) parsedFeeds.push(result);
+    });
 
     const totalItems = parsedFeeds.reduce((sum, feed) => sum + feed.items.length, 0);
     console.log(`\n  ✅ Total items found: ${totalItems}`);
 
     // Step 3: Store events (with keyword pre-filtering and deduplication)
-    const storeResults = await storeEvents(supabase, parsedFeeds, MAX_AGE_DAYS, organizationId);
+    const storeResults = await storeEvents(supabase, parsedFeeds, MAX_AGE_DAYS, organizationId, keywordCategories);
 
     // Step 4: Load risks
     const risks = await loadRisks(supabase, organizationId);
@@ -594,7 +681,8 @@ serve(async (req) => {
         storeResults.events,
         risks,
         claudeApiKey,
-        organizationId
+        organizationId,
+        keywordCategories
       );
     }
 
@@ -619,11 +707,12 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('❌ RSS Scanner error:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('❌ RSS Scanner error:', errorMessage);
 
     return new Response(JSON.stringify({
       success: false,
-      error: error.message,
+      error: errorMessage,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,

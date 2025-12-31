@@ -64,12 +64,12 @@ BEGIN
       measurement_frequency,
       data_source,
       calculation_method,
-      category,
-      subcategory,
-      target_value,
-      warning_threshold,
-      critical_threshold,
-      threshold_direction
+      NULL as category,
+      NULL as subcategory,
+      NULL as target_value,
+      threshold_warning as warning_threshold,
+      threshold_critical as critical_threshold,
+      NULL as threshold_direction
     FROM kri_kci_library
     WHERE indicator_code IS NOT NULL
     ON CONFLICT (indicator_code) DO UPDATE SET
@@ -158,7 +158,21 @@ USING (
 -- ============================================================================
 
 -- Backup existing kri_kci_library table
-ALTER TABLE IF EXISTS kri_kci_library RENAME TO kri_kci_library_backup_20251126;
+-- Backup existing kri_kci_library table
+DROP TABLE IF EXISTS kri_kci_library_backup_20251126;
+DROP VIEW IF EXISTS kri_kci_library_backup_20251126;
+
+-- Rename table if it exists
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'kri_kci_library') THEN
+    ALTER TABLE kri_kci_library RENAME TO kri_kci_library_backup_20251126;
+  END IF;
+END $$;
+
+-- Force drop view if it exists (in case it was a view not a table)
+DROP VIEW IF EXISTS kri_kci_library CASCADE;
+
 
 -- Create unified view
 CREATE OR REPLACE VIEW kri_kci_library AS

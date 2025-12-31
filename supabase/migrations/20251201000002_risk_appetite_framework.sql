@@ -44,7 +44,7 @@ CREATE TABLE risk_appetite (
   review_frequency VARCHAR(20) NOT NULL DEFAULT 'quarterly' CHECK (review_frequency IN ('monthly', 'quarterly', 'semi-annual', 'annual')),
   next_review_date DATE,
   last_reviewed_date DATE,
-  reviewed_by UUID REFERENCES users(id),
+  reviewed_by UUID REFERENCES user_profiles(id),
 
   -- Status & Compliance
   status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('draft', 'active', 'breached', 'under_review', 'archived')),
@@ -57,7 +57,7 @@ CREATE TABLE risk_appetite (
   board_minutes_reference VARCHAR(100),
 
   -- Audit Trail
-  created_by UUID NOT NULL REFERENCES users(id),
+  created_by UUID NOT NULL REFERENCES user_profiles(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
@@ -65,7 +65,7 @@ CREATE TABLE risk_appetite (
   notes TEXT,
 
   -- Unique constraint: one appetite definition per category per division per org
-  UNIQUE(org_id, risk_category, COALESCE(division, ''))
+  UNIQUE(org_id, risk_category, division)
 );
 
 -- =====================================================
@@ -93,7 +93,7 @@ CREATE TABLE risk_appetite_breaches (
 
   -- Response
   status VARCHAR(30) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'acknowledged', 'action_taken', 'resolved', 'accepted')),
-  acknowledged_by UUID REFERENCES users(id),
+  acknowledged_by UUID REFERENCES user_profiles(id),
   acknowledged_at TIMESTAMP WITH TIME ZONE,
   resolution_notes TEXT,
   resolved_at TIMESTAMP WITH TIME ZONE,
@@ -123,11 +123,13 @@ CREATE INDEX idx_appetite_breaches_date ON risk_appetite_breaches(breach_date);
 -- =====================================================
 -- TRIGGERS: Update updated_at timestamp
 -- =====================================================
+DROP TRIGGER IF EXISTS update_risk_appetite_updated_at ON risk_appetite;
 CREATE TRIGGER update_risk_appetite_updated_at
   BEFORE UPDATE ON risk_appetite
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_appetite_breaches_updated_at ON risk_appetite_breaches;
 CREATE TRIGGER update_appetite_breaches_updated_at
   BEFORE UPDATE ON risk_appetite_breaches
   FOR EACH ROW
@@ -143,52 +145,54 @@ ALTER TABLE risk_appetite_breaches ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view risk appetite in their org"
   ON risk_appetite FOR SELECT
   USING (org_id IN (
-    SELECT org_id FROM users WHERE id = auth.uid()
+    SELECT organization_id FROM user_profiles WHERE id = auth.uid()
   ));
 
 -- Policy: Admins can manage risk appetite (checked in app logic)
 CREATE POLICY "Users can create risk appetite in their org"
   ON risk_appetite FOR INSERT
   WITH CHECK (
-    org_id IN (SELECT org_id FROM users WHERE id = auth.uid())
+    org_id IN (SELECT organization_id FROM user_profiles WHERE id = auth.uid())
     AND created_by = auth.uid()
   );
 
 CREATE POLICY "Users can update risk appetite in their org"
   ON risk_appetite FOR UPDATE
   USING (org_id IN (
-    SELECT org_id FROM users WHERE id = auth.uid()
+    SELECT organization_id FROM user_profiles WHERE id = auth.uid()
   ));
 
 CREATE POLICY "Users can delete risk appetite in their org"
   ON risk_appetite FOR DELETE
   USING (org_id IN (
-    SELECT org_id FROM users WHERE id = auth.uid()
+    SELECT organization_id FROM user_profiles WHERE id = auth.uid()
   ));
 
 -- Policy: Users can view breaches in their organization
 CREATE POLICY "Users can view breaches in their org"
   ON risk_appetite_breaches FOR SELECT
   USING (org_id IN (
-    SELECT org_id FROM users WHERE id = auth.uid()
+    SELECT organization_id FROM user_profiles WHERE id = auth.uid()
   ));
 
 -- Policy: System can create breaches (via functions)
 CREATE POLICY "System can create breaches"
   ON risk_appetite_breaches FOR INSERT
   WITH CHECK (org_id IN (
-    SELECT org_id FROM users WHERE id = auth.uid()
+    SELECT organization_id FROM user_profiles WHERE id = auth.uid()
   ));
 
 CREATE POLICY "Users can update breaches in their org"
   ON risk_appetite_breaches FOR UPDATE
   USING (org_id IN (
-    SELECT org_id FROM users WHERE id = auth.uid()
+    SELECT organization_id FROM user_profiles WHERE id = auth.uid()
   ));
 
 -- =====================================================
 -- VIEW: Risk Appetite Compliance Dashboard
 -- =====================================================
+-- Simplified view - join with risks can be done at query time
+DROP VIEW IF EXISTS risk_appetite_compliance CASCADE;
 CREATE OR REPLACE VIEW risk_appetite_compliance AS
 SELECT
   ra.id AS appetite_id,
@@ -203,82 +207,22 @@ SELECT
   ra.max_high_risks,
   ra.max_extreme_risks,
   ra.status AS appetite_status,
-
-  -- Current Exposure Metrics
-  COUNT(DISTINCT r.id) AS total_risks_in_category,
-  COALESCE(AVG(r.likelihood_inherent * r.impact_inherent), 0) AS avg_inherent_score,
-  COALESCE(AVG(CASE
-    WHEN c.residual_likelihood IS NOT NULL AND c.residual_impact IS NOT NULL
-    THEN c.residual_likelihood * c.residual_impact
-    ELSE r.likelihood_inherent * r.impact_inherent
-  END), 0) AS avg_residual_score,
-
-  -- Risk Level Counts
-  COUNT(CASE WHEN rl.level_name = 'Extreme' THEN 1 END) AS extreme_risk_count,
-  COUNT(CASE WHEN rl.level_name = 'High' THEN 1 END) AS high_risk_count,
-  COUNT(CASE WHEN rl.level_name = 'Medium' THEN 1 END) AS medium_risk_count,
-  COUNT(CASE WHEN rl.level_name = 'Low' THEN 1 END) AS low_risk_count,
-
-  -- Compliance Status
-  CASE
-    WHEN ra.critical_threshold IS NOT NULL
-         AND AVG(r.likelihood_inherent * r.impact_inherent) > ra.critical_threshold
-    THEN 'critical_breach'
-    WHEN AVG(r.likelihood_inherent * r.impact_inherent) > ra.tolerance_threshold
-    THEN 'tolerance_breach'
-    WHEN ra.target_threshold IS NOT NULL
-         AND AVG(r.likelihood_inherent * r.impact_inherent) > ra.target_threshold
-    THEN 'above_target'
-    ELSE 'within_appetite'
-  END AS compliance_status,
-
-  -- Count Compliance
-  CASE
-    WHEN ra.max_extreme_risks IS NOT NULL
-         AND COUNT(CASE WHEN rl.level_name = 'Extreme' THEN 1 END) > ra.max_extreme_risks
-    THEN TRUE
-    WHEN ra.max_high_risks IS NOT NULL
-         AND COUNT(CASE WHEN rl.level_name = 'High' THEN 1 END) > ra.max_high_risks
-    THEN TRUE
-    ELSE FALSE
-  END AS count_breach,
-
-  -- Active Breaches
-  COUNT(DISTINCT rab.id) FILTER (WHERE rab.status = 'active') AS active_breaches,
-
+  ra.review_frequency,
+  ra.next_review_date,
+  ra.last_reviewed_date,
+  ra.board_approved,
+  ra.board_approval_date,
   -- Review Status
   CASE
     WHEN ra.next_review_date < CURRENT_DATE THEN 'overdue'
     WHEN ra.next_review_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'due_soon'
     ELSE 'current'
   END AS review_status,
-
-  ra.next_review_date,
-  ra.last_reviewed_date
-
+  -- Active Breaches Count
+  (SELECT COUNT(*) FROM risk_appetite_breaches rab 
+   WHERE rab.risk_appetite_id = ra.id AND rab.status = 'active') AS active_breaches
 FROM risk_appetite ra
-LEFT JOIN risks r ON r.category = ra.risk_category
-  AND r.org_id = ra.org_id
-  AND (ra.division IS NULL OR r.division = ra.division)
-  AND r.status != 'closed'
-LEFT JOIN (
-  SELECT DISTINCT ON (risk_id)
-    risk_id,
-    residual_likelihood,
-    residual_impact
-  FROM controls
-  ORDER BY risk_id, created_at DESC
-) c ON c.risk_id = r.id
-LEFT JOIN risk_levels rl ON rl.org_id = ra.org_id
-  AND (r.likelihood_inherent * r.impact_inherent) BETWEEN rl.min_score AND rl.max_score
-LEFT JOIN risk_appetite_breaches rab ON rab.risk_appetite_id = ra.id
-  AND rab.status = 'active'
-WHERE ra.status = 'active'
-GROUP BY
-  ra.id, ra.org_id, ra.risk_category, ra.division, ra.appetite_level,
-  ra.appetite_statement, ra.target_threshold, ra.tolerance_threshold,
-  ra.critical_threshold, ra.max_high_risks, ra.max_extreme_risks,
-  ra.status, ra.next_review_date, ra.last_reviewed_date;
+WHERE ra.status = 'active';
 
 -- =====================================================
 -- FUNCTION: Check Risk Appetite Compliance

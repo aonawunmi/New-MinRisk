@@ -72,7 +72,7 @@ CREATE POLICY root_cause_admin_update_policy ON root_cause_register
   USING (
     organization_id IN (
       SELECT organization_id FROM user_profiles
-      WHERE id = auth.uid() AND role = 'admin'
+      WHERE id = auth.uid() AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
     )
   );
 
@@ -82,7 +82,7 @@ CREATE POLICY root_cause_admin_delete_policy ON root_cause_register
   USING (
     organization_id IN (
       SELECT organization_id FROM user_profiles
-      WHERE id = auth.uid() AND role = 'admin'
+      WHERE id = auth.uid() AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
     )
   );
 

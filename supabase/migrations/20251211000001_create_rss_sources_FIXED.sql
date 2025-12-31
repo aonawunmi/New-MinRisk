@@ -57,7 +57,7 @@ CREATE POLICY "Admins can insert RSS sources"
       SELECT organization_id
       FROM public.user_profiles
       WHERE id = auth.uid()
-      AND role = 'admin'
+      AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
     )
   );
 
@@ -70,7 +70,7 @@ CREATE POLICY "Admins can update RSS sources"
       SELECT organization_id
       FROM public.user_profiles
       WHERE id = auth.uid()
-      AND role = 'admin'
+      AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
     )
   );
 
@@ -83,7 +83,7 @@ CREATE POLICY "Admins can delete RSS sources"
       SELECT organization_id
       FROM public.user_profiles
       WHERE id = auth.uid()
-      AND role = 'admin'
+      AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
     )
   );
 

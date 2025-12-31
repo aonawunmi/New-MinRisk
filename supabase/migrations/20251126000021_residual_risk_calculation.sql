@@ -177,11 +177,12 @@ CREATE TRIGGER trigger_update_residual_on_control_add
   EXECUTE FUNCTION update_risk_residual();
 
 -- Trigger: When control status changes
-CREATE TRIGGER trigger_update_residual_on_control_update
-  AFTER UPDATE OF status ON risk_controls
-  FOR EACH ROW
-  WHEN (OLD.status IS DISTINCT FROM NEW.status)
-  EXECUTE FUNCTION update_risk_residual();
+-- DISABLED: risk_controls table doesn't have a status column
+-- CREATE TRIGGER trigger_update_residual_on_control_update
+--   AFTER UPDATE OF status ON risk_controls
+--   FOR EACH ROW
+--   WHEN (OLD.status IS DISTINCT FROM NEW.status)
+--   EXECUTE FUNCTION update_risk_residual();
 
 -- Trigger: When control is removed from a risk
 CREATE TRIGGER trigger_update_residual_on_control_delete
@@ -257,26 +258,26 @@ CREATE OR REPLACE VIEW risk_treatment_effectiveness_view AS
 SELECT
   r.id,
   r.organization_id,
-  r.title,
-  r.inherent_likelihood,
-  r.inherent_impact,
-  (r.inherent_likelihood * r.inherent_impact) as inherent_score,
+  r.risk_title AS title,
+  r.likelihood_inherent,
+  r.impact_inherent,
+  (r.likelihood_inherent * r.impact_inherent) as inherent_score,
   r.residual_likelihood,
   r.residual_impact,
   r.residual_score,
   r.control_effectiveness_percentage,
-  (r.inherent_likelihood * r.inherent_impact) - COALESCE(r.residual_score, r.inherent_likelihood * r.inherent_impact) as risk_reduction,
+  (r.likelihood_inherent * r.impact_inherent) - COALESCE(r.residual_score, r.likelihood_inherent * r.impact_inherent) as risk_reduction,
   ROUND(
-    (((r.inherent_likelihood * r.inherent_impact) - COALESCE(r.residual_score, r.inherent_likelihood * r.inherent_impact))::NUMERIC /
-    (r.inherent_likelihood * r.inherent_impact) * 100),
+    (((r.likelihood_inherent * r.impact_inherent) - COALESCE(r.residual_score, r.likelihood_inherent * r.impact_inherent))::NUMERIC /
+    (r.likelihood_inherent * r.impact_inherent) * 100),
     1
   ) as risk_reduction_percentage,
   COUNT(rc.id) as control_count,
   r.residual_last_calculated
 FROM risks r
-LEFT JOIN risk_controls rc ON r.id = rc.risk_id AND rc.status = 'active'
-WHERE r.inherent_likelihood IS NOT NULL AND r.inherent_impact IS NOT NULL
-GROUP BY r.id, r.title, r.organization_id, r.inherent_likelihood, r.inherent_impact,
+LEFT JOIN risk_controls rc ON r.id = rc.risk_id
+WHERE r.likelihood_inherent IS NOT NULL AND r.impact_inherent IS NOT NULL
+GROUP BY r.id, r.risk_title, r.organization_id, r.likelihood_inherent, r.impact_inherent,
          r.residual_likelihood, r.residual_impact, r.residual_score,
          r.control_effectiveness_percentage, r.residual_last_calculated
 ORDER BY risk_reduction_percentage DESC NULLS LAST;

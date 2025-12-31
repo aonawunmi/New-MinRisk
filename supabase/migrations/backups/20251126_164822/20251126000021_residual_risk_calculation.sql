@@ -274,7 +274,7 @@ SELECT
   COUNT(rc.id) as control_count,
   r.residual_last_calculated
 FROM risks r
-LEFT JOIN risk_controls rc ON r.id = rc.risk_id AND rc.status = 'active'
+LEFT JOIN risk_controls rc ON r.id = rc.risk_id
 WHERE r.inherent_likelihood IS NOT NULL AND r.inherent_impact IS NOT NULL
 GROUP BY r.id, r.title, r.organization_id, r.inherent_likelihood, r.inherent_impact,
          r.residual_likelihood, r.residual_impact, r.residual_score,

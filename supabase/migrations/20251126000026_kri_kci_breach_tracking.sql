@@ -132,12 +132,12 @@ SELECT
   ib.consecutive_breach_count,
   -- Risk context
   r.id as risk_id,
-  r.title as risk_title,
+  r.risk_title,
   r.category as risk_category,
   r.residual_score,
   -- Response
   ib.action_taken,
-  owner.email as action_owner_email,
+  -- owner.email removed
   -- Duration
   ROUND(EXTRACT(EPOCH FROM (NOW() - ib.breach_date)) / 3600, 1) as hours_active,
   CASE
@@ -197,7 +197,7 @@ ORDER BY total_breaches DESC, breaches_per_day DESC;
 CREATE OR REPLACE VIEW breach_resolution_performance_view AS
 SELECT
   ib.organization_id,
-  owner.email as action_owner,
+  -- owner.email removed as action_owner
   -- Breach counts
   COUNT(*) as total_assigned_breaches,
   COUNT(*) FILTER (WHERE ib.status = 'resolved') as resolved_count,
@@ -216,7 +216,7 @@ SELECT
 FROM indicator_breaches ib
 LEFT JOIN user_profiles owner ON ib.action_owner = owner.id
 WHERE ib.action_owner IS NOT NULL
-GROUP BY ib.organization_id, owner.id, owner.email
+GROUP BY ib.organization_id, owner.id
 ORDER BY resolution_rate_pct DESC, avg_resolution_time_hours ASC;
 
 -- View: Indicator Health Dashboard
@@ -320,6 +320,7 @@ CREATE OR REPLACE FUNCTION resolve_breach(
 RETURNS BOOLEAN AS $$
 DECLARE
   v_updated BOOLEAN;
+  v_row_count INTEGER;
 BEGIN
   UPDATE indicator_breaches
   SET
@@ -330,7 +331,8 @@ BEGIN
     updated_at = NOW()
   WHERE id = p_breach_id AND status != 'resolved';
 
-  GET DIAGNOSTICS v_updated = ROW_COUNT > 0;
+  GET DIAGNOSTICS v_row_count = ROW_COUNT;
+  v_updated := (v_row_count > 0);
   RETURN v_updated;
 END;
 $$ LANGUAGE plpgsql;

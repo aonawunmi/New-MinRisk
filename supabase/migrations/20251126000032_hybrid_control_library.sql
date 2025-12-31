@@ -12,7 +12,7 @@
 CREATE TABLE IF NOT EXISTS global_control_library (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   control_code VARCHAR(20) UNIQUE NOT NULL,
-  control_name VARCHAR(255) NOT NULL,
+  control_name VARCHAR(200) NOT NULL,
   control_description TEXT,
   control_type VARCHAR(50), -- preventive, detective, corrective, directive
   control_category VARCHAR(100),
@@ -72,8 +72,8 @@ BEGIN
       control_name,
       control_description,
       control_type,
-      control_category,
-      control_sub_category,
+      NULL as control_category,
+      NULL as control_sub_category,
       COALESCE(design_score, 65) as design_score,
       COALESCE(implementation_score, 65) as implementation_score,
       COALESCE(monitoring_score, 65) as monitoring_score,
@@ -161,7 +161,7 @@ CREATE TABLE IF NOT EXISTS org_controls (
 
   -- Custom/override fields
   control_code VARCHAR(20) NOT NULL,
-  control_name VARCHAR(255) NOT NULL,
+  control_name VARCHAR(200) NOT NULL,
   control_description TEXT,
   control_type VARCHAR(50),
   control_category VARCHAR(100),
@@ -227,7 +227,17 @@ USING (
 -- ============================================================================
 
 -- Backup existing control_library table
-ALTER TABLE IF EXISTS control_library RENAME TO control_library_backup_20251126;
+DROP TABLE IF EXISTS control_library_backup_20251126;
+DROP VIEW IF EXISTS control_library_backup_20251126;
+-- Rename table if it exists
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'control_library') THEN
+    ALTER TABLE control_library RENAME TO control_library_backup_20251126;
+  END IF;
+END $$;
+-- Force drop view if it exists (in case it was a view not a table)
+DROP VIEW IF EXISTS control_library CASCADE;
 
 -- Create unified view
 CREATE OR REPLACE VIEW control_library AS
@@ -303,6 +313,7 @@ WHERE o.is_hidden = false;
 -- ============================================================================
 
 -- DIME Variance View
+DROP VIEW IF EXISTS dime_variance_view;
 CREATE OR REPLACE VIEW dime_variance_view AS
 SELECT
   control_code,
@@ -320,6 +331,7 @@ WHERE is_active = true
 ORDER BY dime_range DESC;
 
 -- Control Maturity View
+DROP VIEW IF EXISTS control_maturity_view;
 CREATE OR REPLACE VIEW control_maturity_view AS
 SELECT
   control_category,
@@ -334,6 +346,30 @@ WHERE is_active = true
 GROUP BY control_category
 ORDER BY overall_maturity DESC;
 
+-- Control Implementation Readiness View
+DROP VIEW IF EXISTS control_implementation_readiness_view;
+CREATE OR REPLACE VIEW control_implementation_readiness_view AS
+SELECT
+  automation_level,
+  complexity_level,
+  COUNT(*) as control_count,
+  ROUND(AVG((design_score + implementation_score + monitoring_score + evaluation_score) / 4.0), 1) as avg_dime,
+  ARRAY_AGG(control_code ORDER BY control_code) as control_codes
+FROM control_library
+WHERE organization_id = '11111111-1111-1111-1111-111111111111' AND status = 'active'
+GROUP BY automation_level, complexity_level
+ORDER BY
+  CASE automation_level
+    WHEN 'Fully-Automated' THEN 1
+    WHEN 'Semi-Automated' THEN 2
+    WHEN 'Manual' THEN 3
+  END,
+  CASE complexity_level
+    WHEN 'Basic' THEN 1
+    WHEN 'Intermediate' THEN 2
+    WHEN 'Advanced' THEN 3
+  END;
+
 -- ============================================================================
 -- PART 7: MIGRATION HELPERS
 -- ============================================================================
@@ -342,7 +378,7 @@ ORDER BY overall_maturity DESC;
 CREATE OR REPLACE FUNCTION add_custom_control(
   p_organization_id UUID,
   p_control_code VARCHAR(20),
-  p_control_name VARCHAR(255),
+  p_control_name VARCHAR(200),
   p_control_description TEXT,
   p_control_type VARCHAR(50),
   p_dime_scores INTEGER[] -- [design, implementation, monitoring, evaluation]
@@ -375,7 +411,7 @@ CREATE OR REPLACE FUNCTION override_control_implementation(
 DECLARE
   v_new_id UUID;
   v_control_code VARCHAR(20);
-  v_control_name VARCHAR(255);
+  v_control_name VARCHAR(200);
 BEGIN
   SELECT control_code, control_name
   INTO v_control_code, v_control_name

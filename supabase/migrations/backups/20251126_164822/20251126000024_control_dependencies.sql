@@ -226,7 +226,7 @@ SELECT DISTINCT
   prereq.timeline as prerequisite_timeline,
   cd.rationale as why_needed
 FROM risks r
-JOIN risk_controls rc ON r.id = rc.risk_id AND rc.status = 'active'
+JOIN risk_controls rc ON r.id = rc.risk_id
 JOIN control_library c ON rc.control_id = c.id
 JOIN control_dependencies cd ON c.id = cd.control_id AND cd.dependency_type = 'prerequisite'
 JOIN control_library prereq ON cd.depends_on_control_id = prereq.id

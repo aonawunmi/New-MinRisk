@@ -59,29 +59,26 @@ import {
   AlertCircle,
   Power,
   PowerOff,
+  Download,
 } from 'lucide-react';
 import { isUserAdmin } from '@/lib/profiles';
+import { getCategories } from '@/lib/taxonomy';
+import { RECOMMENDED_SOURCES, type RecommendedSource } from '@/lib/recommendedSources';
 
-const RSS_CATEGORIES = [
-  { value: 'cybersecurity', label: 'Cybersecurity' },
-  { value: 'regulatory', label: 'Regulatory' },
-  { value: 'market', label: 'Market' },
-  { value: 'operational', label: 'Operational' },
-  { value: 'geopolitical', label: 'Geopolitical' },
-  { value: 'environmental', label: 'Environmental' },
-  { value: 'social', label: 'Social' },
-  { value: 'technology', label: 'Technology' },
-  { value: 'other', label: 'Other' },
-];
+// Categories are now loaded dynamically from taxonomy
+const DEFAULT_CATEGORY = 'cybersecurity';
 
 export default function RssSourceManagement() {
   const [sources, setSources] = useState<RssSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [availableCategories, setAvailableCategories] = useState<{ value: string; label: string }[]>([]);
 
   // Dialog states
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedSource, setSelectedSource] = useState<RssSource | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -96,7 +93,7 @@ export default function RssSourceManagement() {
 
   useEffect(() => {
     checkAdminStatus();
-    loadSources();
+    loadData();
   }, []);
 
   async function checkAdminStatus() {
@@ -104,8 +101,24 @@ export default function RssSourceManagement() {
     setIsAdmin(adminStatus);
   }
 
-  async function loadSources() {
+  async function loadData() {
     setLoading(true);
+
+    // Load taxonomy categories
+    try {
+      const { data: taxCategories } = await getCategories();
+      if (taxCategories) {
+        const formatted = taxCategories.map(c => ({
+          value: c.name.toLowerCase(),
+          label: c.name
+        }));
+        setAvailableCategories(formatted);
+      }
+    } catch (e) {
+      console.error('Failed to load categories', e);
+    }
+
+    // Load sources
     const { data, error } = await getRssSources();
     if (error) {
       alert('Error: Failed to load RSS sources');
@@ -182,7 +195,10 @@ export default function RssSourceManagement() {
       alert('Success: RSS source created successfully');
       setShowAddDialog(false);
       resetForm();
-      loadSources();
+      alert('Success: RSS source created successfully');
+      setShowAddDialog(false);
+      resetForm();
+      loadData();
     }
   }
 
@@ -213,7 +229,9 @@ export default function RssSourceManagement() {
       setShowEditDialog(false);
       setSelectedSource(null);
       resetForm();
-      loadSources();
+      setSelectedSource(null);
+      resetForm();
+      loadData();
     }
   }
 
@@ -230,7 +248,10 @@ export default function RssSourceManagement() {
       alert('Success: RSS source deleted successfully');
       setShowDeleteDialog(false);
       setSelectedSource(null);
-      loadSources();
+      alert('Success: RSS source deleted successfully');
+      setShowDeleteDialog(false);
+      setSelectedSource(null);
+      loadData();
     }
   }
 
@@ -242,7 +263,37 @@ export default function RssSourceManagement() {
       alert(`Error: ${error.message}`);
     } else if (success) {
       alert(`Success: RSS source ${newStatus ? 'activated' : 'deactivated'}`);
-      loadSources();
+      loadData();
+    }
+  }
+
+
+
+  async function handleImport(source: RecommendedSource) {
+    setSubmitting(true);
+    const input: CreateRssSourceInput = {
+      name: source.name,
+      url: source.url,
+      description: source.description,
+      category: [source.category]
+    };
+
+    // Check if exists
+    const exists = sources.some(s => s.url === source.url);
+    if (exists) {
+      alert('Source already exists');
+      setSubmitting(false);
+      return;
+    }
+
+    const { data, error } = await createRssSource(input);
+    setSubmitting(false);
+
+    if (error) {
+      alert('Failed to import: ' + error.message);
+    } else {
+      alert('Imported ' + source.name);
+      loadData();
     }
   }
 
@@ -287,10 +338,16 @@ export default function RssSourceManagement() {
               </CardDescription>
             </div>
             {isAdmin && (
-              <Button onClick={openAddDialog}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add RSS Source
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={() => { console.log('Import Recommended clicked, setting showImportDialog to true'); setShowImportDialog(true); }} variant="outline">
+                  <Download className="h-4 w-4 mr-2" />
+                  Import Recommended
+                </Button>
+                <Button onClick={openAddDialog}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add RSS Source
+                </Button>
+              </div>
             )}
           </div>
         </CardHeader>
@@ -337,7 +394,7 @@ export default function RssSourceManagement() {
                             variant="outline"
                             className={getCategoryBadgeColor(cat)}
                           >
-                            {RSS_CATEGORIES.find((c) => c.value === cat)?.label || cat}
+                            {availableCategories.find((c) => c.value === cat)?.label || cat}
                           </Badge>
                         ))}
                       </div>
@@ -480,7 +537,7 @@ export default function RssSourceManagement() {
             <div>
               <Label>Categories * (select at least one)</Label>
               <div className="grid grid-cols-2 gap-3 mt-2 p-3 border rounded-md bg-gray-50">
-                {RSS_CATEGORIES.map((cat) => (
+                {availableCategories.map((cat) => (
                   <div key={cat.value} className="flex items-center space-x-2">
                     <Checkbox
                       id={`cat-${cat.value}`}
@@ -526,6 +583,79 @@ export default function RssSourceManagement() {
         </DialogContent>
       </Dialog>
 
+      {/* Import Recommended Sources Dialog */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="h-5 w-5" />
+              Import Recommended Sources
+            </DialogTitle>
+            <DialogDescription>
+              Add curated RSS feeds from trusted security and risk news sources. Click "Import" to add a source to your organization.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {Object.entries(
+              RECOMMENDED_SOURCES.reduce((acc, source) => {
+                const cat = source.category;
+                if (!acc[cat]) acc[cat] = [];
+                acc[cat].push(source);
+                return acc;
+              }, {} as Record<string, RecommendedSource[]>)
+            ).map(([category, categorySources]) => (
+              <div key={category} className="space-y-2">
+                <h3 className="text-sm font-semibold capitalize flex items-center gap-2">
+                  <Badge className={getCategoryBadgeColor(category)}>{category}</Badge>
+                </h3>
+                <div className="space-y-2">
+                  {categorySources.map((source) => {
+                    const alreadyExists = sources.some(s => s.url === source.url);
+                    return (
+                      <div
+                        key={source.url}
+                        className="flex items-center justify-between p-3 border rounded-md bg-gray-50 hover:bg-gray-100"
+                      >
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{source.name}</p>
+                          <p className="text-xs text-gray-500 truncate max-w-md">{source.description}</p>
+                        </div>
+                        {alreadyExists ? (
+                          <Badge variant="outline" className="text-green-600 border-green-300">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Added
+                          </Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={() => handleImport(source)}
+                            disabled={submitting}
+                          >
+                            {submitting ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Plus className="h-4 w-4 mr-1" />
+                                Import
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowImportDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Edit RSS Source Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="sm:max-w-[500px]">
@@ -554,7 +684,7 @@ export default function RssSourceManagement() {
             <div>
               <Label>Categories * (select at least one)</Label>
               <div className="grid grid-cols-2 gap-3 mt-2 p-3 border rounded-md bg-gray-50">
-                {RSS_CATEGORIES.map((cat) => (
+                {availableCategories.map((cat) => (
                   <div key={cat.value} className="flex items-center space-x-2">
                     <Checkbox
                       id={`edit-cat-${cat.value}`}
@@ -634,3 +764,4 @@ export default function RssSourceManagement() {
     </div>
   );
 }
+

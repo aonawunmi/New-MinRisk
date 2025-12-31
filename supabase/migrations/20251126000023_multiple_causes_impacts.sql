@@ -168,12 +168,12 @@ CREATE OR REPLACE VIEW risk_decomposition_view AS
 SELECT
   r.id as risk_id,
   r.organization_id,
-  r.title,
-  r.event_description,
+  r.risk_title,
+  r.event_text,
   r.status,
-  r.inherent_likelihood,
-  r.inherent_impact,
-  (r.inherent_likelihood * r.inherent_impact) as inherent_score,
+  r.likelihood_inherent,
+  r.impact_inherent,
+  (r.likelihood_inherent * r.impact_inherent) as inherent_score,
   r.residual_likelihood,
   r.residual_impact,
   r.residual_score,
@@ -186,7 +186,7 @@ SELECT
   -- All root causes (JSON array)
   COALESCE(
     json_agg(
-      DISTINCT jsonb_build_object(
+      jsonb_build_object(
         'cause_code', rc.cause_code,
         'cause_name', rc.cause_name,
         'category', rc.category,
@@ -202,16 +202,16 @@ SELECT
   imp_primary.impact_code as primary_impact_code,
   imp_primary.impact_name as primary_impact_name,
   imp_primary.category as primary_impact_category,
-  imp_primary.severity_level as primary_impact_severity,
+  imp_primary.impact_type as primary_impact_severity,
 
   -- All impacts (JSON array)
   COALESCE(
     json_agg(
-      DISTINCT jsonb_build_object(
+      jsonb_build_object(
         'impact_code', imp.impact_code,
         'impact_name', imp.impact_name,
         'category', imp.category,
-        'severity_level', imp.severity_level,
+        'severity_level', imp.impact_type,
         'is_primary', ri.is_primary,
         'severity_percentage', ri.severity_percentage,
         'rationale', ri.rationale
@@ -244,13 +244,13 @@ LEFT JOIN risk_impacts ri ON r.id = ri.risk_id
 LEFT JOIN impact_register imp ON ri.impact_id = imp.id
 
 -- Controls
-LEFT JOIN risk_controls ctrl ON r.id = ctrl.risk_id AND ctrl.status = 'active'
+LEFT JOIN risk_controls ctrl ON r.id = ctrl.risk_id
 
 GROUP BY
-  r.id, r.title, r.event_description, r.organization_id, r.status,
-  r.inherent_likelihood, r.inherent_impact, r.residual_likelihood, r.residual_impact, r.residual_score,
+  r.id, r.risk_title, r.event_text, r.organization_id, r.status,
+  r.likelihood_inherent, r.impact_inherent, r.residual_likelihood, r.residual_impact, r.residual_score,
   rc_primary.cause_code, rc_primary.cause_name, rc_primary.category,
-  imp_primary.impact_code, imp_primary.impact_name, imp_primary.category, imp_primary.severity_level
+  imp_primary.impact_code, imp_primary.impact_name, imp_primary.category, imp_primary.impact_type
 
 ORDER BY r.created_at DESC;
 
@@ -262,20 +262,20 @@ CREATE OR REPLACE VIEW complex_risks_view AS
 SELECT
   r.id,
   r.organization_id,
-  r.title,
-  r.event_description,
+  r.risk_title,
+  r.event_text,
   COUNT(DISTINCT rrc.id) as root_cause_count,
   COUNT(DISTINCT ri.id) as impact_count,
-  STRING_AGG(DISTINCT rc.cause_code, ', ' ORDER BY rc.cause_code) as all_cause_codes,
-  STRING_AGG(DISTINCT imp.impact_code, ', ' ORDER BY imp.impact_code) as all_impact_codes,
-  r.inherent_score,
+  STRING_AGG(rc.cause_code, ', ' ORDER BY rc.cause_code) as all_cause_codes,
+  STRING_AGG(imp.impact_code, ', ' ORDER BY imp.impact_code) as all_impact_codes,
+  (r.likelihood_inherent * r.impact_inherent),
   r.residual_score
 FROM risks r
 LEFT JOIN risk_root_causes rrc ON r.id = rrc.risk_id
 LEFT JOIN root_cause_register rc ON rrc.root_cause_id = rc.id
 LEFT JOIN risk_impacts ri ON r.id = ri.risk_id
 LEFT JOIN impact_register imp ON ri.impact_id = imp.id
-GROUP BY r.id, r.title, r.event_description, r.organization_id, r.inherent_score, r.residual_score
+GROUP BY r.id, r.risk_title, r.event_text, r.organization_id, (r.likelihood_inherent * r.impact_inherent), r.residual_score
 HAVING COUNT(DISTINCT rrc.id) > 1 OR COUNT(DISTINCT ri.id) > 1
 ORDER BY (COUNT(DISTINCT rrc.id) + COUNT(DISTINCT ri.id)) DESC;
 
@@ -294,7 +294,7 @@ SELECT
   COUNT(rrc.risk_id) FILTER (WHERE rrc.is_primary = true) as primary_in_risks,
   COUNT(rrc.risk_id) FILTER (WHERE rrc.is_primary = false) as contributing_in_risks,
   ROUND(AVG(rrc.contribution_percentage), 1) as avg_contribution_pct,
-  STRING_AGG(DISTINCT r.title, '; ' ORDER BY r.title) FILTER (WHERE rrc.is_primary = true) as primary_risk_titles
+  STRING_AGG(r.risk_title, '; ' ORDER BY r.risk_title) FILTER (WHERE rrc.is_primary = true) as primary_risk_titles
 FROM root_cause_register rc
 LEFT JOIN risk_root_causes rrc ON rc.id = rrc.root_cause_id
 LEFT JOIN risks r ON rrc.risk_id = r.id
@@ -313,17 +313,17 @@ SELECT
   imp.impact_code,
   imp.impact_name,
   imp.category,
-  imp.severity_level,
+  imp.impact_type,
   COUNT(ri.risk_id) as risk_count,
   COUNT(ri.risk_id) FILTER (WHERE ri.is_primary = true) as primary_in_risks,
   COUNT(ri.risk_id) FILTER (WHERE ri.is_primary = false) as secondary_in_risks,
   ROUND(AVG(ri.severity_percentage), 1) as avg_severity_pct,
-  STRING_AGG(DISTINCT r.title, '; ' ORDER BY r.title) FILTER (WHERE ri.is_primary = true) as primary_risk_titles
+  STRING_AGG(r.risk_title, '; ' ORDER BY r.risk_title) FILTER (WHERE ri.is_primary = true) as primary_risk_titles
 FROM impact_register imp
 LEFT JOIN risk_impacts ri ON imp.id = ri.impact_id
 LEFT JOIN risks r ON ri.risk_id = r.id
 WHERE imp.status = 'active'
-GROUP BY imp.id, imp.impact_code, imp.impact_name, imp.category, imp.severity_level, imp.organization_id
+GROUP BY imp.id, imp.impact_code, imp.impact_name, imp.category, imp.impact_type, imp.organization_id
 HAVING COUNT(ri.risk_id) > 0
 ORDER BY risk_count DESC, primary_in_risks DESC;
 

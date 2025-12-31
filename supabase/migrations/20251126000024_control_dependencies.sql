@@ -130,7 +130,6 @@ SELECT
   c.organization_id,
   c.control_code,
   c.control_name,
-  c.category,
   c.complexity,
   -- Dependency details
   cd.dependency_type,
@@ -139,12 +138,11 @@ SELECT
   -- Dependent control
   dc.control_code as depends_on_code,
   dc.control_name as depends_on_name,
-  dc.category as depends_on_category,
   dc.complexity as depends_on_complexity,
   -- Risk context: is the dependent control already implemented?
   EXISTS(
     SELECT 1 FROM risk_controls rc
-    WHERE rc.control_id = dc.id AND rc.status = 'active'
+    WHERE rc.control_id = dc.id
   ) as prerequisite_implemented
 FROM control_library c
 JOIN control_dependencies cd ON c.id = cd.control_id
@@ -158,7 +156,6 @@ SELECT
   c.control_code,
   c.control_name,
   c.organization_id,
-  c.category,
   c.complexity,
   c.cost,
   c.timeline,
@@ -181,7 +178,7 @@ FROM control_library c
 LEFT JOIN control_dependencies cd ON c.id = cd.control_id
 LEFT JOIN control_library dc ON cd.depends_on_control_id = dc.id
 WHERE c.status = 'active'
-GROUP BY c.id, c.control_code, c.control_name, c.organization_id, c.category, c.complexity, c.cost, c.timeline
+GROUP BY c.id, c.control_code, c.control_name, c.organization_id, c.complexity, c.cost, c.timeline
 ORDER BY readiness_status, c.control_code;
 
 -- View: Dependency Graph (for visualization)
@@ -215,18 +212,17 @@ CREATE OR REPLACE VIEW missing_prerequisites_view AS
 SELECT DISTINCT
   r.id as risk_id,
   r.organization_id,
-  r.title as risk_title,
+  r.risk_title as risk_title,
   c.control_code,
   c.control_name as control_applied,
   cd.dependency_strength,
   prereq.control_code as missing_prerequisite_code,
   prereq.control_name as missing_prerequisite_name,
-  prereq.category as prerequisite_category,
   prereq.cost as prerequisite_cost,
   prereq.timeline as prerequisite_timeline,
   cd.rationale as why_needed
 FROM risks r
-JOIN risk_controls rc ON r.id = rc.risk_id AND rc.status = 'active'
+JOIN risk_controls rc ON r.id = rc.risk_id
 JOIN control_library c ON rc.control_id = c.id
 JOIN control_dependencies cd ON c.id = cd.control_id AND cd.dependency_type = 'prerequisite'
 JOIN control_library prereq ON cd.depends_on_control_id = prereq.id
@@ -235,9 +231,8 @@ WHERE prereq.status = 'active'
     SELECT 1 FROM risk_controls rc2
     WHERE rc2.risk_id = r.id
       AND rc2.control_id = prereq.id
-      AND rc2.status = 'active'
   )
-ORDER BY r.organization_id, r.title, cd.dependency_strength, prereq.control_code;
+ORDER BY r.organization_id, r.risk_title, cd.dependency_strength, prereq.control_code;
 
 -- ============================================================================
 -- HELPER FUNCTIONS

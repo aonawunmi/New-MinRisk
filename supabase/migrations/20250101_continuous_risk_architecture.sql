@@ -35,13 +35,13 @@ CREATE POLICY "Users can view their org active period"
 CREATE POLICY "Admins can update their org active period"
   ON active_period FOR UPDATE
   USING (organization_id IN (
-    SELECT organization_id FROM user_profiles WHERE id = auth.uid() AND role = 'admin'
+    SELECT organization_id FROM user_profiles WHERE id = auth.uid() AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
   ));
 
 CREATE POLICY "Admins can insert their org active period"
   ON active_period FOR INSERT
   WITH CHECK (organization_id IN (
-    SELECT organization_id FROM user_profiles WHERE id = auth.uid() AND role = 'admin'
+    SELECT organization_id FROM user_profiles WHERE id = auth.uid() AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
   ));
 
 -- ============================================================================
@@ -193,7 +193,7 @@ CREATE POLICY "Users can view their org period commits"
 CREATE POLICY "Admins can insert period commits"
   ON period_commits FOR INSERT
   WITH CHECK (organization_id IN (
-    SELECT organization_id FROM user_profiles WHERE id = auth.uid() AND role = 'admin'
+    SELECT organization_id FROM user_profiles WHERE id = auth.uid() AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
   ));
 
 -- ============================================================================

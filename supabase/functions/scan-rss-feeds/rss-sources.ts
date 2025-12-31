@@ -12,7 +12,7 @@ export interface RSSSource {
   id?: string; // Database ID (optional for backward compatibility)
   name: string;
   url: string;
-  category: 'regulatory' | 'market' | 'business' | 'cybersecurity' | 'environmental' | 'geopolitical' | 'operational' | 'social' | 'technology' | 'other';
+  category: string[]; // Changed to string[] for dynamic taxonomy
   country?: 'Nigeria' | 'Global'; // Optional for backward compatibility
 }
 
@@ -25,19 +25,19 @@ export const DEFAULT_RSS_SOURCES: RSSSource[] = [
   {
     name: 'Central Bank of Nigeria',
     url: 'https://www.cbn.gov.ng/rss/news.xml',
-    category: 'regulatory',
+    category: ['regulatory'],
     country: 'Nigeria'
   },
   {
     name: 'SEC Nigeria',
     url: 'https://sec.gov.ng/feed/',
-    category: 'regulatory',
+    category: ['regulatory'],
     country: 'Nigeria'
   },
   {
     name: 'FMDQ Group',
     url: 'https://fmdqgroup.com/feed/',
-    category: 'market',
+    category: ['market'],
     country: 'Nigeria'
   },
 
@@ -45,19 +45,19 @@ export const DEFAULT_RSS_SOURCES: RSSSource[] = [
   {
     name: 'BusinessDay Nigeria',
     url: 'https://businessday.ng/feed/',
-    category: 'business',
+    category: ['business'],
     country: 'Nigeria'
   },
   {
     name: 'The Guardian Nigeria',
     url: 'https://guardian.ng/feed/',
-    category: 'business',
+    category: ['business'],
     country: 'Nigeria'
   },
   {
     name: 'Premium Times',
     url: 'https://www.premiumtimesng.com/feed',
-    category: 'business',
+    category: ['business'],
     country: 'Nigeria'
   },
 
@@ -65,13 +65,13 @@ export const DEFAULT_RSS_SOURCES: RSSSource[] = [
   {
     name: 'US-CERT Alerts',
     url: 'https://www.cisa.gov/cybersecurity-advisories/all.xml',
-    category: 'cybersecurity',
+    category: ['cybersecurity'],
     country: 'Global'
   },
   {
     name: 'SANS ISC',
     url: 'https://isc.sans.edu/rssfeed.xml',
-    category: 'cybersecurity',
+    category: ['cybersecurity'],
     country: 'Global'
   },
 
@@ -79,7 +79,7 @@ export const DEFAULT_RSS_SOURCES: RSSSource[] = [
   {
     name: 'UN Environment',
     url: 'https://www.unep.org/news-and-stories/rss.xml',
-    category: 'environmental',
+    category: ['environmental'],
     country: 'Global'
   },
 ];
@@ -123,7 +123,9 @@ export async function getRSSSources(
       id: source.id,
       name: source.name,
       url: source.url,
-      category: source.category as RSSSource['category'],
+      // Return category as array (now supported dynamically)
+      category: source.category || ['other'],
+      country: 'Global' // Default for now since DB table doesn't have country column yet
     }));
   } catch (error) {
     console.error('❌ Exception loading RSS sources:', error);

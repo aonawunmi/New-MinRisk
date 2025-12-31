@@ -23,6 +23,26 @@ CREATE TABLE IF NOT EXISTS risk_controls (
   UNIQUE(risk_id, control_id)
 );
 
+-- Ensure columns exist if table was created by earlier migration
+ALTER TABLE risk_controls
+  ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'planned')),
+  ADD COLUMN IF NOT EXISTS implementation_date DATE,
+  ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+-- Backfill organization_id from risks table if it's NULL (for existing records)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'risk_controls' AND column_name = 'organization_id') THEN
+    UPDATE risk_controls rc
+    SET organization_id = r.organization_id
+    FROM risks r
+    WHERE rc.risk_id = r.id
+      AND rc.organization_id IS NULL;
+  END IF;
+END $$;
+
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_risk_controls_risk ON risk_controls(risk_id);
 CREATE INDEX IF NOT EXISTS idx_risk_controls_control ON risk_controls(control_id);
@@ -140,16 +160,19 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Triggers to auto-update residual risk when controls change
+DROP TRIGGER IF EXISTS trigger_update_residual_on_control_add ON risk_controls;
 CREATE TRIGGER trigger_update_residual_on_control_add
   AFTER INSERT ON risk_controls
   FOR EACH ROW
   EXECUTE FUNCTION update_risk_residual();
 
+DROP TRIGGER IF EXISTS trigger_update_residual_on_control_remove ON risk_controls;
 CREATE TRIGGER trigger_update_residual_on_control_remove
   AFTER DELETE ON risk_controls
   FOR EACH ROW
   EXECUTE FUNCTION update_risk_residual();
 
+DROP TRIGGER IF EXISTS trigger_update_residual_on_control_update ON risk_controls;
 CREATE TRIGGER trigger_update_residual_on_control_update
   AFTER UPDATE ON risk_controls
   FOR EACH ROW
@@ -157,6 +180,8 @@ CREATE TRIGGER trigger_update_residual_on_control_update
   EXECUTE FUNCTION update_risk_residual();
 
 -- Create view for residual risk analysis
+-- Create view for residual risk analysis
+DROP VIEW IF EXISTS residual_risk_view;
 CREATE OR REPLACE VIEW residual_risk_view AS
 SELECT
   r.id,
@@ -231,6 +256,8 @@ USING (
 );
 
 -- View for controls due for testing
+-- View for controls due for testing
+DROP VIEW IF EXISTS controls_due_for_testing_view;
 CREATE OR REPLACE VIEW controls_due_for_testing_view AS
 SELECT
   c.control_code,
@@ -318,6 +345,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_single_primary_cause ON risk_root_causes;
 CREATE TRIGGER trigger_single_primary_cause
   BEFORE INSERT OR UPDATE ON risk_root_causes
   FOR EACH ROW
@@ -338,6 +366,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_single_primary_impact ON risk_impacts;
 CREATE TRIGGER trigger_single_primary_impact
   BEFORE INSERT OR UPDATE ON risk_impacts
   FOR EACH ROW
@@ -345,6 +374,8 @@ CREATE TRIGGER trigger_single_primary_impact
   EXECUTE FUNCTION enforce_single_primary_impact();
 
 -- Comprehensive risk decomposition view
+-- Comprehensive risk decomposition view
+DROP VIEW IF EXISTS risk_decomposition_view;
 CREATE OR REPLACE VIEW risk_decomposition_view AS
 SELECT
   r.id,
@@ -538,6 +569,8 @@ USING (
 );
 
 -- View for active breaches
+-- View for active breaches
+DROP VIEW IF EXISTS active_breaches_view;
 CREATE OR REPLACE VIEW active_breaches_view AS
 SELECT
   b.id,
@@ -599,6 +632,8 @@ USING (
 );
 
 -- View for pending suggestions
+-- View for pending suggestions
+DROP VIEW IF EXISTS pending_suggestions_view;
 CREATE OR REPLACE VIEW pending_suggestions_view AS
 SELECT
   s.id,

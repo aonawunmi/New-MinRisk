@@ -92,23 +92,25 @@ CREATE INDEX IF NOT EXISTS idx_exception_next_review ON risk_tolerance_exception
 -- ============================================================================
 -- POPULATE DEFAULT RISK APPETITE STATEMENTS
 -- ============================================================================
+-- COMMENTED OUT: Seed data requires valid organization ID
+-- Uncomment and replace '11111111-1111-1111-1111-111111111111' with actual org ID
 
-INSERT INTO risk_appetite_statements (
-  organization_id, risk_category, appetite_statement, appetite_level,
-  max_acceptable_likelihood, max_acceptable_impact, max_acceptable_score,
-  escalation_threshold, board_tolerance, review_frequency
-) VALUES
-('11111111-1111-1111-1111-111111111111', 'Financial Risk', 'We maintain a risk-cautious approach to financial risks, accepting minor variances but escalating material exposures. Board approval required for residual risks >15.', 'Risk Cautious', 3, 4, 12, 12, 15, 'Quarterly'),
-('11111111-1111-1111-1111-111111111111', 'Operational Risk', 'We accept moderate operational risks that support innovation, but require strong controls for critical systems. Residual risks >12 require escalation.', 'Risk Balanced', 3, 4, 12, 12, 15, 'Quarterly'),
-('11111111-1111-1111-1111-111111111111', 'Compliance & Legal Risk', 'We have minimal appetite for compliance and legal risks. All regulatory breaches escalated to board. Board tolerance capped at 9.', 'Risk Averse', 2, 3, 6, 6, 9, 'Quarterly'),
-('11111111-1111-1111-1111-111111111111', 'Technology & Cyber Risk', 'We accept necessary technology risks to remain competitive, but maintain strong cybersecurity posture. Critical vulnerabilities escalated immediately.', 'Risk Balanced', 3, 4, 12, 12, 15, 'Quarterly'),
-('11111111-1111-1111-1111-111111111111', 'Strategic Risk', 'We accept calculated strategic risks aligned with growth objectives, with board oversight for transformational initiatives. Board tolerance at 16.', 'Risk Seeking', 4, 4, 16, 12, 16, 'Semi-Annual'),
-('11111111-1111-1111-1111-111111111111', 'Governance & Reputational Risk', 'We have low tolerance for reputational damage and governance failures. Board approval required for risks >9.', 'Risk Cautious', 2, 4, 8, 8, 9, 'Quarterly'),
-('11111111-1111-1111-1111-111111111111', 'ESG & Sustainability Risk', 'We have minimal appetite for environmental and social risks that could harm stakeholders or communities.', 'Risk Averse', 2, 3, 6, 6, 9, 'Annual'),
-('11111111-1111-1111-1111-111111111111', 'Supply Chain & Logistics Risk', 'We accept moderate supply chain risks but require contingency planning for critical dependencies.', 'Risk Balanced', 3, 3, 9, 9, 12, 'Semi-Annual'),
-('11111111-1111-1111-1111-111111111111', 'Human Capital Risk', 'We maintain balanced approach to people risks, investing in retention and development while accepting natural attrition.', 'Risk Balanced', 3, 3, 9, 9, 12, 'Annual'),
-('11111111-1111-1111-1111-111111111111', 'Project & Programme Risk', 'We accept project risks within budget and timeline tolerances, with escalation for strategic programs.', 'Risk Balanced', 3, 4, 12, 10, 12, 'Quarterly')
-ON CONFLICT (organization_id, risk_category) DO NOTHING;
+-- INSERT INTO risk_appetite_statements (
+--   organization_id, risk_category, appetite_statement, appetite_level,
+--   max_acceptable_likelihood, max_acceptable_impact, max_acceptable_score,
+--   escalation_threshold, board_tolerance, review_frequency
+-- ) VALUES
+-- ('11111111-1111-1111-1111-111111111111', 'Financial Risk', 'We maintain a risk-cautious approach to financial risks, accepting minor variances but escalating material exposures. Board approval required for residual risks >15.', 'Risk Cautious', 3, 4, 12, 12, 15, 'Quarterly'),
+-- ('11111111-1111-1111-1111-111111111111', 'Operational Risk', 'We accept moderate operational risks that support innovation, but require strong controls for critical systems. Residual risks >12 require escalation.', 'Risk Balanced', 3, 4, 12, 12, 15, 'Quarterly'),
+-- ('11111111-1111-1111-1111-111111111111', 'Compliance & Legal Risk', 'We have minimal appetite for compliance and legal risks. All regulatory breaches escalated to board. Board tolerance capped at 9.', 'Risk Averse', 2, 3, 6, 6, 9, 'Quarterly'),
+-- ('11111111-1111-1111-1111-111111111111', 'Technology & Cyber Risk', 'We accept necessary technology risks to remain competitive, but maintain strong cybersecurity posture. Critical vulnerabilities escalated immediately.', 'Risk Balanced', 3, 4, 12, 12, 15, 'Quarterly'),
+-- ('11111111-1111-1111-1111-111111111111', 'Strategic Risk', 'We accept calculated strategic risks aligned with growth objectives, with board oversight for transformational initiatives. Board tolerance at 16.', 'Risk Seeking', 4, 4, 16, 12, 16, 'Semi-Annual'),
+-- ('11111111-1111-1111-1111-111111111111', 'Governance & Reputational Risk', 'We have low tolerance for reputational damage and governance failures. Board approval required for risks >9.', 'Risk Cautious', 2, 4, 8, 8, 9, 'Quarterly'),
+-- ('11111111-1111-1111-1111-111111111111', 'ESG & Sustainability Risk', 'We have minimal appetite for environmental and social risks that could harm stakeholders or communities.', 'Risk Averse', 2, 3, 6, 6, 9, 'Annual'),
+-- ('11111111-1111-1111-1111-111111111111', 'Supply Chain & Logistics Risk', 'We accept moderate supply chain risks but require contingency planning for critical dependencies.', 'Risk Balanced', 3, 3, 9, 9, 12, 'Semi-Annual'),
+-- ('11111111-1111-1111-1111-111111111111', 'Human Capital Risk', 'We maintain balanced approach to people risks, investing in retention and development while accepting natural attrition.', 'Risk Balanced', 3, 3, 9, 9, 12, 'Annual'),
+-- ('11111111-1111-1111-1111-111111111111', 'Project & Programme Risk', 'We accept project risks within budget and timeline tolerances, with escalation for strategic programs.', 'Risk Balanced', 3, 4, 12, 10, 12, 'Quarterly')
+-- ON CONFLICT (organization_id, risk_category) DO NOTHING;
 
 -- ============================================================================
 -- TRIGGER: Auto-expire Exceptions
@@ -139,12 +141,12 @@ CREATE OR REPLACE VIEW risks_exceeding_appetite_view AS
 SELECT
   r.id as risk_id,
   r.organization_id,
-  r.title,
+  r.risk_title,
   r.category,
   r.status,
-  r.inherent_likelihood,
-  r.inherent_impact,
-  (r.inherent_likelihood * r.inherent_impact) as inherent_score,
+  r.likelihood_inherent,
+  r.impact_inherent,
+  (r.likelihood_inherent * r.impact_inherent) as inherent_score,
   r.residual_likelihood,
   r.residual_impact,
   r.residual_score,
@@ -169,7 +171,7 @@ FROM risks r
 LEFT JOIN risk_appetite_statements ras ON r.category = ras.risk_category AND r.organization_id = ras.organization_id
 LEFT JOIN risk_tolerance_exceptions rte ON r.id = rte.risk_id AND rte.status = 'approved'
 WHERE r.residual_score > COALESCE(ras.max_acceptable_score, 12)
-   OR (r.inherent_likelihood * r.inherent_impact) > COALESCE(ras.board_tolerance, 15)
+   OR (r.likelihood_inherent * r.impact_inherent) > COALESCE(ras.board_tolerance, 15)
 ORDER BY r.residual_score DESC;
 
 -- View: Risk Appetite Dashboard
@@ -213,7 +215,7 @@ CREATE OR REPLACE VIEW exception_management_view AS
 SELECT
   rte.id as exception_id,
   rte.organization_id,
-  r.title as risk_title,
+  r.risk_title as risk_title,
   r.category as risk_category,
   r.residual_score,
   rte.status,
@@ -221,10 +223,8 @@ SELECT
   rte.business_justification,
   rte.compensating_controls,
   -- Requestor
-  req.email as requested_by_email,
   rte.requested_at,
   -- Approver
-  app.email as approved_by_email,
   rte.approved_at,
   -- Validity
   rte.valid_from,
@@ -303,6 +303,7 @@ CREATE OR REPLACE FUNCTION approve_risk_exception(
 RETURNS BOOLEAN AS $$
 DECLARE
   v_updated BOOLEAN;
+  v_row_count INTEGER;
 BEGIN
   UPDATE risk_tolerance_exceptions
   SET
@@ -312,7 +313,8 @@ BEGIN
     updated_at = NOW()
   WHERE id = p_exception_id AND status = 'pending';
 
-  GET DIAGNOSTICS v_updated = ROW_COUNT > 0;
+  GET DIAGNOSTICS v_row_count = ROW_COUNT;
+  v_updated := (v_row_count > 0);
   RETURN v_updated;
 END;
 $$ LANGUAGE plpgsql;

@@ -82,7 +82,7 @@ CREATE POLICY control_admin_update_policy ON control_library
   USING (
     organization_id IN (
       SELECT organization_id FROM user_profiles
-      WHERE id = auth.uid() AND role = 'admin'
+      WHERE id = auth.uid() AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
     )
   );
 
@@ -92,7 +92,7 @@ CREATE POLICY control_admin_delete_policy ON control_library
   USING (
     organization_id IN (
       SELECT organization_id FROM user_profiles
-      WHERE id = auth.uid() AND role = 'admin'
+      WHERE id = auth.uid() AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
     )
   );
 

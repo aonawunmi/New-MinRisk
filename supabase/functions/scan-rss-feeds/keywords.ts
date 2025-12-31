@@ -6,7 +6,13 @@
  * Ported from old MinRisk scan-news.js (lines 534-650)
  */
 
-export const KEYWORD_CATEGORIES = {
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// Define dynamic type for keywords map
+export type KeywordsMap = Record<string, string[]>;
+
+export const KEYWORD_CATEGORIES: KeywordsMap = {
+  // ... (keep existing hardcoded values as fallback) ...
   // ========== CYBERSECURITY RISKS (40+ keywords) ==========
   cybersecurity: [
     // Malware & Attacks
@@ -103,6 +109,57 @@ export const KEYWORD_CATEGORIES = {
 };
 
 /**
+ * Get keywords from database with fallback to defaults
+ * @param supabase - Supabase client
+ * @param organizationId - Organization ID
+ * @returns Categorized keywords object
+ */
+export async function getKeywords(
+  supabase: SupabaseClient,
+  organizationId: string
+): Promise<KeywordsMap> {
+  try {
+    console.log(`🔍 Loading risk keywords from database for org: ${organizationId}`);
+
+    const { data: keywords, error } = await supabase
+      .from('risk_keywords')
+      .select('keyword, category')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true);
+
+    if (error) {
+      console.error('❌ Failed to load keywords from database:', error);
+      return KEYWORD_CATEGORIES;
+    }
+
+    if (!keywords || keywords.length === 0) {
+      console.log('⚠️  No active keywords found in database, using defaults');
+      return KEYWORD_CATEGORIES;
+    }
+
+    console.log(`✅ Loaded ${keywords.length} custom keywords from database`);
+
+    // Initialize as empty dynamic object
+    const newCategories: KeywordsMap = {};
+
+    // Populate from DB
+    keywords.forEach((k: any) => {
+      const cat = k.category;
+      if (!newCategories[cat]) {
+        newCategories[cat] = [];
+      }
+      newCategories[cat].push(k.keyword);
+    });
+
+    return newCategories;
+
+  } catch (error) {
+    console.error('❌ Exception loading keywords:', error);
+    return KEYWORD_CATEGORIES;
+  }
+}
+
+/**
  * Default risk-related keywords for basic filtering
  * Used as fallback if database query fails
  */
@@ -133,10 +190,15 @@ export function extractKeywords(text: string, keywords: string[]): string[] {
  * Check if text matches any keyword in a category
  * @param text - Text to check
  * @param category - Category name (cybersecurity, regulatory, etc.)
+ * @param categories - Keyword categories object (optional, defaults to static list)
  * @returns True if any keyword matches, false otherwise
  */
-export function matchesCategory(text: string, category: keyof typeof KEYWORD_CATEGORIES): boolean {
-  const keywords = KEYWORD_CATEGORIES[category];
+export function matchesCategory(
+  text: string,
+  category: string,
+  categories: KeywordsMap = KEYWORD_CATEGORIES
+): boolean {
+  const keywords = categories[category];
   if (!keywords) return false;
 
   const lowerText = text.toLowerCase();
@@ -145,12 +207,15 @@ export function matchesCategory(text: string, category: keyof typeof KEYWORD_CAT
 
 /**
  * Get all keywords as a flat array
+ * @param categories - Keyword categories object (optional, defaults to static list)
  * @returns All keywords across all categories
  */
-export function getAllKeywords(): string[] {
+export function getAllKeywords(
+  categories: KeywordsMap = KEYWORD_CATEGORIES
+): string[] {
   const allKeywords: string[] = [];
-  for (const category in KEYWORD_CATEGORIES) {
-    allKeywords.push(...KEYWORD_CATEGORIES[category as keyof typeof KEYWORD_CATEGORIES]);
+  for (const category in categories) {
+    allKeywords.push(...(categories[category] || []));
   }
   return allKeywords;
 }
@@ -158,12 +223,16 @@ export function getAllKeywords(): string[] {
 /**
  * Get matched categories for given text
  * @param text - Text to analyze
+ * @param categories - Keyword categories object (optional, defaults to static list)
  * @returns Array of category names that matched
  */
-export function getMatchedCategories(text: string): string[] {
+export function getMatchedCategories(
+  text: string,
+  categories: KeywordsMap = KEYWORD_CATEGORIES
+): string[] {
   const matched: string[] = [];
-  for (const category in KEYWORD_CATEGORIES) {
-    if (matchesCategory(text, category as keyof typeof KEYWORD_CATEGORIES)) {
+  for (const category in categories) {
+    if (matchesCategory(text, category, categories)) {
       matched.push(category);
     }
   }
@@ -174,10 +243,14 @@ export function getMatchedCategories(text: string): string[] {
  * Calculate keyword match score (0-100)
  * Higher score = more keywords matched
  * @param text - Text to analyze
+ * @param categories - Keyword categories object (optional, defaults to static list)
  * @returns Score from 0-100
  */
-export function calculateKeywordScore(text: string): number {
-  const allKeywords = getAllKeywords();
+export function calculateKeywordScore(
+  text: string,
+  categories: KeywordsMap = KEYWORD_CATEGORIES
+): number {
+  const allKeywords = getAllKeywords(categories);
   const matchedKeywords = extractKeywords(text, allKeywords);
 
   if (matchedKeywords.length === 0) return 0;

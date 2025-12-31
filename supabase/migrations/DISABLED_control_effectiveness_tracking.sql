@@ -131,6 +131,7 @@ CREATE OR REPLACE FUNCTION update_control_from_test_results(p_test_id UUID)
 RETURNS BOOLEAN AS $$
 DECLARE
   v_test RECORD;
+  v_row_count INTEGER;
   v_updated BOOLEAN := FALSE;
 BEGIN
   -- Get test results
@@ -152,7 +153,8 @@ BEGIN
     updated_at = NOW()
   WHERE id = v_test.control_id AND organization_id = v_test.organization_id;
 
-  GET DIAGNOSTICS v_updated = ROW_COUNT > 0;
+  GET DIAGNOSTICS v_row_count = ROW_COUNT;
+  v_updated := (v_row_count > 0);
 
   RETURN v_updated;
 END;

@@ -42,13 +42,13 @@ CREATE TABLE incidents (
   data_breach BOOLEAN DEFAULT FALSE,
 
   -- Root Cause Analysis
-  root_cause_id UUID REFERENCES root_cause_register(id),
+  root_cause_id UUID, -- References root_cause_register view (cannot use FK)
   root_cause_description TEXT,
   contributing_factors TEXT[],
 
   -- Assignment & Ownership
-  reported_by UUID REFERENCES users(id),
-  assigned_to UUID REFERENCES users(id),
+  reported_by UUID REFERENCES user_profiles(id),
+  assigned_to UUID REFERENCES user_profiles(id),
   investigated_by UUID[], -- Array of user IDs
 
   -- Resolution
@@ -64,7 +64,7 @@ CREATE TABLE incidents (
   regulatory_reference VARCHAR(100),
 
   -- Audit Trail
-  created_by UUID NOT NULL REFERENCES users(id),
+  created_by UUID NOT NULL REFERENCES user_profiles(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
@@ -86,7 +86,7 @@ CREATE TABLE incident_risk_links (
   link_type VARCHAR(50) NOT NULL DEFAULT 'materialized', -- 'materialized', 'near_miss', 'control_failure'
   notes TEXT,
   linked_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  linked_by UUID REFERENCES users(id),
+  linked_by UUID REFERENCES user_profiles(id),
 
   -- Prevent duplicate links
   UNIQUE(incident_id, risk_id)
@@ -107,8 +107,20 @@ CREATE INDEX idx_incident_risk_links_incident_id ON incident_risk_links(incident
 CREATE INDEX idx_incident_risk_links_risk_id ON incident_risk_links(risk_id);
 
 -- =====================================================
+-- FUNCTION: Update updated_at timestamp (if not exists)
+-- =====================================================
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =====================================================
 -- TRIGGER: Update updated_at timestamp
 -- =====================================================
+DROP TRIGGER IF EXISTS update_incidents_updated_at ON incidents;
 CREATE TRIGGER update_incidents_updated_at
   BEFORE UPDATE ON incidents
   FOR EACH ROW
@@ -124,14 +136,14 @@ ALTER TABLE incident_risk_links ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view incidents in their org"
   ON incidents FOR SELECT
   USING (org_id IN (
-    SELECT org_id FROM users WHERE id = auth.uid()
+    SELECT organization_id FROM user_profiles WHERE id = auth.uid()
   ));
 
 -- Policy: Users can create incidents in their organization
 CREATE POLICY "Users can create incidents in their org"
   ON incidents FOR INSERT
   WITH CHECK (
-    org_id IN (SELECT org_id FROM users WHERE id = auth.uid())
+    org_id IN (SELECT organization_id FROM user_profiles WHERE id = auth.uid())
     AND created_by = auth.uid()
   );
 
@@ -139,14 +151,14 @@ CREATE POLICY "Users can create incidents in their org"
 CREATE POLICY "Users can update incidents in their org"
   ON incidents FOR UPDATE
   USING (org_id IN (
-    SELECT org_id FROM users WHERE id = auth.uid()
+    SELECT organization_id FROM user_profiles WHERE id = auth.uid()
   ));
 
 -- Policy: Users can delete incidents in their organization (admins only via app logic)
 CREATE POLICY "Users can delete incidents in their org"
   ON incidents FOR DELETE
   USING (org_id IN (
-    SELECT org_id FROM users WHERE id = auth.uid()
+    SELECT organization_id FROM user_profiles WHERE id = auth.uid()
   ));
 
 -- Policy: Users can view incident-risk links in their organization
@@ -154,7 +166,7 @@ CREATE POLICY "Users can view incident-risk links in their org"
   ON incident_risk_links FOR SELECT
   USING (incident_id IN (
     SELECT id FROM incidents WHERE org_id IN (
-      SELECT org_id FROM users WHERE id = auth.uid()
+      SELECT organization_id FROM user_profiles WHERE id = auth.uid()
     )
   ));
 
@@ -163,7 +175,7 @@ CREATE POLICY "Users can create incident-risk links in their org"
   ON incident_risk_links FOR INSERT
   WITH CHECK (incident_id IN (
     SELECT id FROM incidents WHERE org_id IN (
-      SELECT org_id FROM users WHERE id = auth.uid()
+      SELECT organization_id FROM user_profiles WHERE id = auth.uid()
     )
   ));
 
@@ -172,7 +184,7 @@ CREATE POLICY "Users can update incident-risk links in their org"
   ON incident_risk_links FOR UPDATE
   USING (incident_id IN (
     SELECT id FROM incidents WHERE org_id IN (
-      SELECT org_id FROM users WHERE id = auth.uid()
+      SELECT organization_id FROM user_profiles WHERE id = auth.uid()
     )
   ));
 
@@ -181,7 +193,7 @@ CREATE POLICY "Users can delete incident-risk links in their org"
   ON incident_risk_links FOR DELETE
   USING (incident_id IN (
     SELECT id FROM incidents WHERE org_id IN (
-      SELECT org_id FROM users WHERE id = auth.uid()
+      SELECT organization_id FROM user_profiles WHERE id = auth.uid()
     )
   ));
 
@@ -234,7 +246,7 @@ SELECT
   -- Array of linked risk IDs
   ARRAY_AGG(DISTINCT irl.risk_id) FILTER (WHERE irl.risk_id IS NOT NULL) AS linked_risk_ids,
   -- Array of linked risk titles
-  ARRAY_AGG(DISTINCT r.title) FILTER (WHERE r.id IS NOT NULL) AS linked_risk_titles
+  ARRAY_AGG(DISTINCT r.risk_title) FILTER (WHERE r.id IS NOT NULL) AS linked_risk_titles
 FROM incidents i
 LEFT JOIN incident_risk_links irl ON i.id = irl.incident_id
 LEFT JOIN risks r ON irl.risk_id = r.id

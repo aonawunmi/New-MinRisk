@@ -107,7 +107,7 @@ CREATE POLICY root_cause_mapping_admin_policy ON root_cause_control_mapping
   USING (
     organization_id IN (
       SELECT organization_id FROM user_profiles
-      WHERE id = auth.uid() AND role = 'admin'
+      WHERE id = auth.uid() AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
     )
   );
 
@@ -116,7 +116,7 @@ CREATE POLICY impact_mapping_admin_policy ON impact_control_mapping
   USING (
     organization_id IN (
       SELECT organization_id FROM user_profiles
-      WHERE id = auth.uid() AND role = 'admin'
+      WHERE id = auth.uid() AND role IN ('primary_admin', 'secondary_admin', 'super_admin')
     )
   );
 

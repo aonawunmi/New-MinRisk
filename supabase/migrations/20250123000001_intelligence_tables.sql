@@ -29,7 +29,22 @@ CREATE TABLE IF NOT EXISTS risk_intelligence_alerts (
   reviewed_at TIMESTAMPTZ,
   applied_to_risk BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  CONSTRAINT fk_risk FOREIGN KEY (risk_code) REFERENCES risks(risk_code) ON DELETE CASCADE
+  CONSTRAINT fk_risk FOREIGN KEY (organization_id, risk_code) REFERENCES risks(organization_id, risk_code) ON DELETE CASCADE
+);
+
+-- Create risk_intelligence_treatment_log (Missing in original file)
+CREATE TABLE IF NOT EXISTS risk_intelligence_treatment_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  alert_id UUID NOT NULL REFERENCES risk_intelligence_alerts(id) ON DELETE CASCADE,
+  risk_code TEXT NOT NULL,
+  action_taken TEXT NOT NULL CHECK (action_taken IN ('accept', 'reject')),
+  previous_likelihood INTEGER,
+  new_likelihood INTEGER,
+  previous_impact INTEGER,
+  new_impact INTEGER,
+  notes TEXT,
+  applied_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Create indexes for better performance
@@ -40,9 +55,14 @@ CREATE INDEX IF NOT EXISTS idx_alerts_status ON risk_intelligence_alerts(status)
 CREATE INDEX IF NOT EXISTS idx_alerts_event ON risk_intelligence_alerts(event_id);
 CREATE INDEX IF NOT EXISTS idx_alerts_risk ON risk_intelligence_alerts(risk_code);
 
+-- Indexes for treatment log
+CREATE INDEX IF NOT EXISTS idx_treatment_log_alert ON risk_intelligence_treatment_log(alert_id);
+CREATE INDEX IF NOT EXISTS idx_treatment_log_risk ON risk_intelligence_treatment_log(risk_code);
+
 -- Enable RLS
 ALTER TABLE external_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE risk_intelligence_alerts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE risk_intelligence_treatment_log ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for external_events
 DROP POLICY IF EXISTS "Users can view external events from their organization" ON external_events;
@@ -117,3 +137,30 @@ CREATE POLICY "Users can delete intelligence alerts from their organization"
       SELECT organization_id FROM user_profiles WHERE id = auth.uid()
     )
   );
+
+-- RLS Policies for risk_intelligence_treatment_log
+DO $$ BEGIN
+CREATE POLICY "Users can view treatment logs from their organization"
+  ON risk_intelligence_treatment_log FOR SELECT
+  USING (
+    alert_id IN (
+        SELECT id FROM risk_intelligence_alerts
+        WHERE organization_id IN (
+            SELECT organization_id FROM user_profiles WHERE id = auth.uid()
+        )
+    )
+  );
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+CREATE POLICY "Users can insert treatment logs for their organization"
+  ON risk_intelligence_treatment_log FOR INSERT
+  WITH CHECK (
+    alert_id IN (
+        SELECT id FROM risk_intelligence_alerts
+        WHERE organization_id IN (
+            SELECT organization_id FROM user_profiles WHERE id = auth.uid()
+        )
+    )
+  );
+EXCEPTION WHEN duplicate_object THEN null; END $$;

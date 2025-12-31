@@ -49,6 +49,8 @@ import {
 } from '@/components/ui/table';
 import RssSourceManagement from './RssSourceManagement';
 
+import KeywordManagement from './KeywordManagement';
+
 export default function RiskIntelligenceManagement() {
   const [showGuide, setShowGuide] = useState(false);
 
@@ -98,9 +100,6 @@ export default function RiskIntelligenceManagement() {
                   <span className="font-semibold text-blue-600 min-w-[24px]">4.</span>
                   <p><strong>Take Action:</strong> ✅ Accept alert to automatically update risk, or ❌ Reject to dismiss. All changes are tracked in treatment history.</p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-blue-200">
-                  <p className="text-xs text-gray-600"><strong>Admin privileges required:</strong> Manually trigger scans, add custom events, manage RSS sources, and cleanup duplicates.</p>
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -112,6 +111,7 @@ export default function RiskIntelligenceManagement() {
           <TabsTrigger value="events">🌐 External Events</TabsTrigger>
           <TabsTrigger value="alerts">🔔 Intelligence Alerts</TabsTrigger>
           <TabsTrigger value="rss-sources">📡 RSS Sources</TabsTrigger>
+          <TabsTrigger value="keywords">🏷️ Risk Keywords</TabsTrigger>
         </TabsList>
 
         <TabsContent value="events" className="mt-6">
@@ -124,6 +124,10 @@ export default function RiskIntelligenceManagement() {
 
         <TabsContent value="rss-sources" className="mt-6">
           <RssSourceManagement />
+        </TabsContent>
+
+        <TabsContent value="keywords" className="mt-6">
+          <KeywordManagement />
         </TabsContent>
       </Tabs>
     </div>
@@ -603,13 +607,13 @@ function EventsFeed() {
       {scanMessage && (
         <Alert className={
           scanMessage.type === 'success' ? 'border-green-200 bg-green-50' :
-          scanMessage.type === 'error' ? 'border-red-200 bg-red-50' :
-          'border-blue-200 bg-blue-50'
+            scanMessage.type === 'error' ? 'border-red-200 bg-red-50' :
+              'border-blue-200 bg-blue-50'
         }>
           <AlertDescription className={
             scanMessage.type === 'success' ? 'text-green-800' :
-            scanMessage.type === 'error' ? 'text-red-800' :
-            'text-blue-800'
+              scanMessage.type === 'error' ? 'text-red-800' :
+                'text-blue-800'
           }>
             {scanMessage.text}
           </AlertDescription>
@@ -665,9 +669,9 @@ function EventsFeed() {
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <Trash2 className="h-4 w-4" />
-                        )}
-                      </Button>
-                    )}
+                          )}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>

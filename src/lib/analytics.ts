@@ -745,7 +745,18 @@ export async function getEnhancedHeatmapData(matrixSize: 5 | 6 = 5): Promise<{
         status,
         owner,
         likelihood_inherent,
-        impact_inherent
+        impact_inherent,
+        organization_id,
+        user_id,
+        owner_profile_id,
+        risk_description,
+        division,
+        department,
+        category,
+        period,
+        is_priority,
+        created_at,
+        updated_at
       `);
 
     if (risksError) {
@@ -782,8 +793,8 @@ export async function getEnhancedHeatmapData(matrixSize: 5 | 6 = 5): Promise<{
     // Populate matrix with risk data
     if (risks && risks.length > 0) {
       // Calculate residual risk for all risks
-      const risksWithResidual = await Promise.all(
-        risks.map(async (risk) => {
+      const risksWithResidual: any[] = await Promise.all(
+        risks.map(async (risk: any) => {
           const { data: residualData } = await calculateResidualRisk(
             risk.id,
             risk.likelihood_inherent,
@@ -877,5 +888,115 @@ export async function getEnhancedHeatmapData(matrixSize: 5 | 6 = 5): Promise<{
       data: null,
       error: err instanceof Error ? err : new Error('Unknown error'),
     };
+  }
+}
+
+
+// ============================================================================
+// RISK PROFILE SUMMARY
+// ============================================================================
+
+export interface RiskProfileSummary {
+  category: string;
+  avg_likelihood: number;
+  avg_impact: number;
+  avg_severity: number;
+  risk_count: number; // Added field
+  previous_severity?: number | null;
+  trend?: 'up' | 'down' | 'unchanged' | 'new';
+}
+
+/**
+ * Get aggregated risk profile summary by category
+ */
+export async function getRiskProfileSummary(
+  period?: string | null,
+  orgId?: string
+): Promise<{
+  data: RiskProfileSummary[] | null;
+  error: Error | null;
+}> {
+  try {
+    // 1. Fetch CURRENT (or selected period) risks
+    let currentRisks: any[] = [];
+
+    // Logic to fetch risks similar to getHeatmapData...
+    // For now, let's assume we are fetching "current" state unless period is specified differently
+    // Reuse the logic from getHeatmapData broadly but for category aggregation
+
+    const { data: risks, error } = await supabase
+      .from('risks')
+      .select('category, likelihood_inherent, impact_inherent, residual_likelihood, residual_impact, id');
+
+    if (error) throw new Error(error.message);
+
+    // Calculate residual for all risks (needed for severity)
+    // We'll use RESIDUAL data for the profile summary as it's "Residual Risk Profile" in the Excel
+    const risksWithResidual = await Promise.all(
+      (risks || []).map(async (risk) => {
+        // If we have calculated values stored, use them
+        if (risk.residual_likelihood && risk.residual_impact) {
+          return {
+            ...risk,
+            final_l: risk.residual_likelihood,
+            final_i: risk.residual_impact,
+            final_score: risk.residual_likelihood * risk.residual_impact
+          };
+        }
+
+        const { data: residualData } = await calculateResidualRisk(
+          risk.id,
+          risk.likelihood_inherent,
+          risk.impact_inherent
+        );
+        return {
+          ...risk,
+          final_l: residualData?.residual_likelihood ?? risk.likelihood_inherent,
+          final_i: residualData?.residual_impact ?? risk.impact_inherent,
+          final_score: residualData?.residual_score ?? (risk.likelihood_inherent * risk.impact_inherent)
+        };
+      })
+    );
+
+    // 2. Aggregate by Category
+    const categoryStats: Record<string, {
+      sumL: number, sumI: number, sumScore: number, count: number
+    }> = {};
+
+    risksWithResidual.forEach(r => {
+      const cat = r.category || 'Uncategorized';
+      if (!categoryStats[cat]) {
+        categoryStats[cat] = { sumL: 0, sumI: 0, sumScore: 0, count: 0 };
+      }
+      categoryStats[cat].sumL += r.final_l;
+      categoryStats[cat].sumI += r.final_i;
+      categoryStats[cat].sumScore += r.final_score;
+      categoryStats[cat].count++;
+    });
+
+    // 3. Build Result
+    const summary: RiskProfileSummary[] = Object.entries(categoryStats).map(([cat, stats]) => {
+      const avgL = stats.sumL / stats.count;
+      const avgI = stats.sumI / stats.count;
+      const avgSev = stats.sumScore / stats.count;
+
+      return {
+        category: cat,
+        avg_likelihood: Number(avgL.toFixed(2)),
+        avg_impact: Number(avgI.toFixed(2)),
+        avg_severity: Number(avgSev.toFixed(2)),
+        previous_severity: null, // Placeholder
+        trend: 'unchanged', // Placeholder
+        risk_count: stats.count
+      };
+    });
+
+    // Sort by Severity Descending
+    summary.sort((a, b) => b.avg_severity - a.avg_severity);
+
+    return { data: summary, error: null };
+  } catch (err) {
+    console.error('getRiskProfileSummary error:', err);
+    return { data: null, error: err instanceof Error ? err : new Error('Unknown error') };
   }
 }
