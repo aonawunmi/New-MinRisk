@@ -244,7 +244,7 @@ serve(async (req) => {
 
     // Parse request body
     const body = await req.json().catch(() => ({}))
-    const minConfidence = body.minConfidence || 70
+    const minConfidence = body.minConfidence ?? 70
     const eventId = body.eventId // Optional: analyze specific event
     const limit = body.limit || 50 // Optional: limit number of events to process
 
