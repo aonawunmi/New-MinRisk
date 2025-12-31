@@ -304,9 +304,14 @@ function EventsFeed() {
       const result = await triggerRssScan();
 
       if (result.success) {
+        let message = `✅ ${result.message}`;
+        if (result.debug_logs && result.debug_logs.length > 0) {
+          message += '\n\n🔍 Debug Info:\n' + result.debug_logs.join('\n');
+        }
+
         setScanMessage({
           type: 'success',
-          text: `✅ ${result.message}`
+          text: message
         });
         // Reload events after successful scan
         await loadEvents();

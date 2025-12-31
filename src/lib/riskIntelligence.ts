@@ -1616,6 +1616,7 @@ export interface RssScanResult {
     alerts_created?: number;
     execution_time?: string;
   };
+  debug_logs?: string[];
   error?: string;
 }
 
@@ -1668,7 +1669,8 @@ export async function triggerRssScan(): Promise<RssScanResult> {
     return {
       success: true,
       message: `RSS scan completed! ${result.stats?.events_stored || 0} events stored, ${result.stats?.alerts_created || 0} alerts created`,
-      stats: result.stats
+      stats: result.stats,
+      debug_logs: result.debug_logs
     };
   } catch (error) {
     return {

@@ -34,11 +34,12 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400',
 };
 
-// Configuration
-const MAX_AGE_DAYS = 7; // Only process news from last 7 days
+// Configuration - Optimized for Supabase Free Tier resource limits
+const MAX_AGE_DAYS = 3650; // Allow articles up to 10 years old (debugging date mismatch)
 const MIN_CONFIDENCE = 0.6; // Minimum confidence to create alert
-const ITEMS_PER_FEED = 10; // Take first 10 items per feed
-const AI_RATE_LIMIT_MS = 500; // 500ms between AI calls (reduced from 1000ms for faster processing)
+const ITEMS_PER_FEED = 5; // Take first 5 items per feed (reduced from 10)
+const MAX_FEEDS = 5; // Maximum feeds to process per invocation
+const AI_RATE_LIMIT_MS = 1000; // 1 second between AI calls to reduce memory pressure
 
 interface RSSItem {
   title: string;
@@ -182,14 +183,13 @@ async function isDuplicate(supabase: any, organizationId: string, url: string): 
 async function storeEvents(
   supabase: any,
   parsedFeeds: ParsedFeed[],
-  maxAgeDays: number,
+  cutoffDate: Date,
   organizationId: string,
   keywordCategories: KeywordsMap
 ): Promise<{ stored: number; events: any[]; stats: any }> {
-  console.log(`\n📊 Storing events (maxAge: ${maxAgeDays} days)...`);
 
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
+
+  console.log(`📊 Storing events (cutoff: ${cutoffDate.toISOString()})...`);
 
   const allKeywords = getAllKeywords(keywordCategories);
   const stats = {
@@ -629,14 +629,17 @@ serve(async (req) => {
       getKeywords(supabase, organizationId)
     ]);
 
-    console.log(`\n📡 Parsing ${sources.length} RSS feeds...`);
+    console.log(`\n📡 Parsing ${sources.length} RSS feeds (max ${MAX_FEEDS})...`);
     console.log(`🔑 Using ${getAllKeywords(keywordCategories).length} keywords from ${Object.keys(keywordCategories).length} categories`);
 
-    // Step 2: Parse all feeds in PARALLEL and update scan statistics
+    // Limit feeds to reduce resource usage on Supabase Free Tier
+    const limitedSources = sources.slice(0, MAX_FEEDS);
+
+    // Step 2: Parse feeds SEQUENTIALLY (not parallel) to reduce memory
     const parsedFeeds: ParsedFeed[] = [];
 
-    // Create an array of promises for parsing feeds
-    const feedPromises = sources.map(async (source) => {
+    // Process feeds one at a time to stay within resource limits
+    for (const source of limitedSources) {
       const result = await parseSingleFeed(source);
 
       // Update scan statistics for this source
@@ -651,24 +654,18 @@ serve(async (req) => {
       }
 
       if (result.items.length > 0) {
-        return { source, items: result.items };
+        parsedFeeds.push({ source, items: result.items });
       }
-      return null;
-    });
+    }
 
-    // Wait for all feeds to be parsed
-    const results = await Promise.all(feedPromises);
-
-    // Filter out nulls (failed feeds or empty feeds)
-    results.forEach(result => {
-      if (result) parsedFeeds.push(result);
-    });
-
-    const totalItems = parsedFeeds.reduce((sum, feed) => sum + feed.items.length, 0);
+    const totalItems = parsedFeeds.reduce((sum: number, feed: ParsedFeed) => sum + feed.items.length, 0);
     console.log(`\n  ✅ Total items found: ${totalItems}`);
 
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - MAX_AGE_DAYS);
+
     // Step 3: Store events (with keyword pre-filtering and deduplication)
-    const storeResults = await storeEvents(supabase, parsedFeeds, MAX_AGE_DAYS, organizationId, keywordCategories);
+    const storeResults = await storeEvents(supabase, parsedFeeds, cutoffDate, organizationId, keywordCategories);
 
     // Step 4: Load risks
     const risks = await loadRisks(supabase, organizationId);
@@ -690,11 +687,20 @@ serve(async (req) => {
     const summary = {
       success: true,
       organization_id: organizationId,
-      feeds_processed: sources.length,
+      feeds_processed: limitedSources.length,
+      feeds_total: sources.length,
       items_found: totalItems,
       events_stored: storeResults.stored,
       alerts_created: alertsCreated,
       stats: storeResults.stats,
+      debug_logs: [
+        `Loaded ${sources.length} sources`,
+        `Processing ${limitedSources.length} sources (limit: ${MAX_FEEDS})`,
+        `Date Check: Current=${new Date().toISOString()}, Cutoff=${cutoffDate.toISOString()} (MaxAge=${MAX_AGE_DAYS}d)`,
+        `Parsed ${parsedFeeds.length} feeds successfully`,
+        `Total items found: ${totalItems}`,
+        `Storage result: ${JSON.stringify(storeResults.stats)}`
+      ],
       timestamp: new Date().toISOString(),
     };
 

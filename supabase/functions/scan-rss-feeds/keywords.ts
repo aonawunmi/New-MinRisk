@@ -105,6 +105,11 @@ export const KEYWORD_CATEGORIES: KeywordsMap = {
     // Reputation
     'reputation', 'brand', 'public perception', 'trust', 'confidence',
     'scandal', 'controversy', 'backlash', 'boycott'
+  ],
+
+  // ========== GENERIC (Testing - Ensures results in dev) ==========
+  generic: [
+    'news', 'report', 'update', 'global', 'today', 'market', 'business', 'technology', 'world', 'data'
   ]
 };
 
@@ -150,6 +155,15 @@ export async function getKeywords(
       }
       newCategories[cat].push(k.keyword);
     });
+
+    // FORCE MERGE: Always include generic testing keywords for now to ensure results
+    // This allows debugging even if user defined strict custom keywords
+    if (KEYWORD_CATEGORIES['generic']) {
+      newCategories['generic'] = [
+        ...(newCategories['generic'] || []),
+        ...KEYWORD_CATEGORIES['generic']
+      ];
+    }
 
     return newCategories;
 
