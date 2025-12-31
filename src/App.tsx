@@ -38,6 +38,7 @@ export default function App() {
     isSuperAdmin: false,
     loading: true,
   });
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   useEffect(() => {
     loadAuthState();
@@ -126,6 +127,8 @@ export default function App() {
       <MobileNav
         isAdmin={authState.isAdmin}
         onLogout={handleLogout}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
       />
 
       {/* Desktop Header - hidden on mobile */}
@@ -169,7 +172,7 @@ export default function App() {
           </div>
         )}
 
-        <Tabs defaultValue="dashboard" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {/* Horizontally scrollable tabs container for mobile */}
           <div className="mobile-scroll-x -mx-3 px-3 sm:mx-0 sm:px-0">
             <TabsList className="mb-4 sm:mb-6 inline-flex sm:flex w-max sm:w-auto">

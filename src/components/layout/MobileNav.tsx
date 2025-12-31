@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useLocation, Link } from 'react-router-dom';
 import {
     Menu,
     X,
@@ -18,46 +17,48 @@ import { cn } from '@/lib/utils';
 
 interface NavItem {
     label: string;
-    href: string;
+    tabValue: string;
     icon: React.ElementType;
     requiresAdmin?: boolean;
 }
 
 const mainNavItems: NavItem[] = [
-    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { label: 'Risk Register', href: '/risks', icon: AlertTriangle },
-    { label: 'Incidents', href: '/incidents', icon: FileText },
-    { label: 'KRI Management', href: '/kri', icon: Activity },
-    { label: 'Risk Intelligence', href: '/intelligence', icon: Shield },
-];
-
-const bottomNavItems: NavItem[] = [
-    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { label: 'Risks', href: '/risks', icon: AlertTriangle },
-    { label: 'Incidents', href: '/incidents', icon: FileText },
-    { label: 'More', href: '#more', icon: Menu },
+    { label: 'Dashboard', tabValue: 'dashboard', icon: LayoutDashboard },
+    { label: 'Risk Register', tabValue: 'risks', icon: AlertTriangle },
+    { label: 'Controls', tabValue: 'controls', icon: Shield },
+    { label: 'Incidents', tabValue: 'incidents', icon: FileText },
+    { label: 'AI Assistant', tabValue: 'ai', icon: Activity },
 ];
 
 const adminNavItems: NavItem[] = [
-    { label: 'Admin', href: '/admin', icon: Users, requiresAdmin: true },
-    { label: 'Settings', href: '/settings', icon: Settings },
+    { label: 'Analytics', tabValue: 'analytics', icon: LayoutDashboard, requiresAdmin: true },
+    { label: 'KRI', tabValue: 'kri', icon: Activity, requiresAdmin: true },
+    { label: 'Intelligence', tabValue: 'intelligence', icon: Shield, requiresAdmin: true },
+    { label: 'Admin', tabValue: 'admin', icon: Users, requiresAdmin: true },
+];
+
+const bottomNavItems: NavItem[] = [
+    { label: 'Dashboard', tabValue: 'dashboard', icon: LayoutDashboard },
+    { label: 'Risks', tabValue: 'risks', icon: AlertTriangle },
+    { label: 'Incidents', tabValue: 'incidents', icon: FileText },
+    { label: 'More', tabValue: '#more', icon: Menu },
 ];
 
 interface MobileNavProps {
     isAdmin?: boolean;
     onLogout?: () => void;
+    activeTab?: string;
+    onTabChange?: (tab: string) => void;
 }
 
-export default function MobileNav({ isAdmin = false, onLogout }: MobileNavProps) {
+export default function MobileNav({
+    isAdmin = false,
+    onLogout,
+    activeTab = 'dashboard',
+    onTabChange
+}: MobileNavProps) {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [showMoreMenu, setShowMoreMenu] = useState(false);
-    const location = useLocation();
-
-    // Close drawer on route change
-    useEffect(() => {
-        setIsDrawerOpen(false);
-        setShowMoreMenu(false);
-    }, [location.pathname]);
 
     // Prevent body scroll when drawer is open
     useEffect(() => {
@@ -71,10 +72,15 @@ export default function MobileNav({ isAdmin = false, onLogout }: MobileNavProps)
         };
     }, [isDrawerOpen]);
 
-    const isActive = (href: string) => {
-        if (href === '/dashboard') return location.pathname === '/dashboard';
-        return location.pathname.startsWith(href);
+    const handleNavClick = (tabValue: string) => {
+        if (onTabChange) {
+            onTabChange(tabValue);
+        }
+        setIsDrawerOpen(false);
+        setShowMoreMenu(false);
     };
+
+    const isActive = (tabValue: string) => activeTab === tabValue;
 
     return (
         <>
@@ -134,47 +140,48 @@ export default function MobileNav({ isAdmin = false, onLogout }: MobileNavProps)
                         {mainNavItems.map((item) => {
                             const Icon = item.icon;
                             return (
-                                <Link
-                                    key={item.href}
-                                    to={item.href}
+                                <button
+                                    key={item.tabValue}
+                                    onClick={() => handleNavClick(item.tabValue)}
                                     className={cn(
-                                        'flex items-center gap-3 px-3 py-3 rounded-lg transition-colors touch-target',
-                                        isActive(item.href)
+                                        'w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors touch-target text-left',
+                                        isActive(item.tabValue)
                                             ? 'bg-blue-50 text-blue-700'
                                             : 'text-slate-600 hover:bg-slate-50'
                                     )}
                                 >
                                     <Icon className="h-5 w-5" />
                                     <span className="font-medium">{item.label}</span>
-                                </Link>
+                                </button>
                             );
                         })}
                     </div>
 
-                    <div className="mt-6 px-3 pt-4 border-t">
-                        <p className="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                            Settings
-                        </p>
-                        {adminNavItems.map((item) => {
-                            if (item.requiresAdmin && !isAdmin) return null;
-                            const Icon = item.icon;
-                            return (
-                                <Link
-                                    key={item.href}
-                                    to={item.href}
-                                    className={cn(
-                                        'flex items-center gap-3 px-3 py-3 rounded-lg transition-colors touch-target',
-                                        isActive(item.href)
-                                            ? 'bg-blue-50 text-blue-700'
-                                            : 'text-slate-600 hover:bg-slate-50'
-                                    )}
-                                >
-                                    <Icon className="h-5 w-5" />
-                                    <span className="font-medium">{item.label}</span>
-                                </Link>
-                            );
-                        })}
-                    </div>
+                    {isAdmin && (
+                        <div className="mt-6 px-3 pt-4 border-t">
+                            <p className="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                                Admin
+                            </p>
+                            {adminNavItems.map((item) => {
+                                const Icon = item.icon;
+                                return (
+                                    <button
+                                        key={item.tabValue}
+                                        onClick={() => handleNavClick(item.tabValue)}
+                                        className={cn(
+                                            'w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors touch-target text-left',
+                                            isActive(item.tabValue)
+                                                ? 'bg-blue-50 text-blue-700'
+                                                : 'text-slate-600 hover:bg-slate-50'
+                                        )}
+                                    >
+                                        <Icon className="h-5 w-5" />
+                                        <span className="font-medium">{item.label}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
 
                 {/* Logout button at bottom */}
@@ -194,12 +201,12 @@ export default function MobileNav({ isAdmin = false, onLogout }: MobileNavProps)
             <nav className="desktop-hidden mobile-bottom-nav" aria-label="Quick navigation">
                 {bottomNavItems.map((item) => {
                     const Icon = item.icon;
-                    const active = item.href !== '#more' && isActive(item.href);
+                    const active = item.tabValue !== '#more' && isActive(item.tabValue);
 
-                    if (item.href === '#more') {
+                    if (item.tabValue === '#more') {
                         return (
                             <button
-                                key={item.href}
+                                key={item.tabValue}
                                 onClick={() => setShowMoreMenu(!showMoreMenu)}
                                 className={cn('mobile-bottom-nav-item', showMoreMenu && 'active')}
                                 aria-expanded={showMoreMenu}
@@ -211,14 +218,14 @@ export default function MobileNav({ isAdmin = false, onLogout }: MobileNavProps)
                     }
 
                     return (
-                        <Link
-                            key={item.href}
-                            to={item.href}
+                        <button
+                            key={item.tabValue}
+                            onClick={() => handleNavClick(item.tabValue)}
                             className={cn('mobile-bottom-nav-item', active && 'active')}
                         >
                             <Icon className="h-5 w-5" />
                             <span className="text-xs mt-1">{item.label}</span>
-                        </Link>
+                        </button>
                     );
                 })}
             </nav>
@@ -232,18 +239,17 @@ export default function MobileNav({ isAdmin = false, onLogout }: MobileNavProps)
                     />
                     <div className="desktop-hidden fixed bottom-[calc(60px+var(--safe-area-inset-bottom))] left-4 right-4 bg-white rounded-lg shadow-xl border z-25 p-2">
                         <div className="grid grid-cols-3 gap-2">
-                            {[...mainNavItems.slice(3), ...adminNavItems.filter(i => !i.requiresAdmin || isAdmin)].map((item) => {
+                            {[...mainNavItems.slice(3), ...(isAdmin ? adminNavItems : [])].map((item) => {
                                 const Icon = item.icon;
                                 return (
-                                    <Link
-                                        key={item.href}
-                                        to={item.href}
+                                    <button
+                                        key={item.tabValue}
+                                        onClick={() => handleNavClick(item.tabValue)}
                                         className="flex flex-col items-center p-3 rounded-lg hover:bg-slate-50 transition-colors"
-                                        onClick={() => setShowMoreMenu(false)}
                                     >
                                         <Icon className="h-6 w-6 text-slate-600" />
                                         <span className="text-xs text-slate-600 mt-1 text-center">{item.label}</span>
-                                    </Link>
+                                    </button>
                                 );
                             })}
                         </div>
