@@ -1088,31 +1088,21 @@ export async function applyIntelligenceAlert(
       });
     }
 
-    // Calculate new values using MAX logic (not cumulative)
-    const newLikelihood = Math.max(
+    // Calculate what the new values WOULD be (for logging purposes, or if we ever revert to auto-updates)
+    const suggestedLikelihood = Math.max(
       1,
       Math.min(5, originalLikelihood + maxLikelihoodChange)
     );
-    const newImpact = Math.max(
+    const suggestedImpact = Math.max(
       1,
       Math.min(5, originalImpact + maxImpactChange)
     );
 
-    // Update the risk
-    const { error: updateError } = await supabase
-      .from('risks')
-      .update({
-        likelihood_inherent: newLikelihood,
-        impact_inherent: newImpact,
-        last_intelligence_check: new Date().toISOString(),
-      })
-      .eq('risk_code', alert.risk_code);
+    // NOTE: ADVISORY MODE ENABLED
+    // We intentionally SKIP updating the risk scores automatically.
+    // The alert is marked as "applied" (acknowledged), but the risk table is not touched.
 
-    if (updateError) {
-      return { error: new Error(updateError.message) };
-    }
-
-    // Mark alert as applied
+    // Mark alert as applied (acknowledged)
     const { error: alertUpdateError } = await supabase
       .from('risk_intelligence_alerts')
       .update({
@@ -1125,18 +1115,19 @@ export async function applyIntelligenceAlert(
     }
 
     // Create treatment log entry
+    // Note: new_likelihood/impact are set to the SAME as previous, as no change occurred.
     const { error: logError } = await supabase
       .from('risk_intelligence_treatment_log')
       .insert([
         {
           alert_id: alertId,
           risk_code: alert.risk_code,
-          action_taken: 'accept',
+          action_taken: 'accept', // 'accept' contextually means acknowledged here
           previous_likelihood: risk.likelihood_inherent,
-          new_likelihood: newLikelihood,
+          new_likelihood: risk.likelihood_inherent, // NO CHANGE
           previous_impact: risk.impact_inherent,
-          new_impact: newImpact,
-          notes: treatmentNotes || null,
+          new_impact: risk.impact_inherent,       // NO CHANGE
+          notes: (treatmentNotes || '') + ' [Advisory Mode: Alert Acknowledged. Scores not automatically updated.]',
           applied_by: user.id,
           applied_at: new Date().toISOString(),
         },
@@ -1147,7 +1138,7 @@ export async function applyIntelligenceAlert(
       // Don't fail the whole operation if logging fails
     }
 
-    console.log('Intelligence alert applied to risk register:', alertId);
+    console.log('Intelligence alert acknowledged (Advisory Mode):', alertId);
     return { error: null };
   } catch (err) {
     console.error('Unexpected apply intelligence alert error:', err);
@@ -1377,17 +1368,21 @@ export async function undoAppliedAlert(
       });
     }
 
-    // Calculate new values using MAX of remaining alerts
-    const newLikelihood = Math.max(
+    // Calculate what the new values WOULD be
+    const suggestedLikelihood = Math.max(
       1,
       Math.min(5, originalLikelihood + maxLikelihoodChange)
     );
-    const newImpact = Math.max(
+    const suggestedImpact = Math.max(
       1,
       Math.min(5, originalImpact + maxImpactChange)
     );
 
-    // Update the risk
+    // NOTE: ADVISORY MODE ENABLED
+    // We intentionally SKIP updating the risk scores automatically.
+
+    // Update the risk - SKIPPED IN ADVISORY MODE
+    /*
     const { error: updateError } = await supabase
       .from('risks')
       .update({
@@ -1400,20 +1395,22 @@ export async function undoAppliedAlert(
     if (updateError) {
       return { error: new Error(updateError.message) };
     }
+    */
 
     // Create treatment log entry documenting the undo
+    // Note: new_likelihood/impact are set to the SAME as previous
     const { error: logError } = await supabase
       .from('risk_intelligence_treatment_log')
       .insert([
         {
           alert_id: alertId,
           risk_code: alert.risk_code,
-          action_taken: 'reject', // Using 'reject' to indicate removal
+          action_taken: 'reject', // contextually 'removed acknowledgement'
           previous_likelihood: risk.likelihood_inherent,
-          new_likelihood: newLikelihood,
+          new_likelihood: risk.likelihood_inherent, // NO CHANGE
           previous_impact: risk.impact_inherent,
-          new_impact: newImpact,
-          notes: notes || 'Alert application undone',
+          new_impact: risk.impact_inherent,       // NO CHANGE
+          notes: (notes || 'Alert application undone') + ' [Advisory Mode: Alert Unlinked. Scores not automatically updated.]',
           applied_by: user.id,
           applied_at: new Date().toISOString(),
         },

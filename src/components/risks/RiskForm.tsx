@@ -1740,6 +1740,55 @@ export default function RiskForm({
               </div>
             </div>
 
+            {/* Active Intelligence Advisory Memo */}
+            {intelligenceAlerts.filter(a => a.applied_to_risk).length > 0 && (
+              <Card className="border-purple-200 bg-purple-50 mb-6">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-purple-600" />
+                    <CardTitle className="text-sm text-purple-900">
+                      Active Intelligence Advice
+                    </CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Alert className="bg-white/80 border-purple-200 mb-3">
+                    <Info className="h-4 w-4 text-purple-600" />
+                    <AlertDescription className="text-purple-800 text-xs">
+                      You have acknowledged the following intelligence alerts.
+                      Consider updating the Inherent Risk scores based on this advice.
+                    </AlertDescription>
+                  </Alert>
+                  <div className="space-y-2">
+                    {intelligenceAlerts.filter(a => a.applied_to_risk).map(alert => (
+                      <div key={alert.id} className="text-sm border-l-2 border-purple-400 pl-3 py-1">
+                        <div className="font-medium text-purple-900">{alert.external_events?.title}</div>
+                        <div className="text-xs text-purple-700 flex gap-2 mt-1">
+                          {/* Show suggestions if non-zero */}
+                          {(alert.suggested_likelihood_change !== 0 || alert.impact_change !== 0) ? (
+                            <>
+                              {alert.suggested_likelihood_change !== 0 && (
+                                <span className={alert.suggested_likelihood_change > 0 ? "text-red-600 font-semibold" : "text-green-600 font-semibold"}>
+                                  Likelihood: {alert.suggested_likelihood_change > 0 ? '+' : ''}{alert.suggested_likelihood_change}
+                                </span>
+                              )}
+                              {alert.impact_change !== 0 && (
+                                <span className={alert.impact_change > 0 ? "text-red-600 font-semibold" : "text-green-600 font-semibold"}>
+                                  Impact: {alert.impact_change > 0 ? '+' : ''}{alert.impact_change}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span>No score change suggested</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="likelihood_inherent">
@@ -2732,30 +2781,38 @@ export default function RiskForm({
               </Card>
             )}
 
-            {/* Intelligence Alerts Section - Only show when editing */}
+            {/* Intelligence Advisory Section - Only show when editing */}
             {editingRisk && (
               <Card className="border-purple-200 bg-purple-50 mt-6">
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <AlertCircle className="h-5 w-5 text-purple-600" />
-                    Intelligence Alerts ({intelligenceAlerts.length})
+                    <Sparkles className="h-5 w-5 text-purple-600" />
+                    Intelligence Advisory ({intelligenceAlerts.length})
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   {loadingAlerts ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
-                      <span className="ml-2 text-sm text-gray-600">Loading intelligence alerts...</span>
+                      <span className="ml-2 text-sm text-gray-600">Loading intelligence advisory...</span>
                     </div>
                   ) : intelligenceAlerts.length === 0 ? (
                     <div className="text-center py-8">
-                      <p className="text-sm text-gray-600">No intelligence alerts for this risk yet.</p>
+                      <p className="text-sm text-gray-600">No active intelligence advice for this risk.</p>
                       <p className="text-xs text-gray-500 mt-2">
-                        Intelligence alerts appear when external events are detected that may affect this risk.
+                        Relevant external events will appear here as advisory memos to help guide manual risk updates.
                       </p>
                     </div>
                   ) : (
                     <div className="space-y-3">
+                      <Alert className="border-blue-200 bg-blue-100/50 mb-4">
+                        <Info className="h-4 w-4 text-blue-600" />
+                        <AlertDescription className="text-blue-800 text-xs">
+                          <strong>Advisory Mode:</strong> The alerts below are AI-generated memos based on external events.
+                          Acknowledging them does <u>not</u> automatically change scores. Please review the advice and update Impact/Likelihood manually if needed.
+                        </AlertDescription>
+                      </Alert>
+
                       {intelligenceAlerts.map((alert) => {
                         const event = alert.external_events;
                         const isExpanded = expandedAlertId === alert.id;
@@ -2769,7 +2826,7 @@ export default function RiskForm({
                         };
 
                         return (
-                          <Card key={alert.id} className="bg-white border border-purple-200">
+                          <Card key={alert.id} className="bg-white border border-purple-200 shadow-sm">
                             <CardContent className="pt-4">
                               {/* Header row */}
                               <div className="flex items-start justify-between mb-3">
@@ -2784,7 +2841,7 @@ export default function RiskForm({
                                     {alert.applied_to_risk && (
                                       <span className="px-2 py-0.5 text-xs font-semibold rounded-full border bg-blue-100 text-blue-700 border-blue-300 flex items-center gap-1">
                                         <CheckCircle className="h-3 w-3" />
-                                        Applied
+                                        Acknowledged
                                       </span>
                                     )}
                                     <span className="text-xs text-gray-500">

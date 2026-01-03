@@ -1139,7 +1139,7 @@ function IntelligenceAlerts() {
       return;
     }
 
-    if (!confirm(`Apply ${selectedAlerts.size} selected alert(s) to risk register?`)) {
+    if (!confirm(`Acknowledge ${selectedAlerts.size} selected alert(s) to risk register?`)) {
       return;
     }
 
@@ -1170,7 +1170,7 @@ function IntelligenceAlerts() {
 
     // Show summary
     if (errorCount === 0) {
-      alert(`✅ Successfully applied ${successCount} alert(s) to risk register`);
+      alert(`✅ Successfully acknowledged ${successCount} alert(s) to risk register`);
     } else {
       alert(
         `⚠️ Batch apply completed:\n` +
@@ -1602,7 +1602,7 @@ function AcceptedAlertsTable({
         <div className="flex items-center justify-between bg-gray-50 p-4 rounded-lg border border-gray-200">
           <div className="flex items-center gap-4">
             <span className="text-sm font-medium text-gray-700">
-              {selectedAlerts.size > 0 ? `${selectedAlerts.size} selected` : 'Select alerts to apply in batch'}
+              {selectedAlerts.size > 0 ? `${selectedAlerts.size} selected` : 'Select alerts to acknowledge in batch'}
             </span>
             {selectedAlerts.size > 0 && (
               <Button size="sm" variant="outline" onClick={onDeselectAll}>
@@ -1611,7 +1611,7 @@ function AcceptedAlertsTable({
             )}
             {selectedAlerts.size === 0 && unappliedAlerts.length > 0 && (
               <Button size="sm" variant="outline" onClick={onSelectAll}>
-                Select All Unapplied ({unappliedAlerts.length})
+                Select All Unacknowledged ({unappliedAlerts.length})
               </Button>
             )}
           </div>
@@ -1642,10 +1642,10 @@ function AcceptedAlertsTable({
               {batchApplying ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Applying {selectedAlerts.size} alert(s)...
+                  Acknowledging {selectedAlerts.size} alert(s)...
                 </>
               ) : (
-                `Apply Selected (${selectedAlerts.size})`
+                `Acknowledge Selected ({selectedAlerts.size})`
               )}
             </Button>
           </div>
@@ -1713,41 +1713,11 @@ function AcceptedAlertsTable({
               </div>
             )}
 
-            {!alert.applied_to_risk && (
-              <>
-                <div>
-                  <Label htmlFor={`notes-${alert.id}`}>Treatment Notes (Optional)</Label>
-                  <Textarea
-                    id={`notes-${alert.id}`}
-                    value={treatmentNotes[alert.id] || ''}
-                    onChange={(e) => onNotesChange({ ...treatmentNotes, [alert.id]: e.target.value })}
-                    placeholder="Document your decision and any actions taken..."
-                    rows={2}
-                  />
-                </div>
-
-                <Button
-                  onClick={() => onApply(alert.id)}
-                  disabled={applyingAlert === alert.id}
-                  size="sm"
-                >
-                  {applyingAlert === alert.id ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Applying...
-                    </>
-                  ) : (
-                    'Apply to Risk Register'
-                  )}
-                </Button>
-              </>
-            )}
-
             {alert.applied_to_risk && (
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-green-700">
                   <CheckCircle2 className="h-4 w-4" />
-                  <span className="text-sm font-medium">Applied to risk register</span>
+                  <span className="text-sm font-medium">Advice Acknowledged & Linked</span>
                 </div>
                 <Button
                   size="sm"
@@ -1755,20 +1725,60 @@ function AcceptedAlertsTable({
                   onClick={() => onUndo(alert.id)}
                   disabled={undoingAlert === alert.id}
                   className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                  title="Unlink this advice (will not remove score changes if any were made manually)"
                 >
                   {undoingAlert === alert.id ? (
                     <>
                       <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                      Undoing...
+                      Unlinking...
                     </>
                   ) : (
                     <>
                       <Undo2 className="h-3 w-3 mr-1" />
-                      Undo
+                      Unlink Advice
                     </>
                   )}
                 </Button>
               </div>
+            )}
+
+            {!alert.applied_to_risk && (
+              <>
+                <div>
+                  <Label htmlFor={`notes-${alert.id}`}>Treatment Notes</Label>
+                  <Textarea
+                    id={`notes-${alert.id}`}
+                    value={treatmentNotes[alert.id] || ''}
+                    onChange={(e) => onNotesChange({ ...treatmentNotes, [alert.id]: e.target.value })}
+                    placeholder="Document your decision (e.g. 'Acknowledged advice, will update scores manually')..."
+                    rows={2}
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => onApply(alert.id)}
+                    disabled={applyingAlert === alert.id}
+                    size="sm"
+                    className="w-full bg-blue-600 hover:bg-blue-700"
+                  >
+                    {applyingAlert === alert.id ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Acknowledging...
+                      </>
+                    ) : (
+                      'Acknowledge Advice (No Score Change)'
+                    )}
+                  </Button>
+                </div>
+                <div className="flex items-start gap-2 bg-blue-50 p-2 rounded text-xs text-blue-800">
+                  <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                  <p>
+                    <strong>Advisory Mode:</strong> Acknowledging this alert will add it to the risk&apos;s audit trail but <strong>will not change scores automatically</strong>. You must update Likelihood/Impact manually if you agree with the AI.
+                  </p>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
