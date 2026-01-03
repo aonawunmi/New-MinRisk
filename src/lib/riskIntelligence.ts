@@ -1038,24 +1038,32 @@ export async function applyIntelligenceAlert(
       return { error: new Error('Risk not found') };
     }
 
-    // Get original risk values (before any intelligence alerts were applied)
-    // We look at the treatment log to find the earliest previous values
-    const { data: treatmentLog } = await supabase
-      .from('risk_intelligence_treatment_log')
-      .select('previous_likelihood, previous_impact')
+    // Get currently applied alerts for this risk (excluding the one we're about to apply)
+    const { data: existingAppliedAlerts } = await supabase
+      .from('risk_intelligence_alerts')
+      .select('id')
       .eq('risk_code', alert.risk_code)
-      .order('applied_at', { ascending: true })
-      .limit(1);
+      .eq('applied_to_risk', true);
 
-    // If there's treatment history, use the original values; otherwise use current values
-    const originalLikelihood =
-      treatmentLog && treatmentLog.length > 0
-        ? treatmentLog[0].previous_likelihood
-        : risk.likelihood_inherent;
-    const originalImpact =
-      treatmentLog && treatmentLog.length > 0
-        ? treatmentLog[0].previous_impact
-        : risk.impact_inherent;
+    const activeAlertIds = existingAppliedAlerts?.map(a => a.id) || [];
+
+    let originalLikelihood = risk.likelihood_inherent;
+    let originalImpact = risk.impact_inherent;
+
+    // If there are ALREADY applied alerts, we need to find the baseline from THEIR logs
+    if (activeAlertIds.length > 0) {
+      const { data: activeLogs } = await supabase
+        .from('risk_intelligence_treatment_log')
+        .select('previous_likelihood, previous_impact')
+        .in('alert_id', activeAlertIds)
+        .order('applied_at', { ascending: true })
+        .limit(1);
+
+      if (activeLogs && activeLogs.length > 0) {
+        originalLikelihood = activeLogs[0].previous_likelihood;
+        originalImpact = activeLogs[0].previous_impact;
+      }
+    }
 
     // Get ALL applied alerts for this risk (including the one we're about to apply)
     const { data: appliedAlerts } = await supabase
