@@ -580,6 +580,7 @@ export default function RiskForm({
         console.log('Risk updated successfully');
       } else {
         // Create new risk
+        console.log('[DEBUG] Calling createRisk with data:', dataToSave);
         const { data: newRisk, error: createError } = await createRisk(dataToSave);
 
         if (createError || !newRisk) {
@@ -1436,8 +1437,6 @@ export default function RiskForm({
                   <Select
                     value={selectedCategory}
                     onValueChange={handleCategoryChange}
-                    disabled={loading}
-                    required
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select category" />
@@ -1463,8 +1462,6 @@ export default function RiskForm({
                 <Select
                   value={selectedSubcategory}
                   onValueChange={handleSubcategoryChange}
-                  disabled={loading || !selectedCategory}
-                  required
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={selectedCategory ? "Select sub-category" : "Select category first"} />
@@ -2982,7 +2979,11 @@ export default function RiskForm({
                 {readOnly ? 'Close' : 'Cancel'}
               </Button>
               {!readOnly && (
-                <Button type="submit" disabled={loading || !selectedCategory || !selectedSubcategory}>
+                <Button
+                  type="submit"
+                  onClick={handleSubmit}
+                  disabled={loading || !selectedCategory || !selectedSubcategory}
+                >
                   {loading ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />

@@ -42,6 +42,7 @@ async function generateRiskCode(
   category: string
 ): Promise<string> {
   try {
+    console.log(`[DEBUG] Calling generate_next_risk_code RPC with: Org=${organizationId}, Div=${division}, Cat=${category}`);
     // Call database function for atomic code generation with dynamic prefix
     const { data, error } = await supabase
       .rpc('generate_next_risk_code', {

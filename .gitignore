@@ -55,3 +55,10 @@ src/**/*.jsx
 !*.config.js
 !scripts/*.js
 .credentials
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
