@@ -196,10 +196,9 @@ export default function ControlForm({
               disabled={isReadOnly}
               className={`
                 p-3 rounded-lg border-2 text-center transition-all
-                ${
-                  value === score
-                    ? 'border-blue-600 bg-blue-50 shadow-md'
-                    : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                ${value === score
+                  ? 'border-blue-600 bg-blue-50 shadow-md'
+                  : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
                 }
                 ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}
               `}
@@ -252,8 +251,8 @@ export default function ControlForm({
             {isReadOnly
               ? 'You can only view this control. Only the control owner can edit or delete it.'
               : editingControl
-              ? 'Update control details and DIME scores.'
-              : 'Create a new risk control with DIME framework assessment.'}
+                ? 'Update control details and DIME scores.'
+                : 'Create a new risk control with DIME framework assessment.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -338,9 +337,8 @@ export default function ControlForm({
                 <Label>Linked Risk</Label>
                 <div className="bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-sm">
                   {availableRisks.find((r) => r.id === riskId)
-                    ? `${availableRisks.find((r) => r.id === riskId)?.risk_code} - ${
-                        availableRisks.find((r) => r.id === riskId)?.risk_title
-                      }`
+                    ? `${availableRisks.find((r) => r.id === riskId)?.risk_code} - ${availableRisks.find((r) => r.id === riskId)?.risk_title
+                    }`
                     : 'Selected risk'}
                 </div>
               </div>
@@ -469,7 +467,7 @@ export default function ControlForm({
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isSubmitting}>
+                <Button type="submit" onClick={handleSubmit} disabled={isSubmitting}>
                   {isSubmitting ? (editingControl ? 'Updating...' : 'Creating...') : (editingControl ? 'Update Control' : 'Create Control')}
                 </Button>
               </>
