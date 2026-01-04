@@ -167,13 +167,15 @@ export default function ControlForm({
     dimension: 'design' | 'implementation' | 'monitoring' | 'evaluation',
     label: string,
     value: DIMEScore | null,
-    onChange: (value: DIMEScore) => void
+    onChange: (value: DIMEScore) => void,
+    disabled: boolean = false,
+    disabledReason?: string
   ) => {
     // Get descriptions from org config or fallback to defaults
     const descriptions = orgConfig?.dime_descriptions?.[dimension] || DEFAULT_DIME_DESCRIPTIONS[dimension];
 
     return (
-      <div className="space-y-2">
+      <div className={`space-y-2 ${disabled ? 'opacity-50' : ''}`}>
         <Label className="font-semibold">{label}</Label>
         <div className="grid grid-cols-4 gap-2">
           {([3, 2, 1, 0] as DIMEScore[]).map((score) => {
@@ -182,15 +184,15 @@ export default function ControlForm({
               <button
                 key={score}
                 type="button"
-                onClick={() => !isReadOnly && onChange(score)}
-                disabled={isReadOnly}
+                onClick={() => !isReadOnly && !disabled && onChange(score)}
+                disabled={isReadOnly || disabled}
                 className={`
                   p-3 rounded-lg border-2 text-center transition-all
                   ${value === score
                     ? 'border-blue-600 bg-blue-50 shadow-md'
                     : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
                   }
-                  ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}
+                  ${isReadOnly || disabled ? 'opacity-60 cursor-not-allowed' : ''}
                 `}
               >
                 <div className="font-bold text-lg">{score}</div>
@@ -199,7 +201,10 @@ export default function ControlForm({
             );
           })}
         </div>
-        {value !== null && (
+        {disabled && disabledReason && (
+          <p className="text-xs text-gray-400">{disabledReason}</p>
+        )}
+        {value !== null && !disabled && (
           <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
             {getDIMEDescription(orgConfig, dimension, value)}
           </p>
@@ -400,21 +405,27 @@ export default function ControlForm({
               'implementation',
               'Implementation (I)',
               formData.implementation_score,
-              (value) => setFormData({ ...formData, implementation_score: value })
+              (value) => setFormData({ ...formData, implementation_score: value }),
+              formData.design_score === 0,
+              formData.design_score === 0 ? 'D=0 → effectiveness is 0' : undefined
             )}
 
             {renderDIMEScoreSelector(
               'monitoring',
               'Monitoring (M)',
               formData.monitoring_score,
-              (value) => setFormData({ ...formData, monitoring_score: value })
+              (value) => setFormData({ ...formData, monitoring_score: value }),
+              formData.design_score === 0 || formData.implementation_score === 0,
+              (formData.design_score === 0 || formData.implementation_score === 0) ? 'D or I=0 → effectiveness is 0' : undefined
             )}
 
             {renderDIMEScoreSelector(
               'evaluation',
               'Effectiveness Evaluation (E)',
               formData.evaluation_score,
-              (value) => setFormData({ ...formData, evaluation_score: value })
+              (value) => setFormData({ ...formData, evaluation_score: value }),
+              formData.design_score === 0 || formData.implementation_score === 0,
+              (formData.design_score === 0 || formData.implementation_score === 0) ? 'D or I=0 → effectiveness is 0' : undefined
             )}
 
             {/* Effectiveness Display */}

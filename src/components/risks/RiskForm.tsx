@@ -1988,7 +1988,7 @@ export default function RiskForm({
                           </Select>
                         </div>
 
-                        <div>
+                        <div className={manualControl.design_score === 0 ? 'opacity-50' : ''}>
                           <Label className="text-xs">Implementation</Label>
                           <Select
                             value={manualControl.implementation_score.toString()}
@@ -1998,6 +1998,7 @@ export default function RiskForm({
                                 implementation_score: parseInt(value),
                               })
                             }
+                            disabled={manualControl.design_score === 0}
                           >
                             <SelectTrigger>
                               <SelectValue />
@@ -2009,15 +2010,19 @@ export default function RiskForm({
                               <SelectItem value="3">{getDIMELabel(orgConfig, 'implementation', 3)}</SelectItem>
                             </SelectContent>
                           </Select>
+                          {manualControl.design_score === 0 && (
+                            <p className="text-xs text-gray-400 mt-1">D=0 → effectiveness is 0</p>
+                          )}
                         </div>
 
-                        <div>
+                        <div className={manualControl.design_score === 0 || manualControl.implementation_score === 0 ? 'opacity-50' : ''}>
                           <Label className="text-xs">Monitoring</Label>
                           <Select
                             value={manualControl.monitoring_score.toString()}
                             onValueChange={(value) =>
                               setManualControl({ ...manualControl, monitoring_score: parseInt(value) })
                             }
+                            disabled={manualControl.design_score === 0 || manualControl.implementation_score === 0}
                           >
                             <SelectTrigger>
                               <SelectValue />
@@ -2029,15 +2034,19 @@ export default function RiskForm({
                               <SelectItem value="3">{getDIMELabel(orgConfig, 'monitoring', 3)}</SelectItem>
                             </SelectContent>
                           </Select>
+                          {(manualControl.design_score === 0 || manualControl.implementation_score === 0) && (
+                            <p className="text-xs text-gray-400 mt-1">D or I=0 → effectiveness is 0</p>
+                          )}
                         </div>
 
-                        <div>
+                        <div className={manualControl.design_score === 0 || manualControl.implementation_score === 0 ? 'opacity-50' : ''}>
                           <Label className="text-xs">Evaluation</Label>
                           <Select
                             value={manualControl.evaluation_score.toString()}
                             onValueChange={(value) =>
                               setManualControl({ ...manualControl, evaluation_score: parseInt(value) })
                             }
+                            disabled={manualControl.design_score === 0 || manualControl.implementation_score === 0}
                           >
                             <SelectTrigger>
                               <SelectValue />
@@ -2235,13 +2244,14 @@ export default function RiskForm({
                                 </SelectContent>
                               </Select>
                             </div>
-                            <div>
+                            <div className={suggestion.design_score === 0 ? 'opacity-50' : ''}>
                               <Label className="text-xs">Implement</Label>
                               <Select
                                 value={suggestion.implementation_score.toString()}
                                 onValueChange={(value) =>
                                   updateAISuggestionDIME(index, 'implementation_score', parseInt(value))
                                 }
+                                disabled={suggestion.design_score === 0}
                               >
                                 <SelectTrigger className="h-8">
                                   <SelectValue />
@@ -2254,13 +2264,14 @@ export default function RiskForm({
                                 </SelectContent>
                               </Select>
                             </div>
-                            <div>
+                            <div className={suggestion.design_score === 0 || suggestion.implementation_score === 0 ? 'opacity-50' : ''}>
                               <Label className="text-xs">Monitor</Label>
                               <Select
                                 value={suggestion.monitoring_score.toString()}
                                 onValueChange={(value) =>
                                   updateAISuggestionDIME(index, 'monitoring_score', parseInt(value))
                                 }
+                                disabled={suggestion.design_score === 0 || suggestion.implementation_score === 0}
                               >
                                 <SelectTrigger className="h-8">
                                   <SelectValue />
@@ -2273,13 +2284,14 @@ export default function RiskForm({
                                 </SelectContent>
                               </Select>
                             </div>
-                            <div>
+                            <div className={suggestion.design_score === 0 || suggestion.implementation_score === 0 ? 'opacity-50' : ''}>
                               <Label className="text-xs">Evaluate</Label>
                               <Select
                                 value={suggestion.evaluation_score.toString()}
                                 onValueChange={(value) =>
                                   updateAISuggestionDIME(index, 'evaluation_score', parseInt(value))
                                 }
+                                disabled={suggestion.design_score === 0 || suggestion.implementation_score === 0}
                               >
                                 <SelectTrigger className="h-8">
                                   <SelectValue />
@@ -2576,7 +2588,7 @@ export default function RiskForm({
                                           </SelectContent>
                                         </Select>
                                       </div>
-                                      <div>
+                                      <div className={(editingControlData.design_score ?? 0) === 0 ? 'opacity-50' : ''}>
                                         <Label className="text-xs">Implementation</Label>
                                         <Select
                                           value={String(editingControlData.implementation_score ?? 0)}
@@ -2586,6 +2598,7 @@ export default function RiskForm({
                                               implementation_score: parseInt(value) as 0 | 1 | 2 | 3,
                                             })
                                           }
+                                          disabled={(editingControlData.design_score ?? 0) === 0}
                                         >
                                           <SelectTrigger className="h-8">
                                             <SelectValue />
@@ -2598,7 +2611,7 @@ export default function RiskForm({
                                           </SelectContent>
                                         </Select>
                                       </div>
-                                      <div>
+                                      <div className={(editingControlData.design_score ?? 0) === 0 || (editingControlData.implementation_score ?? 0) === 0 ? 'opacity-50' : ''}>
                                         <Label className="text-xs">Monitoring</Label>
                                         <Select
                                           value={String(editingControlData.monitoring_score ?? 0)}
@@ -2608,6 +2621,7 @@ export default function RiskForm({
                                               monitoring_score: parseInt(value) as 0 | 1 | 2 | 3,
                                             })
                                           }
+                                          disabled={(editingControlData.design_score ?? 0) === 0 || (editingControlData.implementation_score ?? 0) === 0}
                                         >
                                           <SelectTrigger className="h-8">
                                             <SelectValue />
@@ -2620,7 +2634,7 @@ export default function RiskForm({
                                           </SelectContent>
                                         </Select>
                                       </div>
-                                      <div>
+                                      <div className={(editingControlData.design_score ?? 0) === 0 || (editingControlData.implementation_score ?? 0) === 0 ? 'opacity-50' : ''}>
                                         <Label className="text-xs">Evaluation</Label>
                                         <Select
                                           value={String(editingControlData.evaluation_score ?? 0)}
@@ -2630,6 +2644,7 @@ export default function RiskForm({
                                               evaluation_score: parseInt(value) as 0 | 1 | 2 | 3,
                                             })
                                           }
+                                          disabled={(editingControlData.design_score ?? 0) === 0 || (editingControlData.implementation_score ?? 0) === 0}
                                         >
                                           <SelectTrigger className="h-8">
                                             <SelectValue />
