@@ -25,8 +25,11 @@ import {
   generateAppetiteStatement,
   generateAppetiteCategories,
   generateToleranceMetrics,
+  generateCategoryAppetiteStatement,
+  generateAppetiteSummaryReport,
   getOrganizationContext,
 } from '@/lib/appetiteAI';
+import { APPETITE_LEVEL_DEFINITIONS, getAppetiteLevels, type AppetiteLevel } from '@/lib/appetiteDefinitions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -117,6 +120,8 @@ export default function AppetiteToleranceConfig() {
     metrics?: any[];
   }>({});
   const [showAiPreview, setShowAiPreview] = useState<'statement' | 'categories' | 'metrics' | null>(null);
+  const [summaryReport, setSummaryReport] = useState<string | null>(null);
+  const [showSummaryReport, setShowSummaryReport] = useState(false);
 
   useEffect(() => {
     if (profile?.organization_id) {
@@ -718,6 +723,92 @@ export default function AppetiteToleranceConfig() {
     }
   }
 
+  /**
+   * Generate a category-specific appetite statement using GLOBAL definitions
+   * Called when user selects an appetite level for a category
+   */
+  async function handleGenerateCategoryStatement(riskCategory: string, appetiteLevel: AppetiteLevel) {
+    if (!profile || !riskCategory) return;
+
+    setAiGenerating(true);
+    setError(null);
+
+    try {
+      // Get org name for personalization
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', profile.organization_id)
+        .single();
+
+      const statement = await generateCategoryAppetiteStatement(
+        riskCategory,
+        appetiteLevel,
+        org?.name
+      );
+
+      // Update the rationale field with the AI-generated statement
+      setNewCategory({
+        ...newCategory,
+        risk_category: riskCategory,
+        appetite_level: appetiteLevel,
+        rationale: statement,
+      });
+
+      setSuccess('AI generated statement! Review and edit before adding.');
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err: any) {
+      console.error('Error generating category statement:', err);
+      setError('AI generation failed: ' + err.message);
+    } finally {
+      setAiGenerating(false);
+    }
+  }
+
+  /**
+   * Generate a summary report of all configured appetite categories
+   */
+  async function handleGenerateSummaryReport() {
+    if (!profile || categories.length === 0) {
+      setError('Please configure at least one appetite category first');
+      return;
+    }
+
+    setAiGenerating(true);
+    setError(null);
+
+    try {
+      // Get org name
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', profile.organization_id)
+        .single();
+
+      // Build category statements array
+      const categoryStatements = categories.map((cat: any) => ({
+        category: cat.risk_category,
+        level: cat.appetite_level as AppetiteLevel,
+        statement: cat.rationale || `${cat.appetite_level} appetite for ${cat.risk_category}`,
+      }));
+
+      const report = await generateAppetiteSummaryReport(
+        org?.name || 'Organization',
+        categoryStatements
+      );
+
+      setSummaryReport(report);
+      setShowSummaryReport(true);
+      setSuccess('Summary report generated!');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error('Error generating summary report:', err);
+      setError('Report generation failed: ' + err.message);
+    } finally {
+      setAiGenerating(false);
+    }
+  }
+
   async function handleAcceptAiCategory(category: any) {
     if (!profile || !user || !activeStatement) return;
 
@@ -1070,21 +1161,59 @@ export default function AppetiteToleranceConfig() {
                       <h3 style={{ fontSize: '16px', fontWeight: '600' }}>
                         Add Appetite Category
                       </h3>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleGenerateCategories}
-                        disabled={aiGenerating || saving}
-                        style={{ backgroundColor: '#7c3aed', color: '#ffffff', border: 'none' }}
-                      >
-                        {aiGenerating ? (
-                          <Loader2 size={14} style={{ marginRight: '6px' }} className="animate-spin" />
-                        ) : (
-                          <Sparkles size={14} style={{ marginRight: '6px' }} />
-                        )}
-                        AI Generate All
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleGenerateSummaryReport}
+                          disabled={aiGenerating || saving || categories.length === 0}
+                          style={{ backgroundColor: '#059669', color: '#ffffff', border: 'none' }}
+                        >
+                          {aiGenerating ? (
+                            <Loader2 size={14} style={{ marginRight: '6px' }} className="animate-spin" />
+                          ) : (
+                            <FileText size={14} style={{ marginRight: '6px' }} />
+                          )}
+                          Generate Summary Report
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleGenerateCategories}
+                          disabled={aiGenerating || saving}
+                          style={{ backgroundColor: '#7c3aed', color: '#ffffff', border: 'none' }}
+                        >
+                          {aiGenerating ? (
+                            <Loader2 size={14} style={{ marginRight: '6px' }} className="animate-spin" />
+                          ) : (
+                            <Sparkles size={14} style={{ marginRight: '6px' }} />
+                          )}
+                          AI Generate All
+                        </Button>
+                      </div>
                     </div>
+
+                    {/* Summary Report Display */}
+                    {showSummaryReport && summaryReport && (
+                      <div style={{ marginBottom: '16px', padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #059669' }}>
+                        <div className="flex items-center justify-between mb-3">
+                          <p style={{ fontSize: '14px', fontWeight: '600', color: '#059669' }}>
+                            📊 Risk Appetite Summary Report
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setShowSummaryReport(false)}
+                          >
+                            <X size={14} />
+                          </Button>
+                        </div>
+                        <div
+                          className="prose prose-sm max-w-none bg-white p-4 rounded border"
+                          dangerouslySetInnerHTML={{ __html: summaryReport.replace(/\n/g, '<br/>').replace(/##/g, '<h3>').replace(/###/g, '<h4>') }}
+                        />
+                      </div>
+                    )}
 
                     {/* AI Suggestions */}
                     {showAiPreview === 'categories' && aiSuggestions.categories && aiSuggestions.categories.length > 0 && (
@@ -1149,21 +1278,44 @@ export default function AppetiteToleranceConfig() {
                         <Label htmlFor="appetite_level">Appetite Level</Label>
                         <Select
                           value={newCategory.appetite_level}
-                          onValueChange={(val: any) => setNewCategory({ ...newCategory, appetite_level: val })}
+                          onValueChange={(val: AppetiteLevel) => {
+                            setNewCategory({ ...newCategory, appetite_level: val });
+                            // Auto-generate statement if category is selected
+                            if (newCategory.risk_category && val) {
+                              handleGenerateCategoryStatement(newCategory.risk_category, val);
+                            }
+                          }}
                         >
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="ZERO">ZERO</SelectItem>
-                            <SelectItem value="LOW">LOW</SelectItem>
-                            <SelectItem value="MODERATE">MODERATE</SelectItem>
-                            <SelectItem value="HIGH">HIGH</SelectItem>
+                            {getAppetiteLevels().map((def) => (
+                              <SelectItem key={def.level} value={def.level}>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{def.label}</span>
+                                  <span className="text-xs text-gray-500 truncate max-w-[300px]">{def.enterpriseMeaning}</span>
+                                </div>
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
+                        {newCategory.appetite_level && (
+                          <p className="text-xs text-gray-600 mt-1 italic">
+                            "{APPETITE_LEVEL_DEFINITIONS[newCategory.appetite_level]?.enterpriseMeaning}"
+                          </p>
+                        )}
                       </div>
                       <div style={{ gridColumn: 'span 2' }}>
-                        <Label htmlFor="rationale">Rationale</Label>
+                        <div className="flex items-center justify-between mb-1">
+                          <Label htmlFor="rationale">Appetite Statement</Label>
+                          {aiGenerating && (
+                            <span className="text-xs text-purple-600 flex items-center gap-1">
+                              <Loader2 size={12} className="animate-spin" />
+                              AI generating...
+                            </span>
+                          )}
+                        </div>
                         <Textarea
                           id="rationale"
                           value={newCategory.rationale}
@@ -1221,9 +1373,9 @@ export default function AppetiteToleranceConfig() {
                             <Badge
                               variant={
                                 cat.appetite_level === 'ZERO' ? 'destructive' :
-                                cat.appetite_level === 'LOW' ? 'secondary' :
-                                cat.appetite_level === 'MODERATE' ? 'default' :
-                                'outline'
+                                  cat.appetite_level === 'LOW' ? 'secondary' :
+                                    cat.appetite_level === 'MODERATE' ? 'default' :
+                                      'outline'
                               }
                             >
                               {cat.appetite_level}
@@ -1552,26 +1704,26 @@ export default function AppetiteToleranceConfig() {
                                 )}
                               </div>
                             </div>
-                          <div style={{ display: 'flex', gap: '16px', fontSize: '13px', marginTop: '12px' }}>
-                            <div>
-                              <span style={{ color: '#10b981', fontWeight: '600' }}>Green:</span> {' '}
-                              ≤ {metric.green_max || 'N/A'}
+                            <div style={{ display: 'flex', gap: '16px', fontSize: '13px', marginTop: '12px' }}>
+                              <div>
+                                <span style={{ color: '#10b981', fontWeight: '600' }}>Green:</span> {' '}
+                                ≤ {metric.green_max || 'N/A'}
+                              </div>
+                              <div>
+                                <span style={{ color: '#f59e0b', fontWeight: '600' }}>Amber:</span> {' '}
+                                ≤ {metric.amber_max || 'N/A'}
+                              </div>
+                              <div>
+                                <span style={{ color: '#ef4444', fontWeight: '600' }}>Red:</span> {' '}
+                                ≥ {metric.red_min || 'N/A'}
+                              </div>
                             </div>
-                            <div>
-                              <span style={{ color: '#f59e0b', fontWeight: '600' }}>Amber:</span> {' '}
-                              ≤ {metric.amber_max || 'N/A'}
-                            </div>
-                            <div>
-                              <span style={{ color: '#ef4444', fontWeight: '600' }}>Red:</span> {' '}
-                              ≥ {metric.red_min || 'N/A'}
-                            </div>
+                            {metric.metric_description && (
+                              <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '8px' }}>
+                                {metric.metric_description}
+                              </p>
+                            )}
                           </div>
-                          {metric.metric_description && (
-                            <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '8px' }}>
-                              {metric.metric_description}
-                            </p>
-                          )}
-                        </div>
                         );
                       })
                     )}

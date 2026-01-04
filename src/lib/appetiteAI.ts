@@ -9,6 +9,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { USE_CASE_MODELS } from '@/config/ai-models';
+import { APPETITE_LEVEL_DEFINITIONS, type AppetiteLevel } from './appetiteDefinitions';
 
 const anthropic = new Anthropic({
   apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
@@ -29,7 +30,123 @@ interface RiskContext {
 }
 
 /**
- * Generate Risk Appetite Statement using AI
+ * Generate a category-specific appetite statement using FIXED global definitions
+ * 
+ * IMPORTANT: This function applies the global appetite meaning to a specific
+ * risk category. It does NOT redefine what the appetite level means.
+ */
+export async function generateCategoryAppetiteStatement(
+  riskCategory: string,
+  appetiteLevel: AppetiteLevel,
+  organizationName?: string
+): Promise<string> {
+  const levelDef = APPETITE_LEVEL_DEFINITIONS[appetiteLevel];
+
+  const prompt = `You are a Chief Risk Officer writing a risk appetite statement for a specific risk category.
+
+CRITICAL INSTRUCTION: You must use the EXACT enterprise meaning provided below. Do NOT redefine or reinterpret what the appetite level means. Your job is to APPLY this meaning to the specific risk category.
+
+ENTERPRISE APPETITE LEVEL DEFINITION (DO NOT CHANGE):
+Level: ${appetiteLevel}
+Meaning: "${levelDef.enterpriseMeaning}"
+
+CONTEXT:
+- Organization: ${organizationName || 'The organization'}
+- Risk Category: ${riskCategory}
+- Selected Appetite Level: ${appetiteLevel}
+
+TASK:
+Write a 2-3 sentence appetite statement for ${riskCategory} that:
+1. States the organization's ${appetiteLevel} appetite for ${riskCategory}
+2. APPLIES the enterprise meaning ("${levelDef.enterpriseMeaning}") specifically to ${riskCategory}
+3. Adds 1-2 category-specific examples or controls that align with this appetite level
+4. Uses professional Board-level language
+
+EXAMPLE OUTPUT FORMAT:
+"${organizationName || 'The organization'} maintains a ${appetiteLevel} appetite for ${riskCategory}. [Apply the meaning to this category]. [Add specific controls or examples]."
+
+Generate the appetite statement now (just the statement text, no explanation):`;
+
+  const message = await anthropic.messages.create({
+    model: USE_CASE_MODELS.APPETITE_GENERATION,
+    max_tokens: 512,
+    messages: [{
+      role: 'user',
+      content: prompt
+    }]
+  });
+
+  const textContent = message.content.find(c => c.type === 'text');
+  return textContent ? (textContent as any).text.trim() : 'Error generating statement';
+}
+
+/**
+ * Generate a comprehensive Risk Appetite Summary Report
+ * 
+ * Takes all configured category appetite levels and statements and generates
+ * a consolidated Board-ready summary report.
+ */
+export async function generateAppetiteSummaryReport(
+  organizationName: string,
+  categoryStatements: Array<{
+    category: string;
+    level: AppetiteLevel;
+    statement: string;
+  }>
+): Promise<string> {
+  const categorySummary = categoryStatements.map(c =>
+    `- ${c.category}: ${c.level} - "${c.statement}"`
+  ).join('\n');
+
+  const levelBreakdown = {
+    ZERO: categoryStatements.filter(c => c.level === 'ZERO').map(c => c.category),
+    LOW: categoryStatements.filter(c => c.level === 'LOW').map(c => c.category),
+    MODERATE: categoryStatements.filter(c => c.level === 'MODERATE').map(c => c.category),
+    HIGH: categoryStatements.filter(c => c.level === 'HIGH').map(c => c.category),
+  };
+
+  const prompt = `You are a Chief Risk Officer preparing a Risk Appetite Summary Report for Board presentation.
+
+ORGANIZATION: ${organizationName}
+DATE: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+
+CONFIGURED APPETITE LEVELS BY CATEGORY:
+${categorySummary}
+
+SUMMARY BY LEVEL:
+- Zero Tolerance: ${levelBreakdown.ZERO.length > 0 ? levelBreakdown.ZERO.join(', ') : 'None'}
+- Low Appetite: ${levelBreakdown.LOW.length > 0 ? levelBreakdown.LOW.join(', ') : 'None'}
+- Moderate Appetite: ${levelBreakdown.MODERATE.length > 0 ? levelBreakdown.MODERATE.join(', ') : 'None'}
+- High Appetite: ${levelBreakdown.HIGH.length > 0 ? levelBreakdown.HIGH.join(', ') : 'None'}
+
+TASK:
+Generate a comprehensive Risk Appetite Summary Report that:
+1. Opens with an executive summary paragraph
+2. Groups risks by appetite level with brief explanations
+3. Highlights any areas requiring Board attention
+4. Uses professional, governance-appropriate language
+5. Ends with a recommendation or assurance statement
+
+Format the output with markdown headings (## and ###).
+Keep the report concise (400-500 words).
+
+Generate the Risk Appetite Summary Report now:`;
+
+  const message = await anthropic.messages.create({
+    model: USE_CASE_MODELS.APPETITE_GENERATION,
+    max_tokens: 1500,
+    messages: [{
+      role: 'user',
+      content: prompt
+    }]
+  });
+
+  const textContent = message.content.find(c => c.type === 'text');
+  return textContent ? (textContent as any).text.trim() : 'Error generating report';
+}
+
+/**
+ * Generate Risk Appetite Statement using AI (legacy - for overall statement)
  */
 export async function generateAppetiteStatement(
   context: RiskContext
@@ -90,8 +207,8 @@ export async function generateAppetiteCategories(
 ): Promise<AppetiteCategory[]> {
   const riskContext = context.existingRisks
     ? context.existingRisks.map(r =>
-        `${r.category}: ${r.count} risks, avg inherent score ${r.avgInherentScore}`
-      ).join('\n')
+      `${r.category}: ${r.count} risks, avg inherent score ${r.avgInherentScore}`
+    ).join('\n')
     : context.riskCategories.join('\n');
 
   const prompt = `You are a world-class Chief Risk Officer mapping risk appetite levels.
