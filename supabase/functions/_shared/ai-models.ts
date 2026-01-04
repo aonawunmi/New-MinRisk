@@ -16,7 +16,7 @@ export const AI_MODELS = {
    * Haiku 3.5 - Use for structured JSON generation
    * - RSS feed filtering
    * - Simple analysis tasks
-   * - Cost: ~10x cheaper than Sonnet 4.5
+   * - Cost: ~10x cheaper than Sonnet 3.5
    */
   HAIKU: 'claude-3-5-haiku-20241022',
 
@@ -25,15 +25,15 @@ export const AI_MODELS = {
    * - General purpose analysis
    * - Moderate complexity
    */
-  SONNET_35: 'claude-3-5-sonnet-20250122',
+  SONNET_35: 'claude-3-5-sonnet-latest',
 
   /**
-   * Sonnet 4.5 - Use ONLY for complex reasoning
+   * Sonnet 3.5 (High capability fallback) - Use for complex reasoning
    * - Risk Intelligence deep analysis
    * - Multi-step reasoning
-   * - Cost: 10x more expensive than Haiku
+   * - Note: Temporarily aliased to Sonnet 3.5 until 4.5 is released/verified
    */
-  SONNET_45: 'claude-sonnet-4-5-20250929',
+  SONNET_45: 'claude-3-5-sonnet-latest',
 } as const;
 
 /**

@@ -20,7 +20,7 @@ const corsHeaders = {
 }
 
 // AI Model Configuration
-const AI_MODEL_VERSION = 'claude-3-5-sonnet-20241022'
+const AI_MODEL_VERSION = USE_CASE_MODELS.INCIDENT_RISK_MAPPING
 const CLAUDE_API_TIMEOUT = 30000
 const MIN_CONFIDENCE_THRESHOLD = 70 // Only suggest risks with >= 70% confidence
 

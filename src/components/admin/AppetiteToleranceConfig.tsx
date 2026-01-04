@@ -244,7 +244,7 @@ export default function AppetiteToleranceConfig() {
     try {
       const nextVersion = Math.max(...statements.map(s => s.version_number), 0) + 1;
 
-      const { error: insertError } = await supabase
+      const { data: stmtData, error: insertError } = await supabase
         .from('risk_appetite_statements')
         .insert({
           organization_id: profile.organization_id,
@@ -253,13 +253,38 @@ export default function AppetiteToleranceConfig() {
           effective_from: newStatement.effective_from,
           status: 'DRAFT',
           created_by: user.id,
-        });
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      // Auto-create pre-configured categories
+      if (preConfiguredAppetites.length > 0 && stmtData) {
+        const categoriesToInsert = preConfiguredAppetites.map(conf => ({
+          statement_id: stmtData.id,
+          organization_id: profile.organization_id,
+          risk_category: conf.category,
+          appetite_level: conf.level,
+          rationale: `Pre-defined during Statement v${nextVersion} creation.`,
+          created_by: user.id
+        }));
+
+        const { error: catError } = await supabase
+          .from('risk_appetite_categories')
+          .insert(categoriesToInsert);
+
+        if (catError) console.error('Error auto-creating categories:', catError);
+
+        setPreConfiguredAppetites([]); // Clear config
+      }
 
       if (insertError) throw insertError;
 
       setSuccess('Risk Appetite Statement created successfully!');
       setNewStatement({ statement_text: '', effective_from: new Date().toISOString().split('T')[0] });
       await loadStatements();
+      await loadCategories(); // Refresh categories to show auto-created ones
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       console.error('Error creating statement:', err);
@@ -1051,7 +1076,9 @@ export default function AppetiteToleranceConfig() {
                     <Select value={tempConfig.category} onValueChange={(v) => setTempConfig({ ...tempConfig, category: v })}>
                       <SelectTrigger id="temp-category"><SelectValue placeholder="Select..." /></SelectTrigger>
                       <SelectContent>
-                        {riskCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        {riskCategories
+                          .filter(c => !preConfiguredAppetites.some(p => p.category === c))
+                          .map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1343,11 +1370,13 @@ export default function AppetiteToleranceConfig() {
                             <SelectValue placeholder="Select category" />
                           </SelectTrigger>
                           <SelectContent>
-                            {riskCategories.map((cat) => (
-                              <SelectItem key={cat} value={cat}>
-                                {cat}
-                              </SelectItem>
-                            ))}
+                            {riskCategories
+                              .filter(cat => !categories.some(existing => existing.risk_category === cat))
+                              .map((cat) => (
+                                <SelectItem key={cat} value={cat}>
+                                  {cat}
+                                </SelectItem>
+                              ))}
                           </SelectContent>
                         </Select>
                       </div>
