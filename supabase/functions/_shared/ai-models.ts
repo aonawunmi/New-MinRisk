@@ -60,6 +60,9 @@ export const USE_CASE_MODELS = {
   /** AI text refinement - Use cheapest */
   TEXT_REFINEMENT: AI_MODELS.HAIKU,
 
+  /** Risk Appetite generation (Board language) - Use balanced */
+  APPETITE_GENERATION: AI_MODELS.SONNET_35,
+
   /** Default fallback */
   DEFAULT: AI_MODELS.HAIKU,
 } as const;

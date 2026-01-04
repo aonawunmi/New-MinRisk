@@ -34,7 +34,7 @@ serve(async (req) => {
 
         if (userError || !user) {
             return new Response(
-                JSON.stringify({ error: 'Unauthorized' }),
+                JSON.stringify({ error: 'Unauthorized', details: userError }),
                 { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
@@ -42,11 +42,18 @@ serve(async (req) => {
         // 2. Get API Key
         const claudeApiKey = Deno.env.get('ANTHROPIC_API_KEY') || Deno.env.get('VITE_ANTHROPIC_API_KEY')
         if (!claudeApiKey) {
-            throw new Error('Server misconfiguration: Missing ANTHROPIC_API_KEY')
+            throw new Error('Server misconfiguration: Missing ANTHROPIC_API_KEY in secrets')
         }
 
         // 3. Parse Request
-        const { mode, context, ...params } = await req.json()
+        let body;
+        try {
+            body = await req.json()
+        } catch (e) {
+            throw new Error('Invalid JSON body')
+        }
+
+        const { mode, context, ...params } = body
 
         // 4. Route to specific handler
         let result;
@@ -77,9 +84,10 @@ serve(async (req) => {
 
     } catch (error) {
         console.error('Error:', error.message)
+        // Return 200 OK with error field so client can read the message
         return new Response(
-            JSON.stringify({ error: error.message }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            JSON.stringify({ error: error.message, stack: error.stack }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
     }
 })
