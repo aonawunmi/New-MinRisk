@@ -38,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { AlertCircle, Sparkles, Loader2, CheckCircle, X, Edit, AlertTriangle, Plus, Shield, XCircle, Check, Trash2 } from 'lucide-react';
+import { AlertCircle, Sparkles, Loader2, CheckCircle, X, Edit, AlertTriangle, Plus, Shield, XCircle, Check, Trash2, Info } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import TreatmentLogViewer from '@/components/riskIntelligence/TreatmentLogViewer';
@@ -1980,10 +1980,10 @@ export default function RiskForm({
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="0">0</SelectItem>
-                              <SelectItem value="1">1</SelectItem>
-                              <SelectItem value="2">2</SelectItem>
-                              <SelectItem value="3">3</SelectItem>
+                              <SelectItem value="0">0 - Not designed</SelectItem>
+                              <SelectItem value="1">1 - Poorly designed</SelectItem>
+                              <SelectItem value="2">2 - Partially designed</SelectItem>
+                              <SelectItem value="3">3 - Well designed</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -2003,10 +2003,10 @@ export default function RiskForm({
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="0">0</SelectItem>
-                              <SelectItem value="1">1</SelectItem>
-                              <SelectItem value="2">2</SelectItem>
-                              <SelectItem value="3">3</SelectItem>
+                              <SelectItem value="0">0 - Not applied</SelectItem>
+                              <SelectItem value="1">1 - Sometimes applied</SelectItem>
+                              <SelectItem value="2">2 - Generally oper~</SelectItem>
+                              <SelectItem value="3">3 - Always applied</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -2023,10 +2023,10 @@ export default function RiskForm({
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="0">0</SelectItem>
-                              <SelectItem value="1">1</SelectItem>
-                              <SelectItem value="2">2</SelectItem>
-                              <SelectItem value="3">3</SelectItem>
+                              <SelectItem value="0">0 - Not monitored</SelectItem>
+                              <SelectItem value="1">1 - Ad-hoc monito~</SelectItem>
+                              <SelectItem value="2">2 - Usually monitored</SelectItem>
+                              <SelectItem value="3">3 - Always monitored</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -2043,10 +2043,10 @@ export default function RiskForm({
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="0">0</SelectItem>
-                              <SelectItem value="1">1</SelectItem>
-                              <SelectItem value="2">2</SelectItem>
-                              <SelectItem value="3">3</SelectItem>
+                              <SelectItem value="0">0 - Never evaluated</SelectItem>
+                              <SelectItem value="1">1 - Infrequently eval~</SelectItem>
+                              <SelectItem value="2">2 - Occasionally eval~</SelectItem>
+                              <SelectItem value="3">3 - Regularly evaluated</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -2228,10 +2228,10 @@ export default function RiskForm({
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="0">0</SelectItem>
-                                  <SelectItem value="1">1</SelectItem>
-                                  <SelectItem value="2">2</SelectItem>
-                                  <SelectItem value="3">3</SelectItem>
+                                  <SelectItem value="0">0 - Not designed</SelectItem>
+                                  <SelectItem value="1">1 - Poorly designed</SelectItem>
+                                  <SelectItem value="2">2 - Partially designed</SelectItem>
+                                  <SelectItem value="3">3 - Well designed</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -2247,10 +2247,10 @@ export default function RiskForm({
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="0">0</SelectItem>
-                                  <SelectItem value="1">1</SelectItem>
-                                  <SelectItem value="2">2</SelectItem>
-                                  <SelectItem value="3">3</SelectItem>
+                                  <SelectItem value="0">0 - Not applied</SelectItem>
+                                  <SelectItem value="1">1 - Sometimes applied</SelectItem>
+                                  <SelectItem value="2">2 - Generally oper~</SelectItem>
+                                  <SelectItem value="3">3 - Always applied</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -2266,10 +2266,10 @@ export default function RiskForm({
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="0">0</SelectItem>
-                                  <SelectItem value="1">1</SelectItem>
-                                  <SelectItem value="2">2</SelectItem>
-                                  <SelectItem value="3">3</SelectItem>
+                                  <SelectItem value="0">0 - Not monitored</SelectItem>
+                                  <SelectItem value="1">1 - Ad-hoc monito~</SelectItem>
+                                  <SelectItem value="2">2 - Usually monitored</SelectItem>
+                                  <SelectItem value="3">3 - Always monitored</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -2285,10 +2285,10 @@ export default function RiskForm({
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="0">0</SelectItem>
-                                  <SelectItem value="1">1</SelectItem>
-                                  <SelectItem value="2">2</SelectItem>
-                                  <SelectItem value="3">3</SelectItem>
+                                  <SelectItem value="0">0 - Never evaluated</SelectItem>
+                                  <SelectItem value="1">1 - Infrequently eval~</SelectItem>
+                                  <SelectItem value="2">2 - Occasionally eval~</SelectItem>
+                                  <SelectItem value="3">3 - Regularly evaluated</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>

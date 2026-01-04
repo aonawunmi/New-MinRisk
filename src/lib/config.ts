@@ -33,6 +33,26 @@ export interface ImpactLabels {
   '6'?: string; // Only for 6x6 matrix
 }
 
+// DIME Framework types
+export interface DIMEScoreDescription {
+  label: string;
+  description: string;
+}
+
+export interface DIMEDimensionDescriptions {
+  '0': DIMEScoreDescription;
+  '1': DIMEScoreDescription;
+  '2': DIMEScoreDescription;
+  '3': DIMEScoreDescription;
+}
+
+export interface DIMEDescriptions {
+  design: DIMEDimensionDescriptions;
+  implementation: DIMEDimensionDescriptions;
+  monitoring: DIMEDimensionDescriptions;
+  evaluation: DIMEDimensionDescriptions;
+}
+
 export interface OrganizationConfig {
   id: string;
   organization_id: string;
@@ -44,6 +64,7 @@ export interface OrganizationConfig {
   departments: string[];
   categories: string[];
   owners: string[];
+  dime_descriptions?: DIMEDescriptions;
   created_at: string;
   updated_at: string;
 }
@@ -56,6 +77,7 @@ export interface UpdateConfigData {
   departments?: string[];
   categories?: string[];
   owners?: string[];
+  dime_descriptions?: DIMEDescriptions;
 }
 
 interface ApiResponse<T> {
@@ -114,6 +136,33 @@ export const DEFAULT_CATEGORIES = [
   'ESG',
   'Reputational',
 ];
+
+export const DEFAULT_DIME_DESCRIPTIONS: DIMEDescriptions = {
+  design: {
+    '0': { label: 'Not designed', description: 'Control does not address the risk' },
+    '1': { label: 'Poorly designed', description: 'Control minimally addresses the risk' },
+    '2': { label: 'Partially designed', description: 'Control partially addresses the risk' },
+    '3': { label: 'Well designed', description: 'Control specifically addresses the risk' },
+  },
+  implementation: {
+    '0': { label: 'Not applied', description: 'Control is not applied or applied incorrectly' },
+    '1': { label: 'Sometimes applied', description: 'Control is applied inconsistently' },
+    '2': { label: 'Generally operational', description: 'Control is usually applied correctly' },
+    '3': { label: 'Always applied', description: 'Control is always applied as intended' },
+  },
+  monitoring: {
+    '0': { label: 'Not monitored', description: 'Control is not monitored at all' },
+    '1': { label: 'Ad-hoc monitoring', description: 'Control is monitored on an ad-hoc basis' },
+    '2': { label: 'Usually monitored', description: 'Control is regularly monitored' },
+    '3': { label: 'Always monitored', description: 'Control is continuously monitored' },
+  },
+  evaluation: {
+    '0': { label: 'Never evaluated', description: 'Control effectiveness is never evaluated' },
+    '1': { label: 'Infrequently evaluated', description: 'Control effectiveness is rarely evaluated' },
+    '2': { label: 'Occasionally evaluated', description: 'Control effectiveness is occasionally evaluated' },
+    '3': { label: 'Regularly evaluated', description: 'Control effectiveness is regularly evaluated' },
+  },
+};
 
 // ============================================================================
 // CRUD OPERATIONS
@@ -342,3 +391,56 @@ export async function resetToDefaultLabels(
       matrixSize === 5 ? DEFAULT_5X5_IMPACT_LABELS : DEFAULT_6X6_IMPACT_LABELS,
   });
 }
+
+// ============================================================================
+// DIME HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Get DIME score label for dropdown display
+ * Format: "2 - Partially designed"
+ */
+export function getDIMELabel(
+  config: OrganizationConfig | null,
+  dimension: 'design' | 'implementation' | 'monitoring' | 'evaluation',
+  score: 0 | 1 | 2 | 3
+): string {
+  const descriptions = config?.dime_descriptions || DEFAULT_DIME_DESCRIPTIONS;
+  const scoreDesc = descriptions[dimension]?.[score.toString() as '0' | '1' | '2' | '3'];
+
+  if (scoreDesc) {
+    return `${score} - ${scoreDesc.label}`;
+  }
+
+  // Fallback to defaults
+  const defaultDesc = DEFAULT_DIME_DESCRIPTIONS[dimension][score.toString() as '0' | '1' | '2' | '3'];
+  return `${score} - ${defaultDesc.label}`;
+}
+
+/**
+ * Get DIME score description (longer text)
+ */
+export function getDIMEDescription(
+  config: OrganizationConfig | null,
+  dimension: 'design' | 'implementation' | 'monitoring' | 'evaluation',
+  score: 0 | 1 | 2 | 3
+): string {
+  const descriptions = config?.dime_descriptions || DEFAULT_DIME_DESCRIPTIONS;
+  const scoreDesc = descriptions[dimension]?.[score.toString() as '0' | '1' | '2' | '3'];
+
+  if (scoreDesc) {
+    return scoreDesc.description;
+  }
+
+  return DEFAULT_DIME_DESCRIPTIONS[dimension][score.toString() as '0' | '1' | '2' | '3'].description;
+}
+
+/**
+ * Reset DIME descriptions to defaults
+ */
+export async function resetDIMEDescriptions(): Promise<ApiResponse<OrganizationConfig>> {
+  return updateOrganizationConfig({
+    dime_descriptions: DEFAULT_DIME_DESCRIPTIONS,
+  });
+}
+

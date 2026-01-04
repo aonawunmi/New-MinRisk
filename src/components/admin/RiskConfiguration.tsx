@@ -18,9 +18,11 @@ import {
   DEFAULT_5X5_IMPACT_LABELS,
   DEFAULT_6X6_LIKELIHOOD_LABELS,
   DEFAULT_6X6_IMPACT_LABELS,
+  DEFAULT_DIME_DESCRIPTIONS,
   type OrganizationConfig,
   type LikelihoodLabels,
   type ImpactLabels,
+  type DIMEDescriptions,
 } from '@/lib/config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +53,7 @@ import {
   RotateCcw,
   Building2,
   Tag,
+  Shield,
 } from 'lucide-react';
 
 export default function RiskConfiguration() {
@@ -64,6 +67,7 @@ export default function RiskConfiguration() {
   const [impactLabels, setImpactLabels] = useState<ImpactLabels>(DEFAULT_5X5_IMPACT_LABELS);
   const [divisions, setDivisions] = useState<string[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
+  const [dimeDescriptions, setDimeDescriptions] = useState<DIMEDescriptions>(DEFAULT_DIME_DESCRIPTIONS);
 
   // New item inputs
   const [newDivision, setNewDivision] = useState('');
@@ -97,6 +101,7 @@ export default function RiskConfiguration() {
         setImpactLabels(data.impact_labels);
         setDivisions(data.divisions || []);
         setDepartments(data.departments || []);
+        setDimeDescriptions(data.dime_descriptions || DEFAULT_DIME_DESCRIPTIONS);
       }
     } catch (err: any) {
       console.error('Unexpected error loading config:', err);
@@ -118,6 +123,7 @@ export default function RiskConfiguration() {
         impact_labels: impactLabels,
         divisions,
         departments,
+        dime_descriptions: dimeDescriptions,
       });
 
       if (updateError) {
@@ -143,13 +149,13 @@ export default function RiskConfiguration() {
 
     const defaults = matrixSize === 5
       ? {
-          likelihood: DEFAULT_5X5_LIKELIHOOD_LABELS,
-          impact: DEFAULT_5X5_IMPACT_LABELS,
-        }
+        likelihood: DEFAULT_5X5_LIKELIHOOD_LABELS,
+        impact: DEFAULT_5X5_IMPACT_LABELS,
+      }
       : {
-          likelihood: DEFAULT_6X6_LIKELIHOOD_LABELS,
-          impact: DEFAULT_6X6_IMPACT_LABELS,
-        };
+        likelihood: DEFAULT_6X6_LIKELIHOOD_LABELS,
+        impact: DEFAULT_6X6_IMPACT_LABELS,
+      };
 
     setLikelihoodLabels(defaults.likelihood);
     setImpactLabels(defaults.impact);
@@ -239,7 +245,7 @@ export default function RiskConfiguration() {
 
       {/* Configuration Tabs */}
       <Tabs defaultValue="structure" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="structure">
             <Building2 className="h-4 w-4 mr-2" />
             Organizational Structure
@@ -247,6 +253,10 @@ export default function RiskConfiguration() {
           <TabsTrigger value="labels">
             <Tag className="h-4 w-4 mr-2" />
             Risk Labels
+          </TabsTrigger>
+          <TabsTrigger value="dime">
+            <Shield className="h-4 w-4 mr-2" />
+            DIME Framework
           </TabsTrigger>
         </TabsList>
 
@@ -389,6 +399,131 @@ export default function RiskConfiguration() {
                         value={impactLabels[level.toString() as keyof ImpactLabels] || ''}
                         onChange={(e) => updateImpactLabel(level.toString(), e.target.value)}
                         placeholder={`Impact level ${level}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 3: DIME Framework */}
+        <TabsContent value="dime" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>DIME Framework Labels</CardTitle>
+                  <CardDescription>
+                    Customize the labels used for control effectiveness scoring (Design, Implementation, Monitoring, Evaluation)
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDimeDescriptions(DEFAULT_DIME_DESCRIPTIONS)}
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reset to Defaults
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Design Dimension */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Design (D)</Label>
+                <p className="text-sm text-gray-600">How well the control addresses the risk</p>
+                <div className="grid gap-3">
+                  {(['0', '1', '2', '3'] as const).map((score) => (
+                    <div key={`design-${score}`} className="flex items-center gap-3">
+                      <span className="w-8 text-sm font-medium text-gray-600">{score}:</span>
+                      <Input
+                        value={dimeDescriptions.design[score]?.label || ''}
+                        onChange={(e) => setDimeDescriptions({
+                          ...dimeDescriptions,
+                          design: {
+                            ...dimeDescriptions.design,
+                            [score]: { ...dimeDescriptions.design[score], label: e.target.value }
+                          }
+                        })}
+                        placeholder={`Label for score ${score}`}
+                        className="flex-1"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Implementation Dimension */}
+              <div className="space-y-3 border-t pt-4">
+                <Label className="text-base font-semibold">Implementation (I)</Label>
+                <p className="text-sm text-gray-600">How consistently the control is applied</p>
+                <div className="grid gap-3">
+                  {(['0', '1', '2', '3'] as const).map((score) => (
+                    <div key={`impl-${score}`} className="flex items-center gap-3">
+                      <span className="w-8 text-sm font-medium text-gray-600">{score}:</span>
+                      <Input
+                        value={dimeDescriptions.implementation[score]?.label || ''}
+                        onChange={(e) => setDimeDescriptions({
+                          ...dimeDescriptions,
+                          implementation: {
+                            ...dimeDescriptions.implementation,
+                            [score]: { ...dimeDescriptions.implementation[score], label: e.target.value }
+                          }
+                        })}
+                        placeholder={`Label for score ${score}`}
+                        className="flex-1"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Monitoring Dimension */}
+              <div className="space-y-3 border-t pt-4">
+                <Label className="text-base font-semibold">Monitoring (M)</Label>
+                <p className="text-sm text-gray-600">How actively the control is monitored</p>
+                <div className="grid gap-3">
+                  {(['0', '1', '2', '3'] as const).map((score) => (
+                    <div key={`mon-${score}`} className="flex items-center gap-3">
+                      <span className="w-8 text-sm font-medium text-gray-600">{score}:</span>
+                      <Input
+                        value={dimeDescriptions.monitoring[score]?.label || ''}
+                        onChange={(e) => setDimeDescriptions({
+                          ...dimeDescriptions,
+                          monitoring: {
+                            ...dimeDescriptions.monitoring,
+                            [score]: { ...dimeDescriptions.monitoring[score], label: e.target.value }
+                          }
+                        })}
+                        placeholder={`Label for score ${score}`}
+                        className="flex-1"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Evaluation Dimension */}
+              <div className="space-y-3 border-t pt-4">
+                <Label className="text-base font-semibold">Evaluation (E)</Label>
+                <p className="text-sm text-gray-600">How regularly control effectiveness is evaluated</p>
+                <div className="grid gap-3">
+                  {(['0', '1', '2', '3'] as const).map((score) => (
+                    <div key={`eval-${score}`} className="flex items-center gap-3">
+                      <span className="w-8 text-sm font-medium text-gray-600">{score}:</span>
+                      <Input
+                        value={dimeDescriptions.evaluation[score]?.label || ''}
+                        onChange={(e) => setDimeDescriptions({
+                          ...dimeDescriptions,
+                          evaluation: {
+                            ...dimeDescriptions.evaluation,
+                            [score]: { ...dimeDescriptions.evaluation[score], label: e.target.value }
+                          }
+                        })}
+                        placeholder={`Label for score ${score}`}
+                        className="flex-1"
                       />
                     </div>
                   ))}
