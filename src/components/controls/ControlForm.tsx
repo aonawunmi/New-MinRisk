@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dialog';
 import type { Control, DIMEScore, ControlType, ControlTarget } from '@/types/control';
 import { calculateControlEffectiveness } from '@/lib/controls';
+import { getOrganizationConfig, getDIMELabel, getDIMEDescription, DEFAULT_DIME_DESCRIPTIONS, type OrganizationConfig } from '@/lib/config';
 
 interface ControlFormProps {
   open: boolean;
@@ -50,32 +51,8 @@ interface FormData {
   evaluation_score: DIMEScore | null;
 }
 
-const DIME_DESCRIPTIONS = {
-  design: {
-    3: { label: "Well designed", description: "Control specifically addresses the risk" },
-    2: { label: "Partially designed", description: "Control partially addresses the risk" },
-    1: { label: "Poorly designed", description: "Control minimally addresses the risk" },
-    0: { label: "Not designed", description: "Control does not address the risk" }
-  },
-  implementation: {
-    3: { label: "Always applied", description: "Control is always applied as intended" },
-    2: { label: "Generally operational", description: "Control is usually applied correctly" },
-    1: { label: "Sometimes applied", description: "Control is applied inconsistently" },
-    0: { label: "Not applied", description: "Control is not applied or applied incorrectly" }
-  },
-  monitoring: {
-    3: { label: "Always monitored", description: "Control is continuously monitored" },
-    2: { label: "Usually monitored", description: "Control is regularly monitored" },
-    1: { label: "Ad-hoc monitoring", description: "Control is monitored on an ad-hoc basis" },
-    0: { label: "Not monitored", description: "Control is not monitored at all" }
-  },
-  evaluation: {
-    3: { label: "Regularly evaluated", description: "Control effectiveness is regularly evaluated" },
-    2: { label: "Occasionally evaluated", description: "Control effectiveness is occasionally evaluated" },
-    1: { label: "Infrequently evaluated", description: "Control effectiveness is rarely evaluated" },
-    0: { label: "Never evaluated", description: "Control effectiveness is never evaluated" }
-  }
-} as const;
+// DIME_DESCRIPTIONS is now loaded from organization config
+// Fallback to defaults if config not loaded
 
 export default function ControlForm({
   open,
@@ -98,6 +75,16 @@ export default function ControlForm({
     evaluation_score: null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false); // Prevent double-clicks
+  const [orgConfig, setOrgConfig] = useState<OrganizationConfig | null>(null);
+
+  // Load organization config for DIME labels
+  useEffect(() => {
+    async function loadConfig() {
+      const { data } = await getOrganizationConfig();
+      if (data) setOrgConfig(data);
+    }
+    loadConfig();
+  }, []);
 
   // Debug: Log available risks when form opens
   useEffect(() => {
@@ -182,35 +169,39 @@ export default function ControlForm({
     value: DIMEScore | null,
     onChange: (value: DIMEScore) => void
   ) => {
-    const descriptions = DIME_DESCRIPTIONS[dimension];
+    // Get descriptions from org config or fallback to defaults
+    const descriptions = orgConfig?.dime_descriptions?.[dimension] || DEFAULT_DIME_DESCRIPTIONS[dimension];
 
     return (
       <div className="space-y-2">
         <Label className="font-semibold">{label}</Label>
         <div className="grid grid-cols-4 gap-2">
-          {([3, 2, 1, 0] as DIMEScore[]).map((score) => (
-            <button
-              key={score}
-              type="button"
-              onClick={() => !isReadOnly && onChange(score)}
-              disabled={isReadOnly}
-              className={`
-                p-3 rounded-lg border-2 text-center transition-all
-                ${value === score
-                  ? 'border-blue-600 bg-blue-50 shadow-md'
-                  : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
-                }
-                ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}
-              `}
-            >
-              <div className="font-bold text-lg">{score}</div>
-              <div className="text-xs text-gray-600 mt-1">{descriptions[score].label}</div>
-            </button>
-          ))}
+          {([3, 2, 1, 0] as DIMEScore[]).map((score) => {
+            const scoreKey = score.toString() as '0' | '1' | '2' | '3';
+            return (
+              <button
+                key={score}
+                type="button"
+                onClick={() => !isReadOnly && onChange(score)}
+                disabled={isReadOnly}
+                className={`
+                  p-3 rounded-lg border-2 text-center transition-all
+                  ${value === score
+                    ? 'border-blue-600 bg-blue-50 shadow-md'
+                    : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                  }
+                  ${isReadOnly ? 'opacity-60 cursor-not-allowed' : ''}
+                `}
+              >
+                <div className="font-bold text-lg">{score}</div>
+                <div className="text-xs text-gray-600 mt-1">{descriptions[scoreKey]?.label || ''}</div>
+              </button>
+            );
+          })}
         </div>
         {value !== null && (
           <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
-            {descriptions[value].description}
+            {getDIMEDescription(orgConfig, dimension, value)}
           </p>
         )}
       </div>

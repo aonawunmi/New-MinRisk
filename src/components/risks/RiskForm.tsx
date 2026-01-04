@@ -13,7 +13,7 @@ import { getRootCauses, getImpacts, createCustomRootCause, createCustomImpact, t
 import { refineRiskStatement, type RiskStatementRefinement, revalidateEditedStatement, type RevalidationResult, getAIControlRecommendations, type AISuggestedControl } from '@/lib/ai';
 import { createControl, getControlsForRisk, updateControl, deleteControl, calculateControlEffectiveness } from '@/lib/controls';
 import { getAlertsWithEventsForRisk, type RiskIntelligenceAlert, type ExternalEvent } from '@/lib/riskIntelligence';
-import { getOrganizationConfig, getLikelihoodOptions, getImpactOptions, type OrganizationConfig } from '@/lib/config';
+import { getOrganizationConfig, getLikelihoodOptions, getImpactOptions, getDIMELabel, type OrganizationConfig } from '@/lib/config';
 import { listUsersInOrganization } from '@/lib/admin';
 import { isUserAdmin } from '@/lib/profiles';
 import { supabase } from '@/lib/supabase';
@@ -1980,10 +1980,10 @@ export default function RiskForm({
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="0">0 - Not designed</SelectItem>
-                              <SelectItem value="1">1 - Poorly designed</SelectItem>
-                              <SelectItem value="2">2 - Partially designed</SelectItem>
-                              <SelectItem value="3">3 - Well designed</SelectItem>
+                              <SelectItem value="0">{getDIMELabel(orgConfig, 'design', 0)}</SelectItem>
+                              <SelectItem value="1">{getDIMELabel(orgConfig, 'design', 1)}</SelectItem>
+                              <SelectItem value="2">{getDIMELabel(orgConfig, 'design', 2)}</SelectItem>
+                              <SelectItem value="3">{getDIMELabel(orgConfig, 'design', 3)}</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -2003,10 +2003,10 @@ export default function RiskForm({
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="0">0 - Not applied</SelectItem>
-                              <SelectItem value="1">1 - Sometimes applied</SelectItem>
-                              <SelectItem value="2">2 - Generally oper~</SelectItem>
-                              <SelectItem value="3">3 - Always applied</SelectItem>
+                              <SelectItem value="0">{getDIMELabel(orgConfig, 'implementation', 0)}</SelectItem>
+                              <SelectItem value="1">{getDIMELabel(orgConfig, 'implementation', 1)}</SelectItem>
+                              <SelectItem value="2">{getDIMELabel(orgConfig, 'implementation', 2)}</SelectItem>
+                              <SelectItem value="3">{getDIMELabel(orgConfig, 'implementation', 3)}</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -2023,10 +2023,10 @@ export default function RiskForm({
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="0">0 - Not monitored</SelectItem>
-                              <SelectItem value="1">1 - Ad-hoc monito~</SelectItem>
-                              <SelectItem value="2">2 - Usually monitored</SelectItem>
-                              <SelectItem value="3">3 - Always monitored</SelectItem>
+                              <SelectItem value="0">{getDIMELabel(orgConfig, 'monitoring', 0)}</SelectItem>
+                              <SelectItem value="1">{getDIMELabel(orgConfig, 'monitoring', 1)}</SelectItem>
+                              <SelectItem value="2">{getDIMELabel(orgConfig, 'monitoring', 2)}</SelectItem>
+                              <SelectItem value="3">{getDIMELabel(orgConfig, 'monitoring', 3)}</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -2043,10 +2043,10 @@ export default function RiskForm({
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="0">0 - Never evaluated</SelectItem>
-                              <SelectItem value="1">1 - Infrequently eval~</SelectItem>
-                              <SelectItem value="2">2 - Occasionally eval~</SelectItem>
-                              <SelectItem value="3">3 - Regularly evaluated</SelectItem>
+                              <SelectItem value="0">{getDIMELabel(orgConfig, 'evaluation', 0)}</SelectItem>
+                              <SelectItem value="1">{getDIMELabel(orgConfig, 'evaluation', 1)}</SelectItem>
+                              <SelectItem value="2">{getDIMELabel(orgConfig, 'evaluation', 2)}</SelectItem>
+                              <SelectItem value="3">{getDIMELabel(orgConfig, 'evaluation', 3)}</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -2228,10 +2228,10 @@ export default function RiskForm({
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="0">0 - Not designed</SelectItem>
-                                  <SelectItem value="1">1 - Poorly designed</SelectItem>
-                                  <SelectItem value="2">2 - Partially designed</SelectItem>
-                                  <SelectItem value="3">3 - Well designed</SelectItem>
+                                  <SelectItem value="0">{getDIMELabel(orgConfig, 'design', 0)}</SelectItem>
+                                  <SelectItem value="1">{getDIMELabel(orgConfig, 'design', 1)}</SelectItem>
+                                  <SelectItem value="2">{getDIMELabel(orgConfig, 'design', 2)}</SelectItem>
+                                  <SelectItem value="3">{getDIMELabel(orgConfig, 'design', 3)}</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -2247,10 +2247,10 @@ export default function RiskForm({
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="0">0 - Not applied</SelectItem>
-                                  <SelectItem value="1">1 - Sometimes applied</SelectItem>
-                                  <SelectItem value="2">2 - Generally oper~</SelectItem>
-                                  <SelectItem value="3">3 - Always applied</SelectItem>
+                                  <SelectItem value="0">{getDIMELabel(orgConfig, 'implementation', 0)}</SelectItem>
+                                  <SelectItem value="1">{getDIMELabel(orgConfig, 'implementation', 1)}</SelectItem>
+                                  <SelectItem value="2">{getDIMELabel(orgConfig, 'implementation', 2)}</SelectItem>
+                                  <SelectItem value="3">{getDIMELabel(orgConfig, 'implementation', 3)}</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -2266,10 +2266,10 @@ export default function RiskForm({
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="0">0 - Not monitored</SelectItem>
-                                  <SelectItem value="1">1 - Ad-hoc monito~</SelectItem>
-                                  <SelectItem value="2">2 - Usually monitored</SelectItem>
-                                  <SelectItem value="3">3 - Always monitored</SelectItem>
+                                  <SelectItem value="0">{getDIMELabel(orgConfig, 'monitoring', 0)}</SelectItem>
+                                  <SelectItem value="1">{getDIMELabel(orgConfig, 'monitoring', 1)}</SelectItem>
+                                  <SelectItem value="2">{getDIMELabel(orgConfig, 'monitoring', 2)}</SelectItem>
+                                  <SelectItem value="3">{getDIMELabel(orgConfig, 'monitoring', 3)}</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -2285,10 +2285,10 @@ export default function RiskForm({
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="0">0 - Never evaluated</SelectItem>
-                                  <SelectItem value="1">1 - Infrequently eval~</SelectItem>
-                                  <SelectItem value="2">2 - Occasionally eval~</SelectItem>
-                                  <SelectItem value="3">3 - Regularly evaluated</SelectItem>
+                                  <SelectItem value="0">{getDIMELabel(orgConfig, 'evaluation', 0)}</SelectItem>
+                                  <SelectItem value="1">{getDIMELabel(orgConfig, 'evaluation', 1)}</SelectItem>
+                                  <SelectItem value="2">{getDIMELabel(orgConfig, 'evaluation', 2)}</SelectItem>
+                                  <SelectItem value="3">{getDIMELabel(orgConfig, 'evaluation', 3)}</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -2569,10 +2569,10 @@ export default function RiskForm({
                                             <SelectValue />
                                           </SelectTrigger>
                                           <SelectContent>
-                                            <SelectItem value="0">0 - Not designed</SelectItem>
-                                            <SelectItem value="1">1 - Poorly designed</SelectItem>
-                                            <SelectItem value="2">2 - Partially designed</SelectItem>
-                                            <SelectItem value="3">3 - Well designed</SelectItem>
+                                            <SelectItem value="0">{getDIMELabel(orgConfig, 'design', 0)}</SelectItem>
+                                            <SelectItem value="1">{getDIMELabel(orgConfig, 'design', 1)}</SelectItem>
+                                            <SelectItem value="2">{getDIMELabel(orgConfig, 'design', 2)}</SelectItem>
+                                            <SelectItem value="3">{getDIMELabel(orgConfig, 'design', 3)}</SelectItem>
                                           </SelectContent>
                                         </Select>
                                       </div>
@@ -2591,10 +2591,10 @@ export default function RiskForm({
                                             <SelectValue />
                                           </SelectTrigger>
                                           <SelectContent>
-                                            <SelectItem value="0">0 - Not applied</SelectItem>
-                                            <SelectItem value="1">1 - Sometimes applied</SelectItem>
-                                            <SelectItem value="2">2 - Generally operational</SelectItem>
-                                            <SelectItem value="3">3 - Always applied</SelectItem>
+                                            <SelectItem value="0">{getDIMELabel(orgConfig, 'implementation', 0)}</SelectItem>
+                                            <SelectItem value="1">{getDIMELabel(orgConfig, 'implementation', 1)}</SelectItem>
+                                            <SelectItem value="2">{getDIMELabel(orgConfig, 'implementation', 2)}</SelectItem>
+                                            <SelectItem value="3">{getDIMELabel(orgConfig, 'implementation', 3)}</SelectItem>
                                           </SelectContent>
                                         </Select>
                                       </div>
@@ -2613,10 +2613,10 @@ export default function RiskForm({
                                             <SelectValue />
                                           </SelectTrigger>
                                           <SelectContent>
-                                            <SelectItem value="0">0 - Not monitored</SelectItem>
-                                            <SelectItem value="1">1 - Ad-hoc monitoring</SelectItem>
-                                            <SelectItem value="2">2 - Usually monitored</SelectItem>
-                                            <SelectItem value="3">3 - Always monitored</SelectItem>
+                                            <SelectItem value="0">{getDIMELabel(orgConfig, 'monitoring', 0)}</SelectItem>
+                                            <SelectItem value="1">{getDIMELabel(orgConfig, 'monitoring', 1)}</SelectItem>
+                                            <SelectItem value="2">{getDIMELabel(orgConfig, 'monitoring', 2)}</SelectItem>
+                                            <SelectItem value="3">{getDIMELabel(orgConfig, 'monitoring', 3)}</SelectItem>
                                           </SelectContent>
                                         </Select>
                                       </div>
@@ -2635,10 +2635,10 @@ export default function RiskForm({
                                             <SelectValue />
                                           </SelectTrigger>
                                           <SelectContent>
-                                            <SelectItem value="0">0 - Never evaluated</SelectItem>
-                                            <SelectItem value="1">1 - Infrequently evaluated</SelectItem>
-                                            <SelectItem value="2">2 - Occasionally evaluated</SelectItem>
-                                            <SelectItem value="3">3 - Regularly evaluated</SelectItem>
+                                            <SelectItem value="0">{getDIMELabel(orgConfig, 'evaluation', 0)}</SelectItem>
+                                            <SelectItem value="1">{getDIMELabel(orgConfig, 'evaluation', 1)}</SelectItem>
+                                            <SelectItem value="2">{getDIMELabel(orgConfig, 'evaluation', 2)}</SelectItem>
+                                            <SelectItem value="3">{getDIMELabel(orgConfig, 'evaluation', 3)}</SelectItem>
                                           </SelectContent>
                                         </Select>
                                       </div>
