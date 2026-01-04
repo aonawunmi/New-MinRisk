@@ -124,6 +124,15 @@ async function generateStatement(context: any, apiKey: string) {
         ? `Q${context.currentPeriodQuarter} ${context.currentPeriodYear}`
         : `Fiscal Year ${new Date().getFullYear()}`;
 
+    // Construct constraint text from user's pre-configured inputs
+    let specificConstraint = '';
+    if (context.configuredAppetites && Array.isArray(context.configuredAppetites) && context.configuredAppetites.length > 0) {
+        specificConstraint = `\n\nCRITICAL REQUIREMENT - PRE-DEFINED APPETITE LEVELS:
+The Board has already agreed on the following appetite levels. Your statement MUST faithfully reflect these:
+${context.configuredAppetites.map((a: any) => `- ${a.category}: ${a.level}`).join('\n')}
+`;
+    }
+
     const prompt = `You are a world-class Chief Risk Officer helping to draft a Risk Appetite Statement.
 
 CONTEXT:
@@ -131,13 +140,14 @@ CONTEXT:
 - Industry: ${context.industry || 'Financial Services'}
 - Current Period: ${periodText}
 - Key Risk Categories: ${context.riskCategories.join(', ')}
+${specificConstraint}
 
 TASK:
 Write a concise, Board-approved Risk Appetite Statement (2-3 paragraphs).
 
 REQUIREMENTS:
 1. Use professional, Board-level language
-2. Reference specific risk categories
+2. Reference specific risk categories${specificConstraint ? ' with their assigned levels' : ''}
 3. Be clear about appetite levels (ZERO, LOW, MODERATE, HIGH)
 4. Align with regulatory expectations (CBN, SEC, PENCOM)
 5. Include time horizon referencing the Current Period above (${periodText})

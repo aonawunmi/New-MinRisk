@@ -20,6 +20,10 @@ interface RiskContext {
     count: number;
     avgInherentScore: number;
   }>;
+  configuredAppetites?: Array<{
+    category: string;
+    level: string;
+  }>;
 }
 
 /**
@@ -38,12 +42,21 @@ async function callAppetiteEdgeFunction(mode: string, params: any, context?: any
       mode,
       context,
       ...params
+    },
+    headers: {
+      Authorization: `Bearer ${session?.access_token}`
     }
   });
 
   if (error) {
     console.error(`Edge Function error (${mode}):`, error);
     throw new Error(error.message || 'AI service unavailable');
+  }
+
+  // Check for logical error returned by function (200 OK with error field)
+  if (data && data.error) {
+    console.error(`Edge Function Logic Error:`, data.error);
+    throw new Error(data.error);
   }
 
   return data;
@@ -95,15 +108,23 @@ export async function generateAppetiteSummaryReport(
 }
 
 /**
- * Generate Risk Appetite Statement using AI (legacy - for overall statement)
+ * Generate Risk Appetite Statement using AI
+ * Supports optional list of pre-configured appetites to guide generation.
  */
 export async function generateAppetiteStatement(
-  context: RiskContext
+  context: RiskContext,
+  configuredAppetites?: Array<{ category: string, level: string }>
 ): Promise<string> {
+  // Add configured appetites to context if provided
+  const contextWithAppetites = {
+    ...context,
+    configuredAppetites: configuredAppetites || []
+  };
+
   const result = await callAppetiteEdgeFunction(
     'generate_statement',
     {},
-    context
+    contextWithAppetites
   );
 
   return result.text || 'Error generating statement';
@@ -169,7 +190,7 @@ export async function generateToleranceMetrics(
  */
 export async function getOrganizationContext(
   organizationId: string,
-  supabaseClient: any // keeping signature compatible, but file uses imported supabase
+  supabaseClient: any
 ): Promise<RiskContext> {
   // Use passed client or fall back to imported client
   const client = supabaseClient || supabase;
@@ -189,18 +210,21 @@ export async function getOrganizationContext(
 
   const categoryNames = categories?.map(c => c.name) || [];
 
-  // Get existing risks for context (optional)
+  // Get existing risks for context
+  // FIX: Query base fields (likelihood/impact) instead of score_inherent to prevent 400 errors if column is missing/computed
   const { data: risks } = await client
     .from('risks')
-    .select('category, score_inherent')
+    .select('category, likelihood_inherent, impact_inherent')
     .eq('organization_id', organizationId)
     .eq('is_active', true);
 
-  // Calculate risk stats per category (only for categories with risks)
+  // Calculate risk stats per category
   const riskStats = categoryNames.map(category => {
     const categoryRisks = risks?.filter(r => r.category === category) || [];
+
+    // Calculate average score manually (Likelihood * Impact)
     const avgScore = categoryRisks.length > 0
-      ? categoryRisks.reduce((sum, r) => sum + (r.score_inherent || 0), 0) / categoryRisks.length
+      ? categoryRisks.reduce((sum, r) => sum + ((r.likelihood_inherent || 0) * (r.impact_inherent || 0)), 0) / categoryRisks.length
       : 0;
 
     return {
@@ -216,7 +240,7 @@ export async function getOrganizationContext(
 
   return {
     organizationName: org?.name || 'Organization',
-    industry: 'Financial Services', // Could be from org settings
+    industry: 'Financial Services',
     currentPeriodYear: currentYear,
     currentPeriodQuarter: currentQuarter,
     riskCategories: categoryNames,

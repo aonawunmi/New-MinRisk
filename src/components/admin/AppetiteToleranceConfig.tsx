@@ -66,6 +66,7 @@ import {
   Trash2,
   History,
   X,
+  Settings2,
 } from 'lucide-react';
 
 export default function AppetiteToleranceConfig() {
@@ -122,6 +123,10 @@ export default function AppetiteToleranceConfig() {
   const [showAiPreview, setShowAiPreview] = useState<'statement' | 'categories' | 'metrics' | null>(null);
   const [summaryReport, setSummaryReport] = useState<string | null>(null);
   const [showSummaryReport, setShowSummaryReport] = useState(false);
+
+  // Pre-configuration for AI Statement Generation
+  const [preConfiguredAppetites, setPreConfiguredAppetites] = useState<Array<{ category: string, level: AppetiteLevel }>>([]);
+  const [tempConfig, setTempConfig] = useState({ category: '', level: 'MODERATE' as AppetiteLevel });
 
   useEffect(() => {
     if (profile?.organization_id) {
@@ -660,7 +665,12 @@ export default function AppetiteToleranceConfig() {
 
     try {
       const context = await getOrganizationContext(profile.organization_id, supabase);
-      const generatedStatement = await generateAppetiteStatement(context);
+
+      // Pass the user-defined pre-configuration to the AI
+      const generatedStatement = await generateAppetiteStatement(
+        context,
+        preConfiguredAppetites
+      );
 
       setAiSuggestions({ ...aiSuggestions, statement: generatedStatement });
       setNewStatement({ ...newStatement, statement_text: generatedStatement });
@@ -1007,6 +1017,73 @@ export default function AppetiteToleranceConfig() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Pre-Generated Key Inputs - Added for User Control */}
+              <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Settings2 size={16} />
+                  Configure Key Risk Categories (Optional)
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Add specific appetite levels you want the AI to include in the statement.
+                </p>
+
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {preConfiguredAppetites.length === 0 && (
+                    <span className="text-xs text-gray-400 italic">No specific constraints added. AI will generate based on general context.</span>
+                  )}
+                  {preConfiguredAppetites.map((item, idx) => (
+                    <Badge key={idx} variant="secondary" style={{ paddingLeft: '8px', paddingRight: '4px', paddingTop: '4px', paddingBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {item.category}: {item.level}
+                      <Button variant="ghost" size="sm" style={{ height: '16px', width: '16px', padding: 0 }} onClick={() => {
+                        const newConfig = [...preConfiguredAppetites];
+                        newConfig.splice(idx, 1);
+                        setPreConfiguredAppetites(newConfig);
+                      }}>
+                        <X size={12} />
+                      </Button>
+                    </Badge>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 items-end">
+                  <div style={{ width: '250px' }}>
+                    <Label htmlFor="temp-category">Risk Category</Label>
+                    <Select value={tempConfig.category} onValueChange={(v) => setTempConfig({ ...tempConfig, category: v })}>
+                      <SelectTrigger id="temp-category"><SelectValue placeholder="Select..." /></SelectTrigger>
+                      <SelectContent>
+                        {riskCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div style={{ width: '150px' }}>
+                    <Label htmlFor="temp-level">Level</Label>
+                    <Select value={tempConfig.level} onValueChange={(v) => setTempConfig({ ...tempConfig, level: v as AppetiteLevel })}>
+                      <SelectTrigger id="temp-level"><SelectValue placeholder="Level..." /></SelectTrigger>
+                      <SelectContent>
+                        {getAppetiteLevels().map((def) => (
+                          <SelectItem key={def.level} value={def.level}>{def.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      if (tempConfig.category && tempConfig.level) {
+                        setPreConfiguredAppetites([...preConfiguredAppetites, { category: tempConfig.category, level: tempConfig.level as AppetiteLevel }]);
+                        setTempConfig({ category: '', level: 'MODERATE' });
+                      }
+                    }}
+                    disabled={!tempConfig.category || !tempConfig.level}
+                  >
+                    Add
+                  </Button>
+                  {preConfiguredAppetites.length > 0 && (
+                    <Button variant="ghost" onClick={() => setPreConfiguredAppetites([])}>Clear</Button>
+                  )}
+                </div>
+              </div>
+
               {/* Create New Statement */}
               <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
@@ -1280,10 +1357,6 @@ export default function AppetiteToleranceConfig() {
                           value={newCategory.appetite_level}
                           onValueChange={(val: AppetiteLevel) => {
                             setNewCategory({ ...newCategory, appetite_level: val });
-                            // Auto-generate statement if category is selected
-                            if (newCategory.risk_category && val) {
-                              handleGenerateCategoryStatement(newCategory.risk_category, val);
-                            }
                           }}
                         >
                           <SelectTrigger>
@@ -1309,13 +1382,27 @@ export default function AppetiteToleranceConfig() {
                       <div style={{ gridColumn: 'span 2' }}>
                         <div className="flex items-center justify-between mb-1">
                           <Label htmlFor="rationale">Appetite Statement</Label>
-                          {aiGenerating && (
-                            <span className="text-xs text-purple-600 flex items-center gap-1">
-                              <Loader2 size={12} className="animate-spin" />
-                              AI generating...
-                            </span>
-                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-xs text-violet-600 hover:text-violet-700 hover:bg-violet-50"
+                            onClick={() => {
+                              if (newCategory.risk_category && newCategory.appetite_level) {
+                                handleGenerateCategoryStatement(newCategory.risk_category, newCategory.appetite_level);
+                              }
+                            }}
+                            disabled={aiGenerating || !newCategory.risk_category}
+                          >
+                            <Sparkles size={12} className="mr-1" />
+                            AI Generate Rationale
+                          </Button>
                         </div>
+                        {aiGenerating && (
+                          <span className="text-xs text-purple-600 flex items-center gap-1">
+                            <Loader2 size={12} className="animate-spin" />
+                            AI generating...
+                          </span>
+                        )}
                         <Textarea
                           id="rationale"
                           value={newCategory.rationale}
@@ -1734,6 +1821,6 @@ export default function AppetiteToleranceConfig() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+    </div >
   );
 }
