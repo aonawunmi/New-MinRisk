@@ -95,27 +95,42 @@ serve(async (req) => {
 // --- Logic Handlers ---
 
 async function callClaude(prompt: string, apiKey: string, maxTokens: number = 1024) {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-            model: USE_CASE_MODELS.APPETITE_GENERATION, // Using shared config
-            max_tokens: maxTokens,
-            messages: [{ role: 'user', content: prompt }]
-        }),
-    })
+    const controller = new AbortController();
+    // 50s timeout (under the 60s Edge Function limit)
+    const timeoutId = setTimeout(() => controller.abort(), 50000);
 
-    if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Claude API error (${response.status}): ${errText}`);
+    try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+                model: USE_CASE_MODELS.APPETITE_GENERATION,
+                max_tokens: maxTokens,
+                messages: [{ role: 'user', content: prompt }]
+            }),
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Claude API error (${response.status}): ${errText}`);
+        }
+
+        const data = await response.json();
+        return data.content[0].text;
+    } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            throw new Error('AI generation timed out (50s limit). Please try again.');
+        }
+        throw error;
     }
-
-    const data = await response.json();
-    return data.content[0].text;
 }
 
 // 1. Generate Overall Statement
