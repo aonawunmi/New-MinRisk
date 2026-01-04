@@ -1,20 +1,13 @@
 /**
  * AI Assistant for Risk Appetite & Tolerance Configuration
  *
- * Uses Claude AI to generate intelligent suggestions for:
- * 1. Risk Appetite Statements (Board-approved language)
- * 2. Appetite Categories (risk category → appetite level mapping)
- * 3. Tolerance Metrics (quantitative thresholds)
+ * SECURE IMPLEMENTATION
+ * Uses Supabase Edge Function 'generate-appetite' to proxy AI calls.
+ * This prevents exposure of API keys in the client-side browser.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-import { USE_CASE_MODELS } from '@/config/ai-models';
+import { supabase } from '@/lib/supabase';
 import { APPETITE_LEVEL_DEFINITIONS, type AppetiteLevel } from './appetiteDefinitions';
-
-const anthropic = new Anthropic({
-  apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
-  dangerouslyAllowBrowser: true, // Required for client-side usage
-});
 
 interface RiskContext {
   organizationName?: string;
@@ -30,10 +23,34 @@ interface RiskContext {
 }
 
 /**
+ * Helper to call the secure Edge Function
+ */
+async function callAppetiteEdgeFunction(mode: string, params: any, context?: any) {
+  // Get user session for authorization
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+  if (sessionError || !session) {
+    throw new Error('Authentication required to generate AI content');
+  }
+
+  const { data, error } = await supabase.functions.invoke('generate-appetite', {
+    body: {
+      mode,
+      context,
+      ...params
+    }
+  });
+
+  if (error) {
+    console.error(`Edge Function error (${mode}):`, error);
+    throw new Error(error.message || 'AI service unavailable');
+  }
+
+  return data;
+}
+
+/**
  * Generate a category-specific appetite statement using FIXED global definitions
- * 
- * IMPORTANT: This function applies the global appetite meaning to a specific
- * risk category. It does NOT redefine what the appetite level means.
  */
 export async function generateCategoryAppetiteStatement(
   riskCategory: string,
@@ -42,49 +59,21 @@ export async function generateCategoryAppetiteStatement(
 ): Promise<string> {
   const levelDef = APPETITE_LEVEL_DEFINITIONS[appetiteLevel];
 
-  const prompt = `You are a Chief Risk Officer writing a risk appetite statement for a specific risk category.
+  const result = await callAppetiteEdgeFunction(
+    'generate_category_statement',
+    {
+      riskCategory,
+      appetiteLevel,
+      organizationName,
+      enterpriseMeaning: levelDef.enterpriseMeaning
+    }
+  );
 
-CRITICAL INSTRUCTION: You must use the EXACT enterprise meaning provided below. Do NOT redefine or reinterpret what the appetite level means. Your job is to APPLY this meaning to the specific risk category.
-
-ENTERPRISE APPETITE LEVEL DEFINITION (DO NOT CHANGE):
-Level: ${appetiteLevel}
-Meaning: "${levelDef.enterpriseMeaning}"
-
-CONTEXT:
-- Organization: ${organizationName || 'The organization'}
-- Risk Category: ${riskCategory}
-- Selected Appetite Level: ${appetiteLevel}
-
-TASK:
-Write a 2-3 sentence appetite statement for ${riskCategory} that:
-1. States the organization's ${appetiteLevel} appetite for ${riskCategory}
-2. APPLIES the enterprise meaning ("${levelDef.enterpriseMeaning}") specifically to ${riskCategory}
-3. Adds 1-2 category-specific examples or controls that align with this appetite level
-4. Uses professional Board-level language
-
-EXAMPLE OUTPUT FORMAT:
-"${organizationName || 'The organization'} maintains a ${appetiteLevel} appetite for ${riskCategory}. [Apply the meaning to this category]. [Add specific controls or examples]."
-
-Generate the appetite statement now (just the statement text, no explanation):`;
-
-  const message = await anthropic.messages.create({
-    model: USE_CASE_MODELS.APPETITE_GENERATION,
-    max_tokens: 512,
-    messages: [{
-      role: 'user',
-      content: prompt
-    }]
-  });
-
-  const textContent = message.content.find(c => c.type === 'text');
-  return textContent ? (textContent as any).text.trim() : 'Error generating statement';
+  return result.text || 'Error generating statement';
 }
 
 /**
  * Generate a comprehensive Risk Appetite Summary Report
- * 
- * Takes all configured category appetite levels and statements and generates
- * a consolidated Board-ready summary report.
  */
 export async function generateAppetiteSummaryReport(
   organizationName: string,
@@ -94,55 +83,15 @@ export async function generateAppetiteSummaryReport(
     statement: string;
   }>
 ): Promise<string> {
-  const categorySummary = categoryStatements.map(c =>
-    `- ${c.category}: ${c.level} - "${c.statement}"`
-  ).join('\n');
+  const result = await callAppetiteEdgeFunction(
+    'generate_summary_report',
+    {
+      organizationName,
+      categoryStatements
+    }
+  );
 
-  const levelBreakdown = {
-    ZERO: categoryStatements.filter(c => c.level === 'ZERO').map(c => c.category),
-    LOW: categoryStatements.filter(c => c.level === 'LOW').map(c => c.category),
-    MODERATE: categoryStatements.filter(c => c.level === 'MODERATE').map(c => c.category),
-    HIGH: categoryStatements.filter(c => c.level === 'HIGH').map(c => c.category),
-  };
-
-  const prompt = `You are a Chief Risk Officer preparing a Risk Appetite Summary Report for Board presentation.
-
-ORGANIZATION: ${organizationName}
-DATE: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-
-CONFIGURED APPETITE LEVELS BY CATEGORY:
-${categorySummary}
-
-SUMMARY BY LEVEL:
-- Zero Tolerance: ${levelBreakdown.ZERO.length > 0 ? levelBreakdown.ZERO.join(', ') : 'None'}
-- Low Appetite: ${levelBreakdown.LOW.length > 0 ? levelBreakdown.LOW.join(', ') : 'None'}
-- Moderate Appetite: ${levelBreakdown.MODERATE.length > 0 ? levelBreakdown.MODERATE.join(', ') : 'None'}
-- High Appetite: ${levelBreakdown.HIGH.length > 0 ? levelBreakdown.HIGH.join(', ') : 'None'}
-
-TASK:
-Generate a comprehensive Risk Appetite Summary Report that:
-1. Opens with an executive summary paragraph
-2. Groups risks by appetite level with brief explanations
-3. Highlights any areas requiring Board attention
-4. Uses professional, governance-appropriate language
-5. Ends with a recommendation or assurance statement
-
-Format the output with markdown headings (## and ###).
-Keep the report concise (400-500 words).
-
-Generate the Risk Appetite Summary Report now:`;
-
-  const message = await anthropic.messages.create({
-    model: USE_CASE_MODELS.APPETITE_GENERATION,
-    max_tokens: 1500,
-    messages: [{
-      role: 'user',
-      content: prompt
-    }]
-  });
-
-  const textContent = message.content.find(c => c.type === 'text');
-  return textContent ? (textContent as any).text.trim() : 'Error generating report';
+  return result.text || 'Error generating report';
 }
 
 /**
@@ -151,46 +100,13 @@ Generate the Risk Appetite Summary Report now:`;
 export async function generateAppetiteStatement(
   context: RiskContext
 ): Promise<string> {
-  const periodText = context.currentPeriodYear && context.currentPeriodQuarter
-    ? `Q${context.currentPeriodQuarter} ${context.currentPeriodYear}`
-    : `Fiscal Year ${new Date().getFullYear()}`;
+  const result = await callAppetiteEdgeFunction(
+    'generate_statement',
+    {},
+    context
+  );
 
-  const prompt = `You are a world-class Chief Risk Officer helping to draft a Risk Appetite Statement.
-
-CONTEXT:
-- Organization: ${context.organizationName || 'Financial Institution'}
-- Industry: ${context.industry || 'Financial Services'}
-- Current Period: ${periodText}
-- Key Risk Categories: ${context.riskCategories.join(', ')}
-
-TASK:
-Write a concise, Board-approved Risk Appetite Statement (2-3 paragraphs).
-
-REQUIREMENTS:
-1. Use professional, Board-level language
-2. Reference specific risk categories
-3. Be clear about appetite levels (ZERO, LOW, MODERATE, HIGH)
-4. Align with regulatory expectations (CBN, SEC, PENCOM)
-5. Include time horizon referencing the Current Period above (${periodText})
-
-EXAMPLE STRUCTURE:
-"[Organization Name] maintains a [LEVEL] appetite for [category], recognizing [rationale].
-We accept [LEVEL] appetite for [category] to [business objective], while ensuring [control statement].
-We maintain ZERO tolerance for [category], as [compliance requirement]."
-
-Generate the Risk Appetite Statement now:`;
-
-  const message = await anthropic.messages.create({
-    model: USE_CASE_MODELS.APPETITE_GENERATION,
-    max_tokens: 1024,
-    messages: [{
-      role: 'user',
-      content: prompt
-    }]
-  });
-
-  const textContent = message.content.find(c => c.type === 'text');
-  return textContent ? (textContent as any).text : 'Error generating statement';
+  return result.text || 'Error generating statement';
 }
 
 interface AppetiteCategory {
@@ -205,64 +121,13 @@ interface AppetiteCategory {
 export async function generateAppetiteCategories(
   context: RiskContext
 ): Promise<AppetiteCategory[]> {
-  const riskContext = context.existingRisks
-    ? context.existingRisks.map(r =>
-      `${r.category}: ${r.count} risks, avg inherent score ${r.avgInherentScore}`
-    ).join('\n')
-    : context.riskCategories.join('\n');
+  const result = await callAppetiteEdgeFunction(
+    'generate_categories',
+    {},
+    context
+  );
 
-  const prompt = `You are a world-class Chief Risk Officer mapping risk appetite levels.
-
-CONTEXT:
-Risk Categories in the Organization:
-${riskContext}
-
-TASK:
-For each risk category, recommend an appetite level (ZERO, LOW, MODERATE, HIGH) with rationale.
-
-DEFINITIONS:
-- ZERO: No tolerance for this risk (e.g., compliance violations, fraud)
-- LOW: Minimal acceptable exposure (tight controls required)
-- MODERATE: Balanced approach (standard controls)
-- HIGH: Willing to accept significant exposure (for strategic objectives)
-
-REGULATORY CONTEXT:
-- Financial institutions typically have ZERO appetite for: Regulatory non-compliance, fraud, money laundering
-- Typically LOW appetite for: Operational failures, reputational damage
-- Typically MODERATE appetite for: Credit risk (within limits), market risk
-- Typically HIGH appetite for: Strategic investments, innovation risk (with controls)
-
-OUTPUT FORMAT (JSON array):
-[
-  {
-    "risk_category": "Credit Risk",
-    "appetite_level": "MODERATE",
-    "rationale": "Accept moderate credit exposure to support lending business, with robust underwriting and monitoring controls"
-  },
-  ...
-]
-
-Generate appetite categories now (JSON only, no explanation):`;
-
-  const message = await anthropic.messages.create({
-    model: USE_CASE_MODELS.APPETITE_GENERATION,
-    max_tokens: 2048,
-    messages: [{
-      role: 'user',
-      content: prompt
-    }]
-  });
-
-  const textContent = message.content.find(c => c.type === 'text');
-  const text = textContent ? (textContent as any).text : '[]';
-
-  // Extract JSON from response (handle markdown code blocks)
-  const jsonMatch = text.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) {
-    throw new Error('Failed to parse AI response');
-  }
-
-  return JSON.parse(jsonMatch[0]);
+  return Array.isArray(result) ? result : [];
 }
 
 interface ToleranceMetric {
@@ -287,72 +152,16 @@ export async function generateToleranceMetrics(
   appetiteLevel: 'ZERO' | 'LOW' | 'MODERATE' | 'HIGH',
   context: RiskContext
 ): Promise<ToleranceMetric[]> {
-  const prompt = `You are a world-class Chief Risk Officer designing tolerance metrics.
+  const result = await callAppetiteEdgeFunction(
+    'generate_metrics',
+    {
+      riskCategory,
+      appetiteLevel
+    },
+    context
+  );
 
-CONTEXT:
-- Risk Category: ${riskCategory}
-- Appetite Level: ${appetiteLevel}
-- Industry: ${context.industry || 'Financial Services'}
-
-TASK:
-Design 2-3 quantitative tolerance metrics for this category with Green/Amber/Red thresholds.
-
-METRIC TYPES (use MAXIMUM, MINIMUM, or RANGE only):
-- MAXIMUM: Upper limit (e.g., "VaR must not exceed X")
-- MINIMUM: Lower limit (e.g., "Liquidity ratio must stay above X")
-- RANGE: Between two values (e.g., "NPL ratio between X and Y")
-
-IMPORTANT: Do NOT use DIRECTIONAL type - only MAXIMUM, MINIMUM, or RANGE.
-
-THRESHOLD LOGIC:
-- GREEN zone: Safe, within appetite
-- AMBER zone: Warning, requires attention (30-day SLA for remediation)
-- RED zone: Breach, urgent action required (7-day SLA, Board notification)
-
-MATERIALITY TYPES:
-- INTERNAL: Impact on the organization (traditional)
-- EXTERNAL: Impact on customers/market (conduct lens)
-- DUAL: Both internal and external impact
-
-EXAMPLE FOR CREDIT RISK (MODERATE appetite):
-{
-  "metric_name": "Non-Performing Loan Ratio",
-  "metric_description": "Percentage of loans in default or near-default",
-  "metric_type": "MAXIMUM",
-  "unit": "%",
-  "materiality_type": "INTERNAL",
-  "green_max": 3.0,
-  "amber_max": 5.0,
-  "red_min": 5.0,
-  "green_min": null,
-  "amber_min": null,
-  "red_max": null
-}
-
-OUTPUT FORMAT (JSON array, 2-3 metrics):
-[...]
-
-Generate tolerance metrics now (JSON only, no explanation):`;
-
-  const message = await anthropic.messages.create({
-    model: USE_CASE_MODELS.APPETITE_GENERATION,
-    max_tokens: 2048,
-    messages: [{
-      role: 'user',
-      content: prompt
-    }]
-  });
-
-  const textContent = message.content.find(c => c.type === 'text');
-  const text = textContent ? (textContent as any).text : '[]';
-
-  // Extract JSON from response
-  const jsonMatch = text.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) {
-    throw new Error('Failed to parse AI response');
-  }
-
-  return JSON.parse(jsonMatch[0]);
+  return Array.isArray(result) ? result : [];
 }
 
 /**
@@ -360,17 +169,20 @@ Generate tolerance metrics now (JSON only, no explanation):`;
  */
 export async function getOrganizationContext(
   organizationId: string,
-  supabase: any
+  supabaseClient: any // keeping signature compatible, but file uses imported supabase
 ): Promise<RiskContext> {
+  // Use passed client or fall back to imported client
+  const client = supabaseClient || supabase;
+
   // Get organization details
-  const { data: org } = await supabase
+  const { data: org } = await client
     .from('organizations')
     .select('name')
     .eq('id', organizationId)
     .single();
 
   // Get ALL risk categories from taxonomy (not just categories with active risks)
-  const { data: categories } = await supabase
+  const { data: categories } = await client
     .from('risk_categories')
     .select('name')
     .order('name', { ascending: true });
@@ -378,7 +190,7 @@ export async function getOrganizationContext(
   const categoryNames = categories?.map(c => c.name) || [];
 
   // Get existing risks for context (optional)
-  const { data: risks } = await supabase
+  const { data: risks } = await client
     .from('risks')
     .select('category, score_inherent')
     .eq('organization_id', organizationId)
