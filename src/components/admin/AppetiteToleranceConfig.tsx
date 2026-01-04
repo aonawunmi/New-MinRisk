@@ -67,6 +67,8 @@ import {
   History,
   X,
   Settings2,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 
 export default function AppetiteToleranceConfig() {
@@ -126,7 +128,8 @@ export default function AppetiteToleranceConfig() {
 
   // Pre-configuration for AI Statement Generation
   const [preConfiguredAppetites, setPreConfiguredAppetites] = useState<Array<{ category: string, level: AppetiteLevel }>>([]);
-  const [tempConfig, setTempConfig] = useState({ category: '', level: 'MODERATE' as AppetiteLevel });
+  const [tempConfig, setTempConfig] = useState<{ category: string, level: AppetiteLevel }>({ category: '', level: 'MODERATE' });
+  const [showAddCategoryForm, setShowAddCategoryForm] = useState(false);
 
   useEffect(() => {
     if (profile?.organization_id) {
@@ -1259,194 +1262,192 @@ export default function AppetiteToleranceConfig() {
                 </Alert>
               ) : (
                 <>
-                  {/* Add New Category */}
-                  <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <h3 style={{ fontSize: '16px', fontWeight: '600' }}>
-                        Add Appetite Category
-                      </h3>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleGenerateSummaryReport}
-                          disabled={aiGenerating || saving || categories.length === 0}
-                          style={{ backgroundColor: '#059669', color: '#ffffff', border: 'none' }}
-                        >
-                          {aiGenerating ? (
-                            <Loader2 size={14} style={{ marginRight: '6px' }} className="animate-spin" />
-                          ) : (
-                            <FileText size={14} style={{ marginRight: '6px' }} />
-                          )}
-                          Generate Summary Report
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleGenerateCategories}
-                          disabled={aiGenerating || saving}
-                          style={{ backgroundColor: '#7c3aed', color: '#ffffff', border: 'none' }}
-                        >
-                          {aiGenerating ? (
-                            <Loader2 size={14} style={{ marginRight: '6px' }} className="animate-spin" />
-                          ) : (
-                            <Sparkles size={14} style={{ marginRight: '6px' }} />
-                          )}
-                          AI Generate All
-                        </Button>
-                      </div>
+                  {/* Add Additional Category - Collapsible */}
+                  <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddCategoryForm(!showAddCategoryForm)}
+                        className="flex items-center gap-2 text-left hover:text-gray-700 transition-colors"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      >
+                        {showAddCategoryForm ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#374151' }}>
+                          Add Additional Category
+                        </h3>
+                        <span className="text-xs text-gray-500">(for categories not defined during statement creation)</span>
+                      </button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGenerateSummaryReport}
+                        disabled={aiGenerating || saving || categories.length === 0}
+                        style={{ backgroundColor: '#059669', color: '#ffffff', border: 'none' }}
+                      >
+                        {aiGenerating ? (
+                          <Loader2 size={14} style={{ marginRight: '6px' }} className="animate-spin" />
+                        ) : (
+                          <FileText size={14} style={{ marginRight: '6px' }} />
+                        )}
+                        Generate Summary Report
+                      </Button>
                     </div>
 
-                    {/* Summary Report Display */}
-                    {showSummaryReport && summaryReport && (
-                      <div style={{ marginBottom: '16px', padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #059669' }}>
-                        <div className="flex items-center justify-between mb-3">
-                          <p style={{ fontSize: '14px', fontWeight: '600', color: '#059669' }}>
-                            📊 Risk Appetite Summary Report
-                          </p>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setShowSummaryReport(false)}
-                          >
-                            <X size={14} />
-                          </Button>
-                        </div>
-                        <div
-                          className="prose prose-sm max-w-none bg-white p-4 rounded border"
-                          dangerouslySetInnerHTML={{ __html: summaryReport.replace(/\n/g, '<br/>').replace(/##/g, '<h3>').replace(/###/g, '<h4>') }}
-                        />
-                      </div>
-                    )}
+                    {showAddCategoryForm && (
+                      <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #e5e7eb' }}>
 
-                    {/* AI Suggestions */}
-                    {showAiPreview === 'categories' && aiSuggestions.categories && aiSuggestions.categories.length > 0 && (
-                      <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#f0f9ff', borderRadius: '8px', border: '1px solid #7c3aed' }}>
-                        <p style={{ fontSize: '14px', fontWeight: '600', color: '#7c3aed', marginBottom: '12px' }}>
-                          ✨ AI Suggestions - Click Accept to add or manually configure below
-                        </p>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '8px' }}>
-                          {aiSuggestions.categories.map((aiCat, idx) => (
-                            <div
-                              key={idx}
-                              style={{
-                                padding: '12px',
-                                backgroundColor: '#ffffff',
-                                borderRadius: '6px',
-                                border: '1px solid #e5e7eb',
-                              }}
-                            >
-                              <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
-                                {aiCat.risk_category}
-                              </div>
-                              <Badge variant="outline" style={{ marginBottom: '8px' }}>
-                                {aiCat.appetite_level}
-                              </Badge>
-                              <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>
-                                {aiCat.rationale.substring(0, 80)}...
+                        {/* Summary Report Display */}
+                        {showSummaryReport && summaryReport && (
+                          <div style={{ marginBottom: '16px', padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #059669' }}>
+                            <div className="flex items-center justify-between mb-3">
+                              <p style={{ fontSize: '14px', fontWeight: '600', color: '#059669' }}>
+                                📊 Risk Appetite Summary Report
                               </p>
                               <Button
                                 size="sm"
-                                onClick={() => handleAcceptAiCategory(aiCat)}
-                                disabled={saving}
-                                style={{ width: '100%' }}
+                                variant="ghost"
+                                onClick={() => setShowSummaryReport(false)}
                               >
-                                Accept
+                                <X size={14} />
                               </Button>
                             </div>
-                          ))}
+                            <div
+                              className="prose prose-sm max-w-none bg-white p-4 rounded border"
+                              dangerouslySetInnerHTML={{ __html: summaryReport.replace(/\n/g, '<br/>').replace(/##/g, '<h3>').replace(/###/g, '<h4>') }}
+                            />
+                          </div>
+                        )}
+
+                        {/* AI Suggestions */}
+                        {showAiPreview === 'categories' && aiSuggestions.categories && aiSuggestions.categories.length > 0 && (
+                          <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#f0f9ff', borderRadius: '8px', border: '1px solid #7c3aed' }}>
+                            <p style={{ fontSize: '14px', fontWeight: '600', color: '#7c3aed', marginBottom: '12px' }}>
+                              ✨ AI Suggestions - Click Accept to add or manually configure below
+                            </p>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '8px' }}>
+                              {aiSuggestions.categories.map((aiCat, idx) => (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    padding: '12px',
+                                    backgroundColor: '#ffffff',
+                                    borderRadius: '6px',
+                                    border: '1px solid #e5e7eb',
+                                  }}
+                                >
+                                  <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
+                                    {aiCat.risk_category}
+                                  </div>
+                                  <Badge variant="outline" style={{ marginBottom: '8px' }}>
+                                    {aiCat.appetite_level}
+                                  </Badge>
+                                  <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>
+                                    {aiCat.rationale.substring(0, 80)}...
+                                  </p>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleAcceptAiCategory(aiCat)}
+                                    disabled={saving}
+                                    style={{ width: '100%' }}
+                                  >
+                                    Accept
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                          <div>
+                            <Label htmlFor="risk_category">Risk Category</Label>
+                            <Select
+                              value={newCategory.risk_category}
+                              onValueChange={(val) => setNewCategory({ ...newCategory, risk_category: val })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select category" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {riskCategories
+                                  .filter(cat => !categories.some(existing => existing.risk_category === cat))
+                                  .map((cat) => (
+                                    <SelectItem key={cat} value={cat}>
+                                      {cat}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label htmlFor="appetite_level">Appetite Level</Label>
+                            <Select
+                              value={newCategory.appetite_level}
+                              onValueChange={(val: AppetiteLevel) => {
+                                setNewCategory({ ...newCategory, appetite_level: val });
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {getAppetiteLevels().map((def) => (
+                                  <SelectItem key={def.level} value={def.level}>
+                                    <div className="flex flex-col">
+                                      <span className="font-medium">{def.label}</span>
+                                      <span className="text-xs text-gray-500 truncate max-w-[300px]">{def.enterpriseMeaning}</span>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {newCategory.appetite_level && (
+                              <p className="text-xs text-gray-600 mt-1 italic">
+                                "{APPETITE_LEVEL_DEFINITIONS[newCategory.appetite_level]?.enterpriseMeaning}"
+                              </p>
+                            )}
+                          </div>
+                          <div style={{ gridColumn: 'span 2' }}>
+                            <div className="flex items-center justify-between mb-1">
+                              <Label htmlFor="rationale">Appetite Statement</Label>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 text-xs text-violet-600 hover:text-violet-700 hover:bg-violet-50"
+                                onClick={() => {
+                                  if (newCategory.risk_category && newCategory.appetite_level) {
+                                    handleGenerateCategoryStatement(newCategory.risk_category, newCategory.appetite_level);
+                                  }
+                                }}
+                                disabled={aiGenerating || !newCategory.risk_category}
+                              >
+                                <Sparkles size={12} className="mr-1" />
+                                AI Generate Rationale
+                              </Button>
+                            </div>
+                            {aiGenerating && (
+                              <span className="text-xs text-purple-600 flex items-center gap-1">
+                                <Loader2 size={12} className="animate-spin" />
+                                AI generating...
+                              </span>
+                            )}
+                            <Textarea
+                              id="rationale"
+                              value={newCategory.rationale}
+                              onChange={(e) => setNewCategory({ ...newCategory, rationale: e.target.value })}
+                              placeholder="Why this appetite level?"
+                              rows={2}
+                            />
+                          </div>
+                          <div style={{ gridColumn: 'span 2' }}>
+                            <Button onClick={handleAddCategory} disabled={saving || !newCategory.risk_category}>
+                              <Plus size={16} style={{ marginRight: '6px' }} />
+                              Add Category
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     )}
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                      <div>
-                        <Label htmlFor="risk_category">Risk Category</Label>
-                        <Select
-                          value={newCategory.risk_category}
-                          onValueChange={(val) => setNewCategory({ ...newCategory, risk_category: val })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select category" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {riskCategories
-                              .filter(cat => !categories.some(existing => existing.risk_category === cat))
-                              .map((cat) => (
-                                <SelectItem key={cat} value={cat}>
-                                  {cat}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="appetite_level">Appetite Level</Label>
-                        <Select
-                          value={newCategory.appetite_level}
-                          onValueChange={(val: AppetiteLevel) => {
-                            setNewCategory({ ...newCategory, appetite_level: val });
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {getAppetiteLevels().map((def) => (
-                              <SelectItem key={def.level} value={def.level}>
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{def.label}</span>
-                                  <span className="text-xs text-gray-500 truncate max-w-[300px]">{def.enterpriseMeaning}</span>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {newCategory.appetite_level && (
-                          <p className="text-xs text-gray-600 mt-1 italic">
-                            "{APPETITE_LEVEL_DEFINITIONS[newCategory.appetite_level]?.enterpriseMeaning}"
-                          </p>
-                        )}
-                      </div>
-                      <div style={{ gridColumn: 'span 2' }}>
-                        <div className="flex items-center justify-between mb-1">
-                          <Label htmlFor="rationale">Appetite Statement</Label>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 text-xs text-violet-600 hover:text-violet-700 hover:bg-violet-50"
-                            onClick={() => {
-                              if (newCategory.risk_category && newCategory.appetite_level) {
-                                handleGenerateCategoryStatement(newCategory.risk_category, newCategory.appetite_level);
-                              }
-                            }}
-                            disabled={aiGenerating || !newCategory.risk_category}
-                          >
-                            <Sparkles size={12} className="mr-1" />
-                            AI Generate Rationale
-                          </Button>
-                        </div>
-                        {aiGenerating && (
-                          <span className="text-xs text-purple-600 flex items-center gap-1">
-                            <Loader2 size={12} className="animate-spin" />
-                            AI generating...
-                          </span>
-                        )}
-                        <Textarea
-                          id="rationale"
-                          value={newCategory.rationale}
-                          onChange={(e) => setNewCategory({ ...newCategory, rationale: e.target.value })}
-                          placeholder="Why this appetite level? (or use AI Generate All above)"
-                          rows={2}
-                        />
-                      </div>
-                      <div style={{ gridColumn: 'span 2' }}>
-                        <Button onClick={handleAddCategory} disabled={saving || !newCategory.risk_category}>
-                          <Plus size={16} style={{ marginRight: '6px' }} />
-                          Add Category Manually
-                        </Button>
-                      </div>
-                    </div>
                   </div>
 
                   {/* Existing Categories */}
