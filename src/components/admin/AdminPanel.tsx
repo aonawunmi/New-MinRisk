@@ -9,6 +9,7 @@ import PeriodManagement from './PeriodManagement';
 import AuditTrail from './AuditTrail';
 import HelpTab from './HelpTab';
 import OwnerMappingTool from './OwnerMappingTool';
+import DataCleanup from './DataCleanup';
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
@@ -83,7 +84,14 @@ export default function AdminPanel() {
         )}
         {activeTab === 'audit' && <AuditTrail />}
         {activeTab === 'help' && <HelpTab />}
-        {activeTab === 'settings' && <OrganizationSettings />}
+        {activeTab === 'settings' && (
+          <>
+            <OrganizationSettings />
+            <div style={{ marginTop: '24px' }}>
+              <DataCleanup />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
