@@ -69,6 +69,7 @@ import {
   Settings2,
   ChevronDown,
   ChevronRight,
+  Pencil,
 } from 'lucide-react';
 
 export default function AppetiteToleranceConfig() {
@@ -934,6 +935,74 @@ export default function AppetiteToleranceConfig() {
     }
   }
 
+  // Reject AI category suggestion (remove from list)
+  function handleRejectAiCategory(categoryName: string) {
+    setAiSuggestions({
+      ...aiSuggestions,
+      categories: aiSuggestions.categories?.filter(c => c.risk_category !== categoryName)
+    });
+  }
+
+  // Reject AI metric suggestion (remove from list)
+  function handleRejectAiMetric(metricName: string) {
+    setAiSuggestions({
+      ...aiSuggestions,
+      metrics: aiSuggestions.metrics?.filter(m => m.metric_name !== metricName)
+    });
+  }
+
+  // Edit AI metric suggestion - pre-fill the manual form
+  function handleEditAiMetricSuggestion(metric: any) {
+    setNewMetric({
+      ...newMetric,
+      metric_name: metric.metric_name,
+      metric_description: metric.metric_description,
+      metric_type: metric.metric_type,
+      unit: metric.unit,
+      materiality_type: metric.materiality_type,
+      green_max: metric.green_max?.toString() || '',
+      amber_max: metric.amber_max?.toString() || '',
+      red_min: metric.red_min?.toString() || '',
+    });
+    // Remove from suggestions since it's now in the form
+    handleRejectAiMetric(metric.metric_name);
+    setSuccess('Suggestion moved to form for editing');
+    setTimeout(() => setSuccess(null), 2000);
+  }
+
+  // Edit AI category suggestion - pre-fill the manual form
+  function handleEditAiCategorySuggestion(category: any) {
+    setNewCategory({
+      risk_category: category.risk_category,
+      appetite_level: category.appetite_level,
+      rationale: category.rationale,
+    });
+    // Remove from suggestions since it's now in the form
+    handleRejectAiCategory(category.risk_category);
+    setSuccess('Suggestion moved to form for editing');
+    setTimeout(() => setSuccess(null), 2000);
+  }
+
+  // Edit existing metric - pre-fill the form with current values
+  function handleEditExistingMetric(metric: any) {
+    setNewMetric({
+      appetite_category_id: metric.appetite_category_id,
+      metric_name: metric.metric_name,
+      metric_description: metric.metric_description || '',
+      metric_type: metric.metric_type,
+      unit: metric.unit || '',
+      materiality_type: metric.materiality_type || 'INTERNAL',
+      green_max: metric.green_max?.toString() || '',
+      amber_max: metric.amber_max?.toString() || '',
+      red_min: metric.red_min?.toString() || '',
+      kri_id: metric.kri_id || '',
+    });
+    // Delete the old metric so user can re-add with edits
+    handleDeleteMetric(metric.id);
+    setSuccess('Metric moved to form for editing');
+    setTimeout(() => setSuccess(null), 2000);
+  }
+
   if (loading) {
     return (
       <div style={{ padding: '24px', textAlign: 'center' }}>
@@ -1293,30 +1362,30 @@ export default function AppetiteToleranceConfig() {
                       </Button>
                     </div>
 
+                    {/* Summary Report Display - Outside collapsible */}
+                    {showSummaryReport && summaryReport && (
+                      <div style={{ marginBottom: '16px', padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #059669' }}>
+                        <div className="flex items-center justify-between mb-3">
+                          <p style={{ fontSize: '14px', fontWeight: '600', color: '#059669' }}>
+                            📊 Risk Appetite Summary Report
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setShowSummaryReport(false)}
+                          >
+                            <X size={14} />
+                          </Button>
+                        </div>
+                        <div
+                          className="prose prose-sm max-w-none bg-white p-4 rounded border"
+                          dangerouslySetInnerHTML={{ __html: summaryReport.replace(/\n/g, '<br/>').replace(/##/g, '<h3>').replace(/###/g, '<h4>') }}
+                        />
+                      </div>
+                    )}
+
                     {showAddCategoryForm && (
                       <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #e5e7eb' }}>
-
-                        {/* Summary Report Display */}
-                        {showSummaryReport && summaryReport && (
-                          <div style={{ marginBottom: '16px', padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #059669' }}>
-                            <div className="flex items-center justify-between mb-3">
-                              <p style={{ fontSize: '14px', fontWeight: '600', color: '#059669' }}>
-                                📊 Risk Appetite Summary Report
-                              </p>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setShowSummaryReport(false)}
-                              >
-                                <X size={14} />
-                              </Button>
-                            </div>
-                            <div
-                              className="prose prose-sm max-w-none bg-white p-4 rounded border"
-                              dangerouslySetInnerHTML={{ __html: summaryReport.replace(/\n/g, '<br/>').replace(/##/g, '<h3>').replace(/###/g, '<h4>') }}
-                            />
-                          </div>
-                        )}
 
                         {/* AI Suggestions */}
                         {showAiPreview === 'categories' && aiSuggestions.categories && aiSuggestions.categories.length > 0 && (
@@ -1344,14 +1413,34 @@ export default function AppetiteToleranceConfig() {
                                   <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>
                                     {aiCat.rationale.substring(0, 80)}...
                                   </p>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleAcceptAiCategory(aiCat)}
-                                    disabled={saving}
-                                    style={{ width: '100%' }}
-                                  >
-                                    Accept
-                                  </Button>
+                                  <div className="flex gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleEditAiCategorySuggestion(aiCat)}
+                                      disabled={saving}
+                                      className="flex-1"
+                                    >
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleAcceptAiCategory(aiCat)}
+                                      disabled={saving}
+                                      className="flex-1"
+                                    >
+                                      Accept
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleRejectAiCategory(aiCat.risk_category)}
+                                      disabled={saving}
+                                      className="px-2"
+                                    >
+                                      <X size={14} />
+                                    </Button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -1596,14 +1685,34 @@ export default function AppetiteToleranceConfig() {
                                 {aiMetric.amber_max && <div>🟠 Amber: ≤ {aiMetric.amber_max}{aiMetric.unit}</div>}
                                 {aiMetric.red_min && <div>🔴 Red: ≥ {aiMetric.red_min}{aiMetric.unit}</div>}
                               </div>
-                              <Button
-                                size="sm"
-                                onClick={() => handleAcceptAiMetric(aiMetric, newMetric.appetite_category_id)}
-                                disabled={saving}
-                                style={{ width: '100%' }}
-                              >
-                                Accept
-                              </Button>
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleEditAiMetricSuggestion(aiMetric)}
+                                  disabled={saving}
+                                  className="flex-1"
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleAcceptAiMetric(aiMetric, newMetric.appetite_category_id)}
+                                  disabled={saving}
+                                  className="flex-1"
+                                >
+                                  Accept
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleRejectAiMetric(aiMetric.metric_name)}
+                                  disabled={saving}
+                                  className="px-2"
+                                >
+                                  <X size={14} />
+                                </Button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -1809,15 +1918,26 @@ export default function AppetiteToleranceConfig() {
                                   <Badge variant="secondary">Inactive</Badge>
                                 )}
                                 {canDelete && (
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => handleDeleteMetric(metric.id)}
-                                    disabled={saving}
-                                  >
-                                    <Trash2 size={14} style={{ marginRight: '4px' }} />
-                                    Delete
-                                  </Button>
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleEditExistingMetric(metric)}
+                                      disabled={saving}
+                                    >
+                                      <Pencil size={14} style={{ marginRight: '4px' }} />
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      onClick={() => handleDeleteMetric(metric.id)}
+                                      disabled={saving}
+                                    >
+                                      <Trash2 size={14} style={{ marginRight: '4px' }} />
+                                      Delete
+                                    </Button>
+                                  </>
                                 )}
                               </div>
                             </div>
