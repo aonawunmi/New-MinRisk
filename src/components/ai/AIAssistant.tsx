@@ -5,11 +5,11 @@
  * Generates context-specific risks based on industry, business unit, and other parameters.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { generateAIRisks, type AIGeneratedRisk } from '@/lib/ai';
 import { createRisk, getRisks } from '@/lib/risks';
 import { getActivePeriod } from '@/lib/periods-v2';
-import type { RiskCategory } from '@/types/risk';
+import { getCategories as fetchTaxonomyCategories } from '@/lib/taxonomy';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,29 +31,46 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Sparkles, Loader2, CheckCircle, XCircle, EyeOff } from 'lucide-react';
 
-const RISK_CATEGORIES: (RiskCategory | 'All Categories')[] = [
-  'All Categories',
-  'Operational',
-  'Strategic',
-  'Financial',
-  'Compliance',
-  'Technology',
-  'Market',
-  'Reputational',
-];
+
 
 export default function AIAssistant() {
   const [industry, setIndustry] = useState('');
   const [businessUnit, setBusinessUnit] = useState('');
-  const [category, setCategory] = useState<RiskCategory | 'All Categories'>('All Categories');
+  const [category, setCategory] = useState<string>('All Categories');
   const [numberOfRisks, setNumberOfRisks] = useState(5);
   const [additionalContext, setAdditionalContext] = useState('');
+
+  // Dynamic categories from Risk Taxonomy
+  const [taxonomyCategories, setTaxonomyCategories] = useState<string[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
 
   const [generating, setGenerating] = useState(false);
   const [generatedRisks, setGeneratedRisks] = useState<AIGeneratedRisk[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showGenerator, setShowGenerator] = useState(true);
+
+  // Fetch taxonomy categories on mount
+  useEffect(() => {
+    async function loadCategories() {
+      try {
+        const { data, error } = await fetchTaxonomyCategories();
+        if (error) {
+          console.error('Failed to load taxonomy categories:', error);
+        } else if (data) {
+          setTaxonomyCategories(data.map((cat) => cat.name));
+        }
+      } catch (err) {
+        console.error('Error fetching taxonomy categories:', err);
+      } finally {
+        setLoadingCategories(false);
+      }
+    }
+    loadCategories();
+  }, []);
+
+  // Combine "All Categories" with taxonomy categories
+  const categoryOptions = ['All Categories', ...taxonomyCategories];
 
   const handleGenerate = async () => {
     setError(null);
@@ -277,14 +294,14 @@ export default function AIAssistant() {
                     <Label htmlFor="category">Risk Category</Label>
                     <Select
                       value={category}
-                      onValueChange={(value) => setCategory(value as RiskCategory | 'All Categories')}
+                      onValueChange={(value) => setCategory(value)}
                       disabled={generating}
                     >
                       <SelectTrigger id="category">
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
-                        {RISK_CATEGORIES.map((cat) => (
+                        {categoryOptions.map((cat) => (
                           <SelectItem key={cat} value={cat}>
                             {cat}
                           </SelectItem>
