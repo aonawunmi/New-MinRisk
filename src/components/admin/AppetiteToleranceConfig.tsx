@@ -4,7 +4,7 @@
  * Admin interface for configuring:
  * 1. Risk Appetite Statements (Board-approved strategic appetite)
  * 2. Appetite Categories (appetite level per risk category)
- * 3. Tolerance Metrics (quantitative Green/Amber/Red thresholds)
+ * 3. Risk Indicators (KRIs) - Early warning signals with Green/Amber/Red thresholds
  * 4. Chain Validation (ensures appetite → tolerance → KRI linkage)
  *
  * Regulatory Compliance: CBN, SEC, PENCOM, ISO 31000, COSO ERM
@@ -100,7 +100,7 @@ export default function AppetiteToleranceConfig() {
     rationale: '',
   });
 
-  // Tolerance Metrics state
+  // Risk Indicators (KRIs) - Early warning thresholds
   const [metrics, setMetrics] = useState<any[]>([]);
   const [kriList, setKRIList] = useState<any[]>([]);
   const [newMetric, setNewMetric] = useState({
@@ -188,7 +188,7 @@ export default function AppetiteToleranceConfig() {
 
   async function loadMetrics() {
     const { data, error: metricError } = await supabase
-      .from('tolerance_metrics')
+      .from('appetite_kri_thresholds')
       .select(`
         *,
         appetite_category:risk_appetite_categories(risk_category, appetite_level)
@@ -370,7 +370,7 @@ export default function AppetiteToleranceConfig() {
 
     try {
       const { error: insertError } = await supabase
-        .from('tolerance_metrics')
+        .from('appetite_kri_thresholds')
         .insert({
           organization_id: profile.organization_id,
           appetite_category_id: newMetric.appetite_category_id,
@@ -533,7 +533,7 @@ export default function AppetiteToleranceConfig() {
   async function handleDeleteCategory(categoryId: string) {
     if (!confirm(
       'Delete this appetite category?\n\n' +
-      'This will also delete any tolerance metrics linked to this category.'
+      'This will also delete any risk indicators linked to this category.'
     )) return;
 
     setSaving(true);
@@ -596,7 +596,7 @@ export default function AppetiteToleranceConfig() {
       }
 
       const { error: deleteError } = await supabase
-        .from('tolerance_metrics')
+        .from('appetite_kri_thresholds')
         .delete()
         .eq('id', metricId);
 
@@ -629,7 +629,7 @@ export default function AppetiteToleranceConfig() {
 
     try {
       const { error: updateError } = await supabase
-        .from('tolerance_metrics')
+        .from('appetite_kri_thresholds')
         .update({
           is_active: false,
           effective_to: new Date().toISOString().split('T')[0],
@@ -895,7 +895,7 @@ export default function AppetiteToleranceConfig() {
 
     try {
       const { error: insertError } = await supabase
-        .from('tolerance_metrics')
+        .from('appetite_kri_thresholds')
         .insert({
           organization_id: profile.organization_id,
           appetite_category_id: categoryId,
@@ -1100,7 +1100,7 @@ export default function AppetiteToleranceConfig() {
           </TabsTrigger>
           <TabsTrigger value="metrics">
             <Gauge size={16} style={{ marginRight: '6px' }} />
-            Tolerance Metrics
+            Risk Indicators
           </TabsTrigger>
         </TabsList>
 
@@ -1607,13 +1607,14 @@ export default function AppetiteToleranceConfig() {
           </Card>
         </TabsContent>
 
-        {/* Tab 3: Tolerance Metrics */}
+        {/* Tab 3: Risk Indicators (KRIs) - Early Warning */}
         <TabsContent value="metrics">
           <Card>
             <CardHeader>
-              <CardTitle>Tolerance Metrics</CardTitle>
+              <CardTitle>Risk Indicators (KRIs)</CardTitle>
               <CardDescription>
-                Configure quantitative thresholds (Green/Amber/Red) linked to KRIs
+                Early warning thresholds that operate <strong>inside</strong> tolerance limits.
+                Green/Amber/Red alerts are expected and signal when attention is needed.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1843,7 +1844,7 @@ export default function AppetiteToleranceConfig() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {metrics.length === 0 ? (
                       <p style={{ color: '#6b7280', textAlign: 'center', padding: '24px' }}>
-                        No tolerance metrics yet. Add one above.
+                        No risk indicators yet. Add one above.
                       </p>
                     ) : (
                       metrics.map((metric) => {
