@@ -1,16 +1,13 @@
 -- =====================================================
 -- COMPLETE DATA CLEANUP SCRIPT (SAFE VERSION)
 -- =====================================================
--- Uses IF EXISTS checks to avoid errors on missing tables
+-- Includes GLOBAL library tables (controls, KRIs, root causes, impacts)
 -- Run this in Supabase SQL Editor
 -- =====================================================
 
 -- Disable triggers temporarily
 SET session_replication_role = 'replica';
 
--- =====================================================
--- HELPER: Safe delete that ignores missing tables
--- =====================================================
 DO $$
 DECLARE
   tables_to_clear TEXT[] := ARRAY[
@@ -46,7 +43,17 @@ DECLARE
     'active_period',
     -- Org customizations
     'org_root_causes',
-    'org_impacts'
+    'org_impacts',
+    -- ===========================================
+    -- GLOBAL LIBRARY TABLES (added)
+    -- ===========================================
+    'global_root_cause_kri_mapping',
+    'global_impact_kci_mapping',
+    'global_control_task_mapping',
+    'global_control_library',
+    'global_kri_kci_library',
+    'global_root_cause_library',
+    'global_impact_library'
   ];
   t TEXT;
 BEGIN
@@ -67,4 +74,4 @@ SET session_replication_role = 'origin';
 -- =====================================================
 -- VERIFICATION
 -- =====================================================
-SELECT 'Cleanup complete!' AS status;
+SELECT 'Cleanup complete! All data including global libraries cleared.' AS status;
