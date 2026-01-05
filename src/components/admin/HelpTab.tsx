@@ -3,6 +3,9 @@
  *
  * Comprehensive user manual and documentation for NEW-MINRISK
  * Accordion-style sections with search functionality
+ * 
+ * VERSION 2.0 - Updated January 2026
+ * Added: KRI, Analytics, Risk Appetite, Import/Export, Data Cleanup
  */
 
 import { useState } from 'react';
@@ -75,7 +78,7 @@ export default function HelpTab() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
-              placeholder="Search manual... (e.g., 'DIME', 'audit trail', 'void incident')"
+              placeholder="Search manual... (e.g., 'DIME', 'KRI', 'appetite', 'cleanup')"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -126,9 +129,9 @@ export default function HelpTab() {
       {/* Version Info */}
       <Card>
         <CardContent className="pt-6 text-center text-sm text-gray-500">
-          <p>NEW-MINRISK User Manual - Version 1.0</p>
-          <p>Last Updated: December 4, 2025</p>
-          <p className="mt-2 text-xs">✨ Clean rebuild with enhanced AI, Audit Trail, and modern architecture</p>
+          <p>NEW-MINRISK User Manual - Version 2.0</p>
+          <p>Last Updated: January 5, 2026</p>
+          <p className="mt-2 text-xs">✨ Includes KRI Module, Analytics, Risk Appetite Framework, and Data Cleanup</p>
         </CardContent>
       </Card>
     </div>
@@ -154,17 +157,26 @@ const sections = [
       <ul>
         <li><strong>👁️ view</strong> - Can view all data, cannot make changes</li>
         <li><strong>✏️ edit</strong> - Can add and edit risks, incidents, controls</li>
-        <li><strong>👑 admin</strong> - Full system access including configuration and user management</li>
+        <li><strong>👑 primary_admin</strong> - Full access to their organization including Admin panel</li>
+        <li><strong>🌐 super_admin</strong> - Cross-organization access, can manage all organizations</li>
       </ul>
 
-      <h3>Navigation</h3>
+      <h3>Navigation Tabs</h3>
+      <h4>All Users:</h4>
       <ul>
-        <li><strong>Dashboard</strong> - Overview of risk metrics and KPIs</li>
-        <li><strong>Risk Register</strong> - Complete risk register with filtering</li>
-        <li><strong>Control Register</strong> - DIME-based control management</li>
+        <li><strong>Dashboard</strong> - Overview of risk metrics, heatmaps, and KPIs</li>
+        <li><strong>Risks</strong> - Risk Register with Import/Export</li>
+        <li><strong>Controls</strong> - Control Register with DIME framework</li>
         <li><strong>Incidents</strong> - Incident tracking with void system</li>
-        <li><strong>Risk Intelligence</strong> - Threat event monitoring (Phase 1)</li>
-        <li><strong>Admin</strong> - System configuration (admin only)</li>
+        <li><strong>AI</strong> - AI Assistant for risk analysis</li>
+      </ul>
+      
+      <h4>Admin Only (Risk Management Team):</h4>
+      <ul>
+        <li><strong>Analytics</strong> - Advanced analysis and Risk History</li>
+        <li><strong>KRI</strong> - Key Risk Indicator monitoring</li>
+        <li><strong>Intel</strong> - Risk Intelligence with RSS feeds</li>
+        <li><strong>Admin</strong> - System configuration</li>
       </ul>
     `,
   },
@@ -178,25 +190,23 @@ const sections = [
         <li>Click <strong>"Add Risk"</strong> button</li>
         <li>Fill in required fields:
           <ul>
-            <li><strong>Risk Code</strong> - Unique identifier (e.g., "RISK-001")</li>
+            <li><strong>Risk Code</strong> - Auto-generated (e.g., "RISK-001")</li>
             <li><strong>Risk Title</strong> - Short description (max 150 chars)</li>
             <li><strong>Division, Department, Category</strong> - Select from dropdowns</li>
-            <li><strong>Period</strong> - Time period for this risk (periods-v2 continuous model)</li>
-            <li><strong>Likelihood & Impact</strong> - Rate 1-5</li>
+            <li><strong>Likelihood & Impact</strong> - Rate 1-5 for inherent risk</li>
           </ul>
         </li>
         <li>Add controls if needed</li>
         <li>Click <strong>"Save Risk"</strong></li>
       </ol>
 
-      <h3>Editing Risks</h3>
-      <p>Click the pencil icon in the Actions column, modify fields, and save. All changes are automatically logged to Audit Trail.</p>
-
-      <h3>Deleting Risks</h3>
+      <h3>Import/Export</h3>
+      <p>Access via <strong>Risks → Import/Export</strong> tab:</p>
       <ul>
-        <li><strong>Edit users:</strong> Can delete their own risks</li>
-        <li><strong>Admin users:</strong> Can delete any risk</li>
-        <li>Note: Currently uses hard delete (not archived) - Archive Management coming soon</li>
+        <li><strong>Export to CSV</strong> - Download all risks as spreadsheet</li>
+        <li><strong>Export to JSON</strong> - Download for backup or migration</li>
+        <li><strong>Import from CSV</strong> - Bulk upload risks</li>
+        <li><strong>Import from JSON</strong> - Restore from backup</li>
       </ul>
 
       <h3>Filtering & Searching</h3>
@@ -205,14 +215,10 @@ const sections = [
         <li>Search text (searches all fields)</li>
         <li>Division (multi-select)</li>
         <li>Department (multi-select)</li>
-        <li>Period (multi-select) - Filter by time period</li>
         <li>Category</li>
         <li>Status</li>
-        <li>Owner (filter by risk owner)</li>
+        <li>Owner (filter by risk owner name)</li>
       </ul>
-
-      <h3>Owner Filter</h3>
-      <p>NEW in this version: Filter risks by owner name to see risks assigned to specific people.</p>
     `,
   },
   {
@@ -221,9 +227,9 @@ const sections = [
     icon: '🛡️',
     content: `
       <h3>About DIME Framework</h3>
-      <p>Controls are assessed using the DIME framework with updated labels:</p>
+      <p>Controls are assessed using the DIME framework:</p>
 
-      <h4>Design (D) - How well designed is the control?</h4>
+      <h4>Design (D) - How well designed?</h4>
       <ul>
         <li><strong>3 - Well designed:</strong> Control specifically addresses the risk</li>
         <li><strong>2 - Partially designed:</strong> Control partially addresses the risk</li>
@@ -236,38 +242,167 @@ const sections = [
         <li><strong>3 - Always applied:</strong> Control is always applied as intended</li>
         <li><strong>2 - Generally operational:</strong> Control is usually applied correctly</li>
         <li><strong>1 - Sometimes applied:</strong> Control is applied inconsistently</li>
-        <li><strong>0 - Not applied:</strong> Control is not applied or applied incorrectly</li>
+        <li><strong>0 - Not applied:</strong> Control is not applied</li>
       </ul>
 
       <h4>Monitoring (M) - How well monitored?</h4>
       <ul>
-        <li><strong>3 - Always monitored:</strong> Control is continuously monitored</li>
-        <li><strong>2 - Usually monitored:</strong> Control is regularly monitored</li>
-        <li><strong>1 - Ad-hoc monitoring:</strong> Control is monitored on an ad-hoc basis</li>
-        <li><strong>0 - Not monitored:</strong> Control is not monitored at all</li>
+        <li><strong>3 - Always monitored:</strong> Continuously monitored</li>
+        <li><strong>2 - Usually monitored:</strong> Regularly monitored</li>
+        <li><strong>1 - Ad-hoc monitoring:</strong> Monitored on ad-hoc basis</li>
+        <li><strong>0 - Not monitored:</strong> Not monitored at all</li>
       </ul>
 
       <h4>Effectiveness Evaluation (E) - How well evaluated?</h4>
       <ul>
-        <li><strong>3 - Regularly evaluated:</strong> Control effectiveness is regularly evaluated</li>
-        <li><strong>2 - Occasionally evaluated:</strong> Control effectiveness is occasionally evaluated</li>
-        <li><strong>1 - Infrequently evaluated:</strong> Control effectiveness is rarely evaluated</li>
-        <li><strong>0 - Never evaluated:</strong> Control effectiveness is never evaluated</li>
+        <li><strong>3 - Regularly evaluated:</strong> Regularly assessed</li>
+        <li><strong>2 - Occasionally evaluated:</strong> Occasionally assessed</li>
+        <li><strong>1 - Infrequently evaluated:</strong> Rarely assessed</li>
+        <li><strong>0 - Never evaluated:</strong> Never assessed</li>
       </ul>
 
       <h3>Control Effectiveness Calculation</h3>
       <p>Formula: <strong>((D + I + M + E) / 12) × 100</strong></p>
       <p><strong>Special Rule:</strong> If Design=0 or Implementation=0, effectiveness is automatically 0%</p>
 
-      <h3>Adding Controls</h3>
+      <h3>Control Register Features</h3>
+      <ul>
+        <li><strong>Add Control</strong> - Create independent controls</li>
+        <li><strong>Link to Risks</strong> - Associate controls with risks</li>
+        <li><strong>DIME Scoring</strong> - Score each dimension 0-3</li>
+        <li><strong>Import/Export</strong> - Bulk management via CSV/JSON</li>
+      </ul>
+    `,
+  },
+  {
+    id: 'kri',
+    title: 'KRI Monitoring (Key Risk Indicators)',
+    icon: '📉',
+    content: `
+      <h3>About KRIs</h3>
+      <p>Key Risk Indicators (KRIs) are early warning signals that help predict when risks may materialize.</p>
+
+      <h3>KRI Definitions</h3>
+      <p>Create and manage KRI definitions:</p>
+      <ul>
+        <li><strong>KRI Code</strong> - Auto-generated (KRI-001, KRI-002, etc.)</li>
+        <li><strong>Name</strong> - Descriptive name for the indicator</li>
+        <li><strong>Type</strong> - Leading, Lagging, or Concurrent</li>
+        <li><strong>Unit</strong> - Measurement unit (%, count, days, etc.)</li>
+        <li><strong>Collection Frequency</strong> - Daily, Weekly, Monthly, Quarterly, Annually</li>
+        <li><strong>Thresholds</strong> - Yellow (warning) and Red (critical) levels</li>
+        <li><strong>Direction</strong> - Above, Below, or Between target</li>
+      </ul>
+
+      <h3>Data Entry</h3>
+      <p>Record KRI measurements:</p>
       <ol>
-        <li>When adding/editing a risk, scroll to Controls section</li>
-        <li>Click "Add Control"</li>
-        <li>Enter control description</li>
-        <li>Select target: <strong>Likelihood</strong> or <strong>Impact</strong></li>
-        <li>Rate all four DIME dimensions</li>
-        <li>View calculated effectiveness score</li>
+        <li>Select KRI from list</li>
+        <li>Enter measurement value</li>
+        <li>Select measurement date</li>
+        <li>Add notes if needed</li>
+        <li>System automatically calculates alert status (Green/Yellow/Red)</li>
       </ol>
+
+      <h3>Alerts</h3>
+      <p>KRI breaches generate alerts:</p>
+      <ul>
+        <li><strong>Yellow Alert</strong> - Warning threshold breached</li>
+        <li><strong>Red Alert</strong> - Critical threshold breached</li>
+        <li><strong>Acknowledge</strong> - Mark alert as seen</li>
+        <li><strong>Resolve</strong> - Close alert with resolution notes</li>
+      </ul>
+
+      <h3>Risk Linking</h3>
+      <p>Connect KRIs to risks to track which indicators predict which risks.</p>
+    `,
+  },
+  {
+    id: 'analytics',
+    title: 'Analytics & Reporting',
+    icon: '📊',
+    content: `
+      <h3>Current Analysis</h3>
+      <p>View current risk landscape:</p>
+      <ul>
+        <li><strong>Risk Heatmap</strong> - Visual 5x5 matrix of likelihood vs impact</li>
+        <li><strong>Category Distribution</strong> - Pie chart of risks by category</li>
+        <li><strong>Trend Analysis</strong> - How risk scores change over time</li>
+        <li><strong>Top Risks</strong> - Highest scoring risks requiring attention</li>
+        <li><strong>Control Coverage</strong> - Risks with/without controls</li>
+      </ul>
+
+      <h3>Risk History</h3>
+      <p>Track risk evolution over time:</p>
+      <ul>
+        <li><strong>Period Comparison</strong> - Compare risk profiles across periods</li>
+        <li><strong>Historical Snapshots</strong> - View past risk states</li>
+        <li><strong>Change Tracking</strong> - See what changed between periods</li>
+      </ul>
+
+      <h3>Export Reports</h3>
+      <p>Generate reports for Board and management:</p>
+      <ul>
+        <li>Risk Register exports</li>
+        <li>Control effectiveness reports</li>
+        <li>KRI status reports</li>
+      </ul>
+    `,
+  },
+  {
+    id: 'appetite',
+    title: 'Risk Appetite Framework',
+    icon: '🎯',
+    content: `
+      <h3>Understanding Risk Appetite</h3>
+      <p>Risk Appetite defines how much risk your organization is willing to accept.</p>
+
+      <h3>Key Concepts</h3>
+      <table border="1" cellpadding="8" style="border-collapse: collapse; width: 100%;">
+        <tr>
+          <th>Concept</th>
+          <th>Definition</th>
+          <th>Breach Behavior</th>
+        </tr>
+        <tr>
+          <td><strong>Tolerance Limit</strong></td>
+          <td>Hard boundary - the maximum acceptable level</td>
+          <td>Governance event, Board notification</td>
+        </tr>
+        <tr>
+          <td><strong>KRI Threshold</strong></td>
+          <td>Early warning signal (Green/Amber/Red)</td>
+          <td>Expected, triggers management attention</td>
+        </tr>
+      </table>
+
+      <h3>Admin Configuration</h3>
+      <p>Access via <strong>Admin → Appetite & Tolerance</strong>:</p>
+
+      <h4>1. Risk Appetite Statements</h4>
+      <ul>
+        <li>Create organization-wide appetite statements</li>
+        <li>Define effective dates</li>
+        <li>Version control for audit trail</li>
+      </ul>
+
+      <h4>2. Risk Appetite Categories</h4>
+      <ul>
+        <li>Set appetite level per risk category (Conservative, Moderate, Aggressive)</li>
+        <li>Define tolerance limits per category</li>
+        <li>Link to overall appetite statement</li>
+      </ul>
+
+      <h4>3. Risk Indicators (KRIs)</h4>
+      <ul>
+        <li>Define early warning thresholds (Green/Amber/Red)</li>
+        <li>These operate <strong>inside</strong> tolerance limits</li>
+        <li>Designed to breach frequently as warnings</li>
+      </ul>
+
+      <h3>Important Distinction</h3>
+      <p><strong>KRI alerts are expected</strong> - they signal attention needed.<br>
+      <strong>Tolerance breaches are rare</strong> - they trigger governance escalation.</p>
     `,
   },
   {
@@ -275,9 +410,6 @@ const sections = [
     title: 'Incident Management (Void System)',
     icon: '🚨',
     content: `
-      <h3>About Incidents</h3>
-      <p>Track operational incidents with NEW-MINRISK's enhanced void system (soft-delete pattern with full audit trail).</p>
-
       <h3>Recording an Incident</h3>
       <ol>
         <li>Navigate to <strong>Incidents</strong> tab</li>
@@ -301,19 +433,10 @@ const sections = [
       <ul>
         <li><strong>Void Button:</strong> Click void button on incident detail view</li>
         <li><strong>Provide Reason:</strong> Required - explain why incident is being voided</li>
-        <li><strong>Audit Trail:</strong> All voids logged in incident_lifecycle_history table</li>
+        <li><strong>Audit Trail:</strong> All voids logged in incident_lifecycle_history</li>
         <li><strong>Status Change:</strong> incident_status changes from ACTIVE to VOIDED</li>
         <li><strong>Preservation:</strong> Record stays in database for compliance</li>
-        <li><strong>Admin View:</strong> Admins can view voided incidents in "Voided Incidents (Audit)" tab</li>
-      </ul>
-
-      <h3>Voided Incidents View (Admin Only)</h3>
-      <p>Access via Admin → Incident Review → "Voided Incidents (Audit)" tab:</p>
-      <ul>
-        <li>Shows all voided incidents with void reason</li>
-        <li>Displays who voided and when</li>
-        <li>View lifecycle history for full audit trail</li>
-        <li>Search and filter capabilities</li>
+        <li><strong>Admin View:</strong> Admins can view voided incidents in audit tab</li>
       </ul>
 
       <h3>Why Void Instead of Delete?</h3>
@@ -321,7 +444,6 @@ const sections = [
         <li><strong>Compliance:</strong> Regulatory requirements to preserve records</li>
         <li><strong>Audit Trail:</strong> Full history of why incidents were removed</li>
         <li><strong>Reversibility:</strong> Can be reviewed later if needed</li>
-        <li><strong>Admin-Only Restriction:</strong> Only admins can void (ON DELETE RESTRICT prevents accidental loss)</li>
       </ul>
     `,
   },
@@ -332,86 +454,41 @@ const sections = [
     content: `
       <h3>Overview</h3>
       <p>NEW-MINRISK includes advanced AI capabilities powered by <strong>Claude 3.5 Sonnet:</strong></p>
-      <ol>
-        <li><strong>AI Risk Generation</strong> - Generate context-specific risks</li>
-        <li><strong>AI Control Recommendations</strong> - Get control suggestions with DIME scores</li>
-        <li><strong>AI Risk Classification</strong> - Classify risks against taxonomy</li>
-        <li><strong>AI Statement Refinement</strong> - Improve risk statements professionally</li>
-        <li><strong>AI Revalidation</strong> - Re-validate edited statements</li>
-      </ol>
 
       <h3>1. AI Risk Generation</h3>
-      <p><strong>Purpose:</strong> Quickly generate relevant risks based on your industry and business context.</p>
-
-      <h4>How to Use:</h4>
-      <ol>
-        <li>Go to <strong>Risk Register</strong> tab</li>
-        <li>Look for <strong>"AI Risk Generator"</strong> section</li>
-        <li>Click <strong>"Generate Risks"</strong> button</li>
-        <li>Fill in context:
-          <ul>
-            <li><strong>Industry/Sector</strong> (required): Banking, Insurance, Healthcare, etc.</li>
-            <li><strong>Business Unit</strong> (optional): Trading Desk, IT Operations, etc.</li>
-            <li><strong>Risk Category</strong> (optional): Focus on specific category</li>
-            <li><strong>Number of Risks</strong>: 1-10 (default: 5)</li>
-            <li><strong>Additional Context</strong>: Specific concerns or projects</li>
-          </ul>
-        </li>
-        <li>Click <strong>"Generate Risks"</strong></li>
-        <li>Review AI-generated risks</li>
-        <li>Select risks to save</li>
-      </ol>
+      <p>Generate context-specific risks based on your industry:</p>
+      <ul>
+        <li>Specify industry/sector</li>
+        <li>Optionally narrow to business unit</li>
+        <li>AI generates 1-10 relevant risks</li>
+        <li>Review and select which to save</li>
+      </ul>
 
       <h3>2. AI Control Recommendations</h3>
-      <p><strong>Purpose:</strong> Get AI suggestions for effective controls with DIME scores.</p>
-
-      <h4>How to Use:</h4>
-      <ol>
-        <li>When viewing/editing a risk, find "Controls" section</li>
-        <li>Click <strong>"Get AI Recommendations"</strong></li>
+      <p>Get AI suggestions for effective controls:</p>
+      <ul>
         <li>AI analyzes risk and suggests 3-5 controls</li>
-        <li>Each suggestion includes:
-          <ul>
-            <li>Control description</li>
-            <li>Target (Likelihood/Impact)</li>
-            <li>Suggested DIME scores (D, I, M, E)</li>
-            <li>Rationale for suggestion</li>
-          </ul>
-        </li>
-        <li>Click <strong>"Add Control"</strong> to use suggestion</li>
-        <li>Adjust DIME scores based on your implementation</li>
-      </ol>
+        <li>Each suggestion includes DIME scores</li>
+        <li>Provides rationale for suggestion</li>
+      </ul>
 
       <h3>3. AI Risk Classification</h3>
-      <p><strong>Purpose:</strong> Automatically classify risks against your taxonomy.</p>
       <ul>
-        <li>AI suggests category and subcategory</li>
-        <li>Provides confidence score (0-100%)</li>
-        <li>Explains reasoning for classification</li>
-        <li>Normalizes risk statement for consistency</li>
+        <li>Auto-classify risks against taxonomy</li>
+        <li>Confidence score (0-100%)</li>
+        <li>Reasoning explanation</li>
       </ul>
 
       <h3>4. AI Statement Refinement</h3>
-      <p><strong>Purpose:</strong> Improve risk statements to be more professional and clear.</p>
       <ul>
-        <li>AI rewrites risk statement</li>
-        <li>Lists improvements made</li>
+        <li>Improve risk statements professionally</li>
         <li>Maintains original meaning</li>
         <li>Follows industry best practices</li>
-      </ul>
-
-      <h3>5. AI Revalidation</h3>
-      <p><strong>Purpose:</strong> Re-validate edited risk statements.</p>
-      <ul>
-        <li>Check if classification still applies after edits</li>
-        <li>Suggests reclassification if needed</li>
-        <li>Ensures taxonomy alignment</li>
       </ul>
 
       <h3>Best Practices</h3>
       <ul>
         <li><strong>Review all suggestions:</strong> AI is a starting point, not final answer</li>
-        <li><strong>Customize for your org:</strong> Adapt to your specific context</li>
         <li><strong>Be specific in prompts:</strong> More context = better results</li>
         <li><strong>Professional review:</strong> Have risk experts validate AI output</li>
       </ul>
@@ -419,40 +496,44 @@ const sections = [
   },
   {
     id: 'risk-intelligence',
-    title: 'Risk Intelligence Monitor (Phase 1)',
-    icon: '🎯',
+    title: 'Risk Intelligence Monitor',
+    icon: '🧠',
     content: `
       <h3>About Risk Intelligence</h3>
-      <p>NEW-MINRISK includes Phase 1 of Risk Intelligence: <strong>Manual Event Entry with Auto-Scan</strong></p>
+      <p>Monitor external threats and events that may impact your risk profile.</p>
 
-      <h3>How It Works</h3>
-      <ol>
-        <li>Navigate to <strong>Risk Intelligence</strong> tab</li>
-        <li>Click <strong>"Add External Event"</strong></li>
-        <li>Enter threat event details:
-          <ul>
-            <li>Title (e.g., "Ransomware attack on healthcare sector")</li>
-            <li>Source (e.g., news article URL)</li>
-            <li>Event date</li>
-            <li>Description</li>
-            <li>Category (Cyber, Operational, etc.)</li>
-          </ul>
-        </li>
-        <li><strong>Auto-Scan Triggers:</strong> AI automatically analyzes event against your risk register</li>
-        <li>If relevant (confidence ≥ 70%), creates alert linking event to risk</li>
-        <li>Review alerts in "Pending" tab</li>
-      </ol>
+      <h3>RSS Source Management</h3>
+      <p>Configure news sources to monitor:</p>
+      <ul>
+        <li><strong>Add RSS Sources</strong> - Enter feed URLs</li>
+        <li><strong>Categorize</strong> - Assign to risk categories</li>
+        <li><strong>Enable/Disable</strong> - Control which sources are active</li>
+        <li><strong>Auto-Scan</strong> - System periodically fetches new articles</li>
+      </ul>
+
+      <h3>Keyword Management</h3>
+      <p>Define keywords to watch for:</p>
+      <ul>
+        <li><strong>Risk Keywords</strong> - Terms that indicate potential risks</li>
+        <li><strong>Category Mapping</strong> - Link keywords to risk categories</li>
+        <li><strong>AI Matching</strong> - AI analyzes articles for relevance</li>
+      </ul>
 
       <h3>Alert Management</h3>
       <ul>
-        <li><strong>Pending Alerts:</strong> Review AI suggestions</li>
-        <li><strong>Accept Alert:</strong> Add to treatment log for manual application</li>
-        <li><strong>Reject Alert:</strong> Dismiss with reason</li>
-        <li><strong>Treatment Log:</strong> Track accepted alerts before applying to risk register</li>
+        <li><strong>Pending Alerts</strong> - Review AI-flagged articles</li>
+        <li><strong>Accept Alert</strong> - Add to treatment log</li>
+        <li><strong>Reject Alert</strong> - Dismiss with reason</li>
+        <li><strong>Treatment Log</strong> - Track accepted alerts</li>
       </ul>
 
-      <h3>Phase 2 (Planned)</h3>
-      <p>RSS automation with intelligent pre-filtering - see CLAUDE.md for details.</p>
+      <h3>How It Works</h3>
+      <ol>
+        <li>RSS sources are scanned for new articles</li>
+        <li>AI analyzes articles against your risk keywords</li>
+        <li>Relevant articles (confidence ≥ 70%) create alerts</li>
+        <li>Risk managers review and treat alerts</li>
+      </ol>
     `,
   },
   {
@@ -461,9 +542,9 @@ const sections = [
     icon: '👑',
     content: `
       <h3>Admin Capabilities</h3>
-      <p>NEW-MINRISK Admin Panel has 6 sections:</p>
+      <p>NEW-MINRISK Admin Panel has 9 sections:</p>
 
-      <h4>1. Risk Taxonomy Management</h4>
+      <h4>1. Risk Taxonomy</h4>
       <ul>
         <li>Manage risk categories and subcategories</li>
         <li>Import/Export taxonomy</li>
@@ -477,7 +558,15 @@ const sections = [
         <li>Custom fields</li>
       </ul>
 
-      <h4>3. User Management</h4>
+      <h4>3. Appetite & Tolerance</h4>
+      <ul>
+        <li>Risk Appetite Statements</li>
+        <li>Risk Appetite Categories</li>
+        <li>Risk Indicators (KRIs)</li>
+        <li>Tolerance Limits</li>
+      </ul>
+
+      <h4>4. User Management</h4>
       <ul>
         <li>Approve/reject pending users</li>
         <li>Change user roles (view/edit/admin)</li>
@@ -485,34 +574,52 @@ const sections = [
         <li>Delete users (with confirmation)</li>
       </ul>
 
-      <h4>4. Period Management</h4>
+      <h4>5. Owner Mapping</h4>
       <ul>
-        <li>Manage reporting periods (periods-v2 continuous model)</li>
+        <li>Map risks to owners</li>
+        <li>Bulk assignment</li>
+        <li>Owner reporting</li>
+      </ul>
+
+      <h4>6. Period Management</h4>
+      <ul>
+        <li>Manage reporting periods</li>
         <li>Set active period</li>
         <li>Historical period tracking</li>
       </ul>
 
-      <h4>5. Audit Trail ✨ NEW</h4>
+      <h4>7. Audit Trail</h4>
       <ul>
-        <li><strong>Complete activity log</strong> of all system actions</li>
-        <li><strong>8 filters:</strong> search, risk code, user, action type, entity type, dates, limit</li>
-        <li><strong>Automatic capture:</strong> Risks, controls, users logged via database triggers</li>
-        <li><strong>Detail view:</strong> Before/after comparison for all changes</li>
-        <li><strong>CSV export:</strong> Download audit log for reporting</li>
-        <li><strong>Immutable:</strong> No edits or deletes allowed (compliance)</li>
-        <li><strong>Color-coded actions:</strong> Create=green, Update=blue, Delete=red, etc.</li>
+        <li>Complete activity log of all system actions</li>
+        <li>8 filters: search, risk code, user, action type, entity type, dates, limit</li>
+        <li>Before/after comparison for all changes</li>
+        <li>CSV export for reporting</li>
+        <li>Immutable - no edits or deletes allowed</li>
       </ul>
 
-      <h4>6. Organization Settings</h4>
+      <h4>8. Help</h4>
+      <ul>
+        <li>This user manual</li>
+        <li>Search functionality</li>
+      </ul>
+
+      <h4>9. Organization Settings</h4>
       <ul>
         <li>Configure organization details</li>
         <li>DIME scale configuration</li>
         <li>Likelihood/Impact scales</li>
-        <li>System preferences</li>
+        <li><strong>⚠️ Danger Zone: Data Cleanup</strong> - Delete operational data</li>
       </ul>
 
-      <h3>Accessing Admin Panel</h3>
-      <p>Only users with <strong>role='admin'</strong> can access the Admin tab. If you don't see it, contact your administrator.</p>
+      <h3>Data Cleanup (Danger Zone)</h3>
+      <p>Located in Organization Settings. Allows admins to delete operational data:</p>
+      <ul>
+        <li><strong>Scope Selection:</strong> Current org only or all organizations (super_admin)</li>
+        <li><strong>Two-Step Confirmation:</strong> Must type "DELETE ALL DATA" to confirm</li>
+        <li><strong>Preserved:</strong> User accounts, organizations, taxonomy</li>
+        <li><strong>Deleted:</strong> Risks, controls, KRIs, incidents, audit logs, intelligence</li>
+      </ul>
+      <p style="color: red;"><strong>⚠️ WARNING: This action is irreversible!</strong></p>
     `,
   },
   {
@@ -522,10 +629,10 @@ const sections = [
     content: `
       <h3>Risk Management</h3>
       <ul>
-        <li><strong>Consistent Codes:</strong> Use a naming convention (RISK-001, RISK-002, etc.)</li>
         <li><strong>Regular Updates:</strong> Review risks quarterly minimum</li>
         <li><strong>Honest DIME Ratings:</strong> Be realistic in control effectiveness scores</li>
         <li><strong>Document Changes:</strong> Audit trail tracks everything automatically</li>
+        <li><strong>Link KRIs:</strong> Connect early warning indicators to risks</li>
       </ul>
 
       <h3>Control Assessment</h3>
@@ -538,22 +645,22 @@ const sections = [
       <h3>Incident Management</h3>
       <ul>
         <li><strong>Use Void for Mistakes:</strong> Don't delete - use void with clear reason</li>
-        <li><strong>Link to Risks:</strong> Connect incidents to related risks for analysis</li>
+        <li><strong>Link to Risks:</strong> Connect incidents to related risks</li>
         <li><strong>Document Root Causes:</strong> Helps prevent recurrence</li>
+      </ul>
+
+      <h3>KRI Management</h3>
+      <ul>
+        <li><strong>Leading Indicators:</strong> Focus on predictive metrics</li>
+        <li><strong>Regular Data Entry:</strong> Keep measurements current</li>
+        <li><strong>Respond to Alerts:</strong> Don't let alerts go stale</li>
       </ul>
 
       <h3>Admin Operations</h3>
       <ul>
         <li><strong>User Approval:</strong> Verify identity, start with 'view' role</li>
         <li><strong>Audit Trail Review:</strong> Regularly check for unusual activity</li>
-        <li><strong>Taxonomy Alignment:</strong> Keep categories aligned with industry standards</li>
-      </ul>
-
-      <h3>Data Quality</h3>
-      <ul>
-        <li><strong>Complete Information:</strong> Fill all fields thoroughly</li>
-        <li><strong>Regular Cleanup:</strong> Use void system for outdated data</li>
-        <li><strong>Training:</strong> Train all users on proper usage</li>
+        <li><strong>Backup Before Cleanup:</strong> Export data before using cleanup function</li>
       </ul>
     `,
   },
@@ -576,29 +683,38 @@ const sections = [
       <p><strong>Can't access Admin Panel:</strong><br>
       Only admins can access. Contact your organization's admin.</p>
 
+      <p><strong>Can't see Analytics/KRI/Intel tabs:</strong><br>
+      These are admin-only features for Risk Management team.</p>
+
       <h3>Data Issues</h3>
       <p><strong>Risk code already exists:</strong><br>
-      Risk codes must be unique. Try a different code.</p>
+      Risk codes must be unique. System auto-generates unique codes.</p>
 
       <p><strong>Can't void incident:</strong><br>
       Only admins can void incidents. Contact your admin.</p>
 
-      <p><strong>Audit trail not showing my actions:</strong><br>
-      Audit trail may take a few seconds to update. Refresh the page.</p>
+      <p><strong>KRI alert not showing:</strong><br>
+      Check threshold direction matches your measurement. Refresh the page.</p>
 
       <h3>AI Features</h3>
       <p><strong>AI not generating risks:</strong><br>
-      Check Anthropic API key is configured in environment variables. Contact admin.</p>
+      AI calls are proxied through Supabase Edge Functions. Check if functions are deployed.</p>
 
       <p><strong>AI suggestions seem off:</strong><br>
       Provide more context in the prompt. AI works better with specific information.</p>
+
+      <h3>Data Cleanup Issues</h3>
+      <p><strong>Cleanup button not visible:</strong><br>
+      Only primary_admin and super_admin can see the cleanup function.</p>
+
+      <p><strong>Cleanup not deleting everything:</strong><br>
+      Some tables may have different names. Contact system administrator.</p>
 
       <h3>Getting Support</h3>
       <ul>
         <li>Contact your administrator for account issues</li>
         <li>Refer to this manual for usage questions</li>
         <li>Check CLAUDE.md in project root for technical documentation</li>
-        <li>Report bugs to your system administrator</li>
       </ul>
     `,
   },
