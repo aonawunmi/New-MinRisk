@@ -11,6 +11,7 @@ import AuditTrail from './AuditTrail';
 import HelpTab from './HelpTab';
 import OwnerMappingTool from './OwnerMappingTool';
 import DataCleanup from './DataCleanup';
+import LibraryGenerator from './LibraryGenerator';
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
@@ -48,6 +49,7 @@ export default function AdminPanel() {
     { id: 'taxonomy', label: 'Risk Taxonomy' },
     { id: 'configuration', label: 'Risk Configuration' },
     { id: 'appetite', label: 'Appetite & Tolerance' },
+    { id: 'library', label: 'Library Setup' },
     { id: 'users', label: 'User Management' },
     ...(hasUnmappedOwners ? [{ id: 'owner-mapping', label: 'Owner Mapping' }] : []),
     { id: 'periods', label: 'Period Management' },
@@ -106,6 +108,7 @@ export default function AdminPanel() {
         {activeTab === 'taxonomy' && <TaxonomyManagement />}
         {activeTab === 'configuration' && <RiskConfiguration />}
         {activeTab === 'appetite' && <AppetiteToleranceConfig />}
+        {activeTab === 'library' && <LibraryGenerator />}
         {activeTab === 'users' && <UserManagement />}
         {activeTab === 'owner-mapping' && hasUnmappedOwners && <OwnerMappingTool />}
         {activeTab === 'periods' && user && profile && (
