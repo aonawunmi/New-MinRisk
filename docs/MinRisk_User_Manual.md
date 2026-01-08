@@ -11,7 +11,7 @@
 3. [Risk Management](#3-risk-management)
 4. [Control Management](#4-control-management)
 5. [Incident Management](#5-incident-management)
-6. [AI Risk Generator](#6-ai-risk-generator)
+6. [Smart Library Filtering & AI Generator](#6-smart-library-filtering--ai-generator)
 7. [Analytics & Reporting](#7-analytics--reporting)
 8. [KRI/KCI Management](#8-krikci-management)
 9. [Risk Intelligence](#9-risk-intelligence)
@@ -272,9 +272,25 @@ For each incident, document:
 
 ---
 
-## 6. AI Risk Generator
+## 6. Smart Library Filtering & AI Generator
 
-### 6.1 AI-Powered Risk Generation
+### 6.1 Smart Library Filtering
+
+MinRisk automatically curates the risk and control libraries based on your organization's setup to keep your workspace relevant and clutter-free.
+
+**How it works:**
+- **Industry Context**: The system knows your organization's industry (e.g., Banking, Healthcare, Energy).
+- **Universal vs. Specific**:
+  - **Universal Items**: Risks/Controls relevant to all industries are always visible.
+  - **Industry-Specific Items**: Items specific to other industries are hidden from your dropdowns.
+- **Data Integrity**: Hidden items remain in the database to preserve historical records, but won't clutter new selection lists.
+
+**Benefits:**
+- Faster selection from dropdowns (Risk Categories, Root Causes, Impacts).
+- Reduced cognitive load for Risk Managers.
+- Ensures relevance of standardized data.
+
+### 6.2 AI-Powered Risk Generation
 
 Generate comprehensive risks using AI:
 

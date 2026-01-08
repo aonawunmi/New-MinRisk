@@ -109,6 +109,7 @@ export default function RiskForm({
 
   // Admin access state
   const [isAdmin, setIsAdmin] = useState(false);
+  const [industryType, setIndustryType] = useState<string | null>(null);
 
   // AI Refinement state
   const [isRefining, setIsRefining] = useState(false);
@@ -371,6 +372,38 @@ export default function RiskForm({
       setIsAdmin(false); // Default to non-admin on error
     }
   }
+
+  // Load Organization Industry Type for filtering
+  useEffect(() => {
+    async function loadIndustryType() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('organization_id')
+          .eq('id', user.id)
+          .single();
+
+        if (profile?.organization_id) {
+          const { data: org } = await supabase
+            .from('organizations')
+            .select('industry_type')
+            .eq('id', profile.organization_id)
+            .single();
+
+          setIndustryType(org?.industry_type || null);
+        }
+      } catch (err) {
+        console.error('Error loading industry type:', err);
+      }
+    }
+
+    if (open) {
+      loadIndustryType();
+    }
+  }, [open]);
 
   async function loadLibraries() {
     setLoadingLibraries(true);

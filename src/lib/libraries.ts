@@ -17,6 +17,8 @@ export interface RootCause {
   source: 'global' | 'organization';
   organization_id: string | null;
   is_active: boolean;
+  industry_tags?: string[];
+  is_universal?: boolean;
   created_at: string;
 }
 
@@ -30,6 +32,8 @@ export interface Impact {
   source: 'global' | 'organization';
   organization_id: string | null;
   is_active: boolean;
+  industry_tags?: string[];
+  is_universal?: boolean;
   created_at: string;
 }
 
@@ -47,6 +51,8 @@ export interface Control {
   source: 'global' | 'organization';
   organization_id: string | null;
   is_active: boolean;
+  industry_tags?: string[];
+  is_universal?: boolean;
   created_at: string;
 }
 
@@ -65,6 +71,8 @@ export interface KRIorKCI {
   source: 'global' | 'organization';
   organization_id: string | null;
   is_active: boolean;
+  industry_tags?: string[];
+  is_universal?: boolean;
   created_at: string;
 }
 
@@ -130,7 +138,7 @@ export async function getControls(): Promise<{ data: Control[] | null; error: Er
       .from('control_library')
       .select('*')
       .order('source', { ascending: false }) // Global first
-      .order('control_code', { ascending: true});
+      .order('control_code', { ascending: true });
 
     if (error) {
       console.error('Get controls error:', error.message);

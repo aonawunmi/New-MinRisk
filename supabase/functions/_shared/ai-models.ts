@@ -13,28 +13,24 @@
 
 export const AI_MODELS = {
   /**
-   * Haiku 3.5 - Use for structured JSON generation
-   * - RSS feed filtering
-   * - Simple analysis tasks
-   * - VALIDATED WORKING: This ID was confirmed working in scan-rss-feeds before centralization
+   * Haiku 3.5 - Fastest, cheapest model
+   * - Currently unused (standardized to Sonnet)
    */
   HAIKU: 'claude-3-5-haiku-20241022',
 
   /**
-   * Sonnet 3.5 - Use for balanced tasks
-   * - General purpose analysis
-   * - Moderate complexity
-   * - TEMPORARY: Using Haiku until Sonnet access is verified
+   * Sonnet 3.5 - Standard model for all MinRisk AI features
+   * - Risk generation, text refinement, RSS filtering
+   * - Incident analysis, risk intelligence
+   * - Risk appetite, KRI suggestions
+   * - STANDARDIZED: All features now use this model for consistency
    */
-  SONNET_35: 'claude-3-5-haiku-20241022',
+  SONNET_35: 'claude-3-5-sonnet-20241022',
 
   /**
-   * Sonnet 4.5 (fallback) - Use for complex reasoning
-   * - Risk Intelligence deep analysis
-   * - Multi-step reasoning
-   * - TEMPORARY: Using Haiku until premium model access is verified
+   * Sonnet 4.5 - Alias for Sonnet 3.5 (standardized)
    */
-  SONNET_45: 'claude-3-5-haiku-20241022',
+  SONNET_45: 'claude-3-5-sonnet-20241022',
 } as const;
 
 /**
@@ -43,27 +39,27 @@ export const AI_MODELS = {
  * Change models here to adjust cost/performance tradeoff globally
  */
 export const USE_CASE_MODELS = {
-  /** Risk Intelligence analysis (complex reasoning) - Use most capable */
-  RISK_INTELLIGENCE: AI_MODELS.SONNET_45,
+  /** Risk Intelligence analysis (complex reasoning) */
+  RISK_INTELLIGENCE: AI_MODELS.SONNET_35,
 
-  /** RSS Feed filtering - Use cheapest */
-  RSS_FILTERING: AI_MODELS.HAIKU,
+  /** RSS Feed filtering - Now uses Sonnet for quality */
+  RSS_FILTERING: AI_MODELS.SONNET_35,
 
-  /** Incident analysis (severity, impact assessment) - Use most capable */
-  INCIDENT_ANALYSIS: AI_MODELS.SONNET_45,
+  /** Incident analysis (severity, impact assessment) */
+  INCIDENT_ANALYSIS: AI_MODELS.SONNET_35,
 
-  /** Incident-to-Risk mapping (complex reasoning) - Use most capable */
-  INCIDENT_RISK_MAPPING: AI_MODELS.SONNET_45,
+  /** Incident-to-Risk mapping (complex reasoning) */
+  INCIDENT_RISK_MAPPING: AI_MODELS.SONNET_35,
 
-  /** KRI suggestions (structured generation) - Use balanced */
+  /** KRI suggestions (structured generation) */
   KRI_GENERATION: AI_MODELS.SONNET_35,
 
-  /** AI text refinement - Use cheapest */
-  TEXT_REFINEMENT: AI_MODELS.HAIKU,
+  /** AI text refinement */
+  TEXT_REFINEMENT: AI_MODELS.SONNET_35,
 
-  /** Risk Appetite generation (Board language) - Use balanced */
+  /** Risk Appetite generation (Board language) */
   APPETITE_GENERATION: AI_MODELS.SONNET_35,
 
   /** Default fallback */
-  DEFAULT: AI_MODELS.HAIKU,
+  DEFAULT: AI_MODELS.SONNET_35,
 } as const;

@@ -370,6 +370,8 @@ export default function LibraryGenerator() {
                             category: seed.category_hints?.[0] || 'General',
                             subcategory: seed.category_hints?.[1] || null,
                             severity_indicator: seed.metadata?.severity_indicator || 'Medium',
+                            industry_tags: seed.industry_tags,
+                            is_universal: seed.industry_tags?.includes('universal') || false,
                             is_active: true,
                         }, { onConflict: 'cause_code' });
 
@@ -391,6 +393,8 @@ export default function LibraryGenerator() {
                             impact_type: seed.metadata?.impact_type || 'operational',
                             category: seed.category_hints?.[0] || 'General',
                             severity_level: seed.metadata?.severity_level || 'Moderate',
+                            industry_tags: seed.industry_tags,
+                            is_universal: seed.industry_tags?.includes('universal') || false,
                             is_active: true,
                         }, { onConflict: 'impact_code' });
 
@@ -412,6 +416,8 @@ export default function LibraryGenerator() {
                             control_type: seed.metadata?.control_type || 'preventive',
                             control_category: seed.category_hints?.[0] || 'General',
                             automation_level: seed.metadata?.automation_level || 'Manual',
+                            industry_tags: seed.industry_tags,
+                            is_universal: seed.industry_tags?.includes('universal') || false,
                             is_active: true,
                         }, { onConflict: 'control_code' });
 
@@ -437,6 +443,8 @@ export default function LibraryGenerator() {
                             warning_threshold: seed.metadata?.warning_threshold,
                             critical_threshold: seed.metadata?.critical_threshold,
                             threshold_direction: seed.metadata?.threshold_direction || 'above',
+                            industry_tags: seed.industry_tags,
+                            is_universal: seed.industry_tags?.includes('universal') || false,
                             is_active: true,
                         }, { onConflict: 'indicator_code' });
 
