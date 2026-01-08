@@ -224,13 +224,20 @@ export default function LibraryGenerator() {
                 supabase.from('global_kri_kci_library').select('*', { count: 'exact', head: true }),
             ]);
 
-            setCurrentCounts({
+            const counts = {
                 root_cause: rootCauses.count || 0,
                 impact: impacts.count || 0,
                 control: controls.count || 0,
                 kri: kris.count || 0,
                 kci: 0, // KCIs are in same table
-            });
+            };
+            setCurrentCounts(counts);
+
+            // Also lock industry if libraries already have data (fallback for existing data)
+            const hasExistingData = counts.root_cause > 0 || counts.impact > 0 || counts.control > 0 || counts.kri > 0;
+            if (hasExistingData && industryType) {
+                setIndustryLocked(true);
+            }
         } catch (err) {
             console.error('Error loading current counts:', err);
         }
