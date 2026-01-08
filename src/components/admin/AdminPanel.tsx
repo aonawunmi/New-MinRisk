@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
 import TaxonomyManagement from './TaxonomyManagement';
 import UserManagement from './UserManagement';
 import OrganizationSettings from './OrganizationSettings';
@@ -14,13 +15,41 @@ import DataCleanup from './DataCleanup';
 export default function AdminPanel() {
   const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState('taxonomy');
+  const [hasUnmappedOwners, setHasUnmappedOwners] = useState(false);
+  const [checkingOwners, setCheckingOwners] = useState(true);
 
+  // Check if there are any unmapped owners
+  useEffect(() => {
+    async function checkLegacyOwners() {
+      if (!profile?.organization_id) return;
+
+      try {
+        const { count, error } = await supabase
+          .from('risks')
+          .select('*', { count: 'exact', head: true })
+          .eq('organization_id', profile.organization_id)
+          .is('owner_id', null);
+
+        if (!error && count !== null) {
+          setHasUnmappedOwners(count > 0);
+        }
+      } catch (err) {
+        console.error('Error checking legacy owners:', err);
+      } finally {
+        setCheckingOwners(false);
+      }
+    }
+
+    checkLegacyOwners();
+  }, [profile?.organization_id]);
+
+  // Build tabs dynamically - only include Owner Mapping if there are unmapped owners
   const tabs = [
     { id: 'taxonomy', label: 'Risk Taxonomy' },
     { id: 'configuration', label: 'Risk Configuration' },
     { id: 'appetite', label: 'Appetite & Tolerance' },
     { id: 'users', label: 'User Management' },
-    { id: 'owner-mapping', label: 'Owner Mapping' },
+    ...(hasUnmappedOwners ? [{ id: 'owner-mapping', label: 'Owner Mapping' }] : []),
     { id: 'periods', label: 'Period Management' },
     { id: 'audit', label: 'Audit Trail' },
     { id: 'help', label: 'Help' },
@@ -78,7 +107,7 @@ export default function AdminPanel() {
         {activeTab === 'configuration' && <RiskConfiguration />}
         {activeTab === 'appetite' && <AppetiteToleranceConfig />}
         {activeTab === 'users' && <UserManagement />}
-        {activeTab === 'owner-mapping' && <OwnerMappingTool />}
+        {activeTab === 'owner-mapping' && hasUnmappedOwners && <OwnerMappingTool />}
         {activeTab === 'periods' && user && profile && (
           <PeriodManagement orgId={profile.organization_id} userId={user.id} />
         )}
@@ -96,3 +125,4 @@ export default function AdminPanel() {
     </div>
   );
 }
+

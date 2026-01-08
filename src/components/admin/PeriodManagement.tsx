@@ -9,8 +9,10 @@ import { useState, useEffect } from 'react';
 import {
   commitPeriod,
   getActivePeriod,
+  setActivePeriod as updateActivePeriodInDB,
   getCommittedPeriods,
   formatPeriod,
+  generatePeriodOptions,
   type Period,
   type PeriodCommit,
 } from '@/lib/periods-v2';
@@ -29,6 +31,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -53,6 +62,8 @@ export default function PeriodManagement({ orgId, userId }: PeriodManagementProp
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showPeriodSelector, setShowPeriodSelector] = useState(false);
+  const [changingPeriod, setChangingPeriod] = useState(false);
 
   useEffect(() => {
     loadPeriodData();
@@ -130,8 +141,8 @@ export default function PeriodManagement({ orgId, userId }: PeriodManagementProp
   // Check if current period already committed
   const currentPeriodCommitted = activePeriod
     ? committedPeriods.some(
-        (c) => c.period_year === activePeriod.year && c.period_quarter === activePeriod.quarter
-      )
+      (c) => c.period_year === activePeriod.year && c.period_quarter === activePeriod.quarter
+    )
     : false;
 
   return (
@@ -157,9 +168,66 @@ export default function PeriodManagement({ orgId, userId }: PeriodManagementProp
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm text-blue-600 font-medium mb-1">Current Active Period</div>
-                <div className="text-2xl font-bold text-blue-900">
-                  {formatPeriod(activePeriod)}
-                </div>
+                {showPeriodSelector ? (
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={`${activePeriod.year}-${activePeriod.quarter}`}
+                      onValueChange={async (value) => {
+                        const [year, quarter] = value.split('-').map(Number);
+                        setChangingPeriod(true);
+                        setError(null);
+                        try {
+                          const result = await updateActivePeriodInDB(orgId, { year, quarter });
+                          if (result.error) {
+                            throw result.error;
+                          }
+                          setActivePeriod({ year, quarter });
+                          setSuccess(`Active period changed to Q${quarter} ${year}`);
+                          setShowPeriodSelector(false);
+                          await loadPeriodData();
+                        } catch (err: any) {
+                          setError(`Failed to change period: ${err.message}`);
+                        } finally {
+                          setChangingPeriod(false);
+                        }
+                      }}
+                      disabled={changingPeriod}
+                    >
+                      <SelectTrigger className="w-[180px] bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {generatePeriodOptions().map((p) => (
+                          <SelectItem key={`${p.year}-${p.quarter}`} value={`${p.year}-${p.quarter}`}>
+                            Q{p.quarter} {p.year}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowPeriodSelector(false)}
+                      disabled={changingPeriod}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <div className="text-2xl font-bold text-blue-900">
+                      {formatPeriod(activePeriod)}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowPeriodSelector(true)}
+                      className="text-blue-600 border-blue-300 hover:bg-blue-100"
+                    >
+                      Change
+                    </Button>
+                  </div>
+                )}
                 {currentPeriodCommitted && (
                   <Badge variant="outline" className="mt-2 border-green-600 text-green-700">
                     <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -219,8 +287,8 @@ export default function PeriodManagement({ orgId, userId }: PeriodManagementProp
             {committing
               ? 'Committing Period...'
               : currentPeriodCommitted
-              ? `${activePeriod ? formatPeriod(activePeriod) : 'Period'} Already Committed`
-              : `Commit ${activePeriod ? formatPeriod(activePeriod) : 'Current Period'}`}
+                ? `${activePeriod ? formatPeriod(activePeriod) : 'Period'} Already Committed`
+                : `Commit ${activePeriod ? formatPeriod(activePeriod) : 'Current Period'}`}
           </Button>
 
           {currentPeriodCommitted && (
