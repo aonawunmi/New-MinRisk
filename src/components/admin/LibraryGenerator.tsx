@@ -97,7 +97,7 @@ interface GenerationResult {
 
 interface GenerationLog {
     id: string;
-    created_at: string;
+    generated_at: string;
     generation_mode: string;
     root_causes_generated: number;
     impacts_generated: number;
@@ -202,7 +202,7 @@ export default function LibraryGenerator() {
             }
 
             // Load current library counts
-            await loadCurrentCounts();
+            await loadCurrentCounts(org?.industry_type || null);
 
             // Load generation history
             await loadHistory();
@@ -215,7 +215,7 @@ export default function LibraryGenerator() {
         }
     }
 
-    async function loadCurrentCounts() {
+    async function loadCurrentCounts(overrideIndustry?: string | null) {
         try {
             const [rootCauses, impacts, controls, kris] = await Promise.all([
                 supabase.from('global_root_cause_library').select('*', { count: 'exact', head: true }),
@@ -235,7 +235,9 @@ export default function LibraryGenerator() {
 
             // Also lock industry if libraries already have data (fallback for existing data)
             const hasExistingData = counts.root_cause > 0 || counts.impact > 0 || counts.control > 0 || counts.kri > 0;
-            if (hasExistingData && industryType) {
+            const activeIndustry = overrideIndustry !== undefined ? overrideIndustry : industryType;
+
+            if (hasExistingData && activeIndustry) {
                 setIndustryLocked(true);
             }
         } catch (err) {
@@ -247,9 +249,9 @@ export default function LibraryGenerator() {
         try {
             const { data } = await supabase
                 .from('library_generation_log')
-                .select('id, created_at, generation_mode, root_causes_generated, impacts_generated, controls_generated, kris_generated, kcis_generated, status')
+                .select('id, generated_at, generation_mode, root_causes_generated, impacts_generated, controls_generated, kris_generated, kcis_generated, status')
                 .eq('organization_id', profile!.organization_id)
-                .order('created_at', { ascending: false })
+                .order('generated_at', { ascending: false })
                 .limit(5);
 
             setGenerationHistory(data || []);
@@ -286,6 +288,11 @@ export default function LibraryGenerator() {
 
             if (error) throw error;
             setIndustryType(value);
+
+            // Lock immediately if we already have data
+            if (currentCounts && (currentCounts.root_cause > 0 || currentCounts.impact > 0 || currentCounts.control > 0 || currentCounts.kri > 0)) {
+                setIndustryLocked(true);
+            }
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -787,7 +794,7 @@ export default function LibraryGenerator() {
                                     <div key={log.id} className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm">
                                         <div>
                                             <span className="font-medium">
-                                                {new Date(log.created_at).toLocaleDateString()}
+                                                {new Date(log.generated_at).toLocaleDateString()}
                                             </span>
                                             <span className="ml-2 text-gray-500">
                                                 {log.generation_mode}
