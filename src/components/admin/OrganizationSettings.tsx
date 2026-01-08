@@ -1,62 +1,36 @@
 /**
  * Organization Settings Component
  *
- * Allows admins to configure organization-wide settings:
- * - Risk matrix size (5x5 or 6x6)
- * - Risk appetite statement
- * - Risk tolerance level
- *
- * Note: Period management is handled in the Period Management tab
+ * Displays system information for the organization.
+ * 
+ * Note: Risk matrix, appetite, and tolerance settings are managed in dedicated tabs:
+ * - Risk Configuration: Matrix size, likelihood/impact labels
+ * - Appetite & Tolerance: Category-level appetite and tolerance settings
  */
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUserProfile } from '@/lib/profiles';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle, Settings } from 'lucide-react';
+import { AlertCircle, Settings } from 'lucide-react';
 
-interface RiskConfig {
+interface OrgConfig {
   id: string;
   organization_id: string;
-  matrix_size: number;
-  risk_appetite_statement: string | null;
-  risk_tolerance_level: string | null;
-  active_period: string;
   created_at: string;
   updated_at: string;
 }
 
 export default function OrganizationSettings() {
-  const [config, setConfig] = useState<RiskConfig | null>(null);
+  const [config, setConfig] = useState<OrgConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  // Form state
-  const [matrixSize, setMatrixSize] = useState<number>(5);
-  const [riskAppetite, setRiskAppetite] = useState('');
-  const [riskTolerance, setRiskTolerance] = useState('');
-
-  // Feedback
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     loadConfig();
@@ -67,17 +41,15 @@ export default function OrganizationSettings() {
     setError(null);
 
     try {
-      // Get current user's organization
       const { data: profile } = await getCurrentUserProfile();
       if (!profile) {
         setError('Could not load user profile');
         return;
       }
 
-      // Fetch risk config
       const { data, error: configError } = await supabase
         .from('risk_configs')
-        .select('*')
+        .select('id, organization_id, created_at, updated_at')
         .eq('organization_id', profile.organization_id)
         .single();
 
@@ -88,44 +60,11 @@ export default function OrganizationSettings() {
       }
 
       setConfig(data);
-      setMatrixSize(data.matrix_size);
-      setRiskAppetite(data.risk_appetite_statement || '');
-      setRiskTolerance(data.risk_tolerance_level || '');
     } catch (err: any) {
       console.error('Unexpected error loading config:', err);
       setError(err.message);
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleSave() {
-    if (!config) return;
-
-    setSaving(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      // Update risk_configs
-      const { error: updateError } = await supabase
-        .from('risk_configs')
-        .update({
-          matrix_size: matrixSize,
-          risk_appetite_statement: riskAppetite || null,
-          risk_tolerance_level: riskTolerance || null,
-        })
-        .eq('id', config.id);
-
-      if (updateError) throw updateError;
-
-      setSuccess('Settings saved successfully');
-      await loadConfig();
-    } catch (err: any) {
-      console.error('Save settings error:', err);
-      setError(err.message);
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -153,101 +92,15 @@ export default function OrganizationSettings() {
         </Alert>
       )}
 
-      {success && (
-        <Alert className="bg-green-50 border-green-200">
-          <CheckCircle className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-800">
-            {success}
-          </AlertDescription>
-        </Alert>
-      )}
-
+      {/* System Information */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-600 rounded-lg">
               <Settings className="h-6 w-6 text-white" />
             </div>
-            <div>
-              <CardTitle>Organization Settings</CardTitle>
-              <CardDescription>
-                Configure risk management settings for your organization
-              </CardDescription>
-            </div>
+            <CardTitle>System Information</CardTitle>
           </div>
-        </CardHeader>
-
-        <CardContent>
-          <div className="space-y-6">
-            {/* Risk Matrix Size */}
-            <div className="space-y-2">
-              <Label htmlFor="matrix-size">Risk Matrix Size</Label>
-              <Select
-                value={matrixSize.toString()}
-                onValueChange={(value) => setMatrixSize(parseInt(value))}
-              >
-                <SelectTrigger id="matrix-size">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5">5×5 Matrix (Standard)</SelectItem>
-                  <SelectItem value="6">6×6 Matrix (Advanced)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-sm text-gray-600">
-                Determines the granularity of likelihood and impact assessments
-              </p>
-            </div>
-
-            {/* Risk Appetite Statement */}
-            <div className="space-y-2">
-              <Label htmlFor="risk-appetite">
-                Risk Appetite Statement (Optional)
-              </Label>
-              <Textarea
-                id="risk-appetite"
-                value={riskAppetite}
-                onChange={(e) => setRiskAppetite(e.target.value)}
-                placeholder="Define the level and type of risk your organization is willing to accept..."
-                rows={4}
-              />
-              <p className="text-sm text-gray-600">
-                High-level statement defining the organization's willingness to
-                take on risk
-              </p>
-            </div>
-
-            {/* Risk Tolerance Level */}
-            <div className="space-y-2">
-              <Label htmlFor="risk-tolerance">
-                Risk Tolerance Level (Optional)
-              </Label>
-              <Textarea
-                id="risk-tolerance"
-                value={riskTolerance}
-                onChange={(e) => setRiskTolerance(e.target.value)}
-                placeholder="Specify specific thresholds and limits for acceptable risk levels..."
-                rows={4}
-              />
-              <p className="text-sm text-gray-600">
-                Specific, measurable thresholds for different risk categories
-              </p>
-            </div>
-
-            {/* Save Button */}
-            <div className="flex justify-end pt-4">
-              <Button onClick={handleSave} disabled={saving} size="lg">
-                {saving ? 'Saving...' : 'Save Settings'}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* System Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle>System Information</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-4 text-sm">
@@ -267,6 +120,14 @@ export default function OrganizationSettings() {
               <p className="text-gray-600">Last Updated:</p>
               <p>{new Date(config.updated_at).toLocaleString()}</p>
             </div>
+          </div>
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
+            <p className="text-sm text-gray-600">
+              <strong>Note:</strong> Risk matrix configuration is managed in the{' '}
+              <span className="font-medium text-purple-600">Risk Configuration</span> tab.
+              Appetite and tolerance settings are in the{' '}
+              <span className="font-medium text-purple-600">Appetite & Tolerance</span> tab.
+            </p>
           </div>
         </CardContent>
       </Card>
