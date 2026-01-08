@@ -1,0 +1,125 @@
+-- ============================================================================
+-- MASTER SEED LIBRARY DATA: IMPACTS (80+)
+-- ============================================================================
+
+INSERT INTO seed_master_library (library_type, code, name, description, category_hints, keyword_hints, industry_tags, metadata) VALUES
+
+-- FINANCIAL IMPACTS (15)
+('impact', 'IMP-FN-001', 'Revenue loss', 'Decrease in sales, contracts, or income streams reducing top-line revenue', ARRAY['Financial', 'Revenue'], ARRAY['revenue', 'sales', 'income', 'top line'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "financial"}'::jsonb),
+('impact', 'IMP-FN-002', 'Cost overruns', 'Unanticipated expenses exceeding budgets or projections', ARRAY['Financial', 'Cost'], ARRAY['cost', 'expense', 'budget', 'overrun'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "financial"}'::jsonb),
+('impact', 'IMP-FN-003', 'Asset impairment', 'Write-downs or losses on physical or intangible assets', ARRAY['Financial', 'Asset'], ARRAY['asset', 'impairment', 'write-down', 'loss'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "financial"}'::jsonb),
+('impact', 'IMP-FN-004', 'Increased insurance costs', 'Higher premiums or reduced coverage availability', ARRAY['Financial', 'Insurance'], ARRAY['insurance', 'premium', 'coverage', 'cost'], ARRAY['universal'], '{"severity_level": "Minor", "impact_type": "financial"}'::jsonb),
+('impact', 'IMP-FN-005', 'Credit rating downgrade', 'Reduced credit rating affecting borrowing costs', ARRAY['Financial', 'Credit'], ARRAY['credit', 'rating', 'downgrade', 'borrowing'], ARRAY['financial_services', 'banking', 'universal'], '{"severity_level": "Major", "impact_type": "financial"}'::jsonb),
+('impact', 'IMP-FN-006', 'Capital call requirements', 'Unexpected need to inject additional capital', ARRAY['Financial', 'Capital'], ARRAY['capital', 'funding', 'injection', 'requirement'], ARRAY['financial_services', 'universal'], '{"severity_level": "Major", "impact_type": "financial"}'::jsonb),
+('impact', 'IMP-FN-007', 'Increased borrowing costs', 'Higher interest rates on debt financing', ARRAY['Financial', 'Debt'], ARRAY['borrowing', 'interest', 'debt', 'financing'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "financial"}'::jsonb),
+('impact', 'IMP-FN-008', 'Margin compression', 'Reduced profit margins affecting profitability', ARRAY['Financial', 'Profitability'], ARRAY['margin', 'profit', 'compression', 'profitability'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "financial"}'::jsonb),
+('impact', 'IMP-FN-009', 'Cash flow disruption', 'Interruption to regular cash generation or collection', ARRAY['Financial', 'Cash Flow'], ARRAY['cash flow', 'liquidity', 'collection', 'payment'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "financial"}'::jsonb),
+('impact', 'IMP-FN-010', 'Investment write-off', 'Loss on strategic investments or failed projects', ARRAY['Financial', 'Investment'], ARRAY['investment', 'write-off', 'loss', 'project'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "financial"}'::jsonb),
+('impact', 'IMP-FN-011', 'Fraud losses', 'Financial losses from fraudulent activity', ARRAY['Financial', 'Fraud'], ARRAY['fraud', 'theft', 'embezzlement', 'loss'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "financial"}'::jsonb),
+('impact', 'IMP-FN-012', 'Shareholder value destruction', 'Decline in stock price or market capitalization', ARRAY['Financial', 'Shareholder'], ARRAY['shareholder', 'stock', 'market cap', 'value'], ARRAY['universal'], '{"severity_level": "Severe", "impact_type": "financial"}'::jsonb),
+('impact', 'IMP-FN-013', 'Dividend reduction or suspension', 'Inability to pay expected dividends', ARRAY['Financial', 'Dividend'], ARRAY['dividend', 'payout', 'suspension', 'reduction'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "financial"}'::jsonb),
+('impact', 'IMP-FN-014', 'Currency losses', 'Losses from adverse foreign exchange movements', ARRAY['Financial', 'FX'], ARRAY['currency', 'FX', 'foreign exchange', 'loss'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "financial"}'::jsonb),
+('impact', 'IMP-FN-015', 'Tax penalties and interest', 'Additional tax liabilities from non-compliance', ARRAY['Financial', 'Tax'], ARRAY['tax', 'penalty', 'interest', 'liability'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "financial"}'::jsonb),
+
+-- OPERATIONAL IMPACTS (12)
+('impact', 'IMP-OP-001', 'Service disruption', 'Interruption to customer-facing services or products', ARRAY['Operational', 'Service'], ARRAY['service', 'disruption', 'outage', 'availability'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "operational"}'::jsonb),
+('impact', 'IMP-OP-002', 'Production delays', 'Slowed or halted manufacturing or production', ARRAY['Operational', 'Production'], ARRAY['production', 'delay', 'manufacturing', 'halt'], ARRAY['manufacturing', 'universal'], '{"severity_level": "Moderate", "impact_type": "operational"}'::jsonb),
+('impact', 'IMP-OP-003', 'System downtime', 'IT systems unavailable affecting operations', ARRAY['Operational', 'Technology'], ARRAY['downtime', 'system', 'outage', 'unavailable'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "operational"}'::jsonb),
+('impact', 'IMP-OP-004', 'Quality defects', 'Products or services not meeting quality standards', ARRAY['Operational', 'Quality'], ARRAY['quality', 'defect', 'error', 'standard'], ARRAY['manufacturing', 'universal'], '{"severity_level": "Moderate", "impact_type": "operational"}'::jsonb),
+('impact', 'IMP-OP-005', 'Delivery failures', 'Inability to fulfill orders or commitments on time', ARRAY['Operational', 'Delivery'], ARRAY['delivery', 'fulfillment', 'order', 'commitment'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "operational"}'::jsonb),
+('impact', 'IMP-OP-006', 'Process inefficiency', 'Increased time or resources to complete tasks', ARRAY['Operational', 'Process'], ARRAY['process', 'efficiency', 'productivity', 'time'], ARRAY['universal'], '{"severity_level": "Minor", "impact_type": "operational"}'::jsonb),
+('impact', 'IMP-OP-007', 'Capacity constraints', 'Inability to meet demand with available resources', ARRAY['Operational', 'Capacity'], ARRAY['capacity', 'demand', 'resource', 'constraint'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "operational"}'::jsonb),
+('impact', 'IMP-OP-008', 'Data loss or corruption', 'Loss of critical business data', ARRAY['Operational', 'Data'], ARRAY['data', 'loss', 'corruption', 'recovery'], ARRAY['universal'], '{"severity_level": "Severe", "impact_type": "operational"}'::jsonb),
+('impact', 'IMP-OP-009', 'Inventory losses', 'Damage, theft, or obsolescence of inventory', ARRAY['Operational', 'Inventory'], ARRAY['inventory', 'stock', 'loss', 'waste'], ARRAY['retail', 'manufacturing', 'universal'], '{"severity_level": "Moderate", "impact_type": "operational"}'::jsonb),
+('impact', 'IMP-OP-010', 'Extended recovery time', 'Prolonged time to restore normal operations', ARRAY['Operational', 'Recovery'], ARRAY['recovery', 'restoration', 'time', 'business continuity'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "operational"}'::jsonb),
+('impact', 'IMP-OP-011', 'Supply chain breakdown', 'Disruption to material or product supply chains', ARRAY['Operational', 'Supply Chain'], ARRAY['supply chain', 'disruption', 'supplier', 'logistics'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "operational"}'::jsonb),
+('impact', 'IMP-OP-012', 'Contract penalties', 'Financial penalties for failing to meet contractual obligations', ARRAY['Operational', 'Contract'], ARRAY['contract', 'penalty', 'SLA', 'breach'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "operational"}'::jsonb),
+
+-- STRATEGIC IMPACTS (10)
+('impact', 'IMP-ST-001', 'Market share loss', 'Declining competitive position in target markets', ARRAY['Strategic', 'Market'], ARRAY['market share', 'competition', 'position', 'decline'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "strategic"}'::jsonb),
+('impact', 'IMP-ST-002', 'Competitive disadvantage', 'Falling behind competitors in capabilities or offerings', ARRAY['Strategic', 'Competition'], ARRAY['competitive', 'disadvantage', 'capability', 'offering'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "strategic"}'::jsonb),
+('impact', 'IMP-ST-003', 'Strategic initiative failure', 'Key strategic projects not achieving objectives', ARRAY['Strategic', 'Initiative'], ARRAY['strategic', 'initiative', 'project', 'failure'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "strategic"}'::jsonb),
+('impact', 'IMP-ST-004', 'Business model disruption', 'Fundamental changes threatening viability', ARRAY['Strategic', 'Business Model'], ARRAY['business model', 'disruption', 'viability', 'transformation'], ARRAY['universal'], '{"severity_level": "Catastrophic", "impact_type": "strategic"}'::jsonb),
+('impact', 'IMP-ST-005', 'Partnership or alliance breakdown', 'Failure of strategic partnerships', ARRAY['Strategic', 'Partnership'], ARRAY['partnership', 'alliance', 'joint venture', 'collaboration'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "strategic"}'::jsonb),
+('impact', 'IMP-ST-006', 'Innovation setbacks', 'Delays or failures in R&D or new product development', ARRAY['Strategic', 'Innovation'], ARRAY['innovation', 'R&D', 'product', 'development'], ARRAY['technology', 'pharmaceuticals', 'universal'], '{"severity_level": "Moderate", "impact_type": "strategic"}'::jsonb),
+('impact', 'IMP-ST-007', 'Market exit or closure', 'Forced exit from markets or business lines', ARRAY['Strategic', 'Market'], ARRAY['exit', 'closure', 'market', 'divestiture'], ARRAY['universal'], '{"severity_level": "Severe", "impact_type": "strategic"}'::jsonb),
+('impact', 'IMP-ST-008', 'M&A value destruction', 'Failed acquisitions or integration problems', ARRAY['Strategic', 'M&A'], ARRAY['M&A', 'acquisition', 'merger', 'integration'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "strategic"}'::jsonb),
+('impact', 'IMP-ST-009', 'Digital transformation delays', 'Slowed modernization affecting competitiveness', ARRAY['Strategic', 'Digital'], ARRAY['digital', 'transformation', 'modernization', 'delay'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "strategic"}'::jsonb),
+('impact', 'IMP-ST-010', 'Talent flight', 'Loss of key employees to competitors', ARRAY['Strategic', 'Talent'], ARRAY['talent', 'employee', 'retention', 'competitor'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "strategic"}'::jsonb),
+
+-- REPUTATIONAL IMPACTS (10)
+('impact', 'IMP-RP-001', 'Brand damage', 'Erosion of brand equity and value', ARRAY['Reputational', 'Brand'], ARRAY['brand', 'damage', 'reputation', 'equity'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "reputational"}'::jsonb),
+('impact', 'IMP-RP-002', 'Customer trust erosion', 'Loss of customer confidence and loyalty', ARRAY['Reputational', 'Customer'], ARRAY['customer', 'trust', 'confidence', 'loyalty'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "reputational"}'::jsonb),
+('impact', 'IMP-RP-003', 'Negative media coverage', 'Adverse publicity in news or social media', ARRAY['Reputational', 'Media'], ARRAY['media', 'publicity', 'news', 'coverage'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "reputational"}'::jsonb),
+('impact', 'IMP-RP-004', 'Investor confidence decline', 'Reduced trust from shareholders and investors', ARRAY['Reputational', 'Investor'], ARRAY['investor', 'shareholder', 'confidence', 'trust'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "reputational"}'::jsonb),
+('impact', 'IMP-RP-005', 'Partner relationship damage', 'Strained relationships with business partners', ARRAY['Reputational', 'Partner'], ARRAY['partner', 'relationship', 'vendor', 'supplier'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "reputational"}'::jsonb),
+('impact', 'IMP-RP-006', 'Employer brand damage', 'Reduced attractiveness as employer', ARRAY['Reputational', 'Employer'], ARRAY['employer', 'recruitment', 'talent', 'culture'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "reputational"}'::jsonb),
+('impact', 'IMP-RP-007', 'Social license erosion', 'Loss of community or stakeholder acceptance', ARRAY['Reputational', 'Social'], ARRAY['social license', 'community', 'stakeholder', 'acceptance'], ARRAY['mining', 'energy_utilities', 'universal'], '{"severity_level": "Major", "impact_type": "reputational"}'::jsonb),
+('impact', 'IMP-RP-008', 'Executive reputation damage', 'Personal reputation harm to leadership', ARRAY['Reputational', 'Leadership'], ARRAY['executive', 'leadership', 'reputation', 'personal'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "reputational"}'::jsonb),
+('impact', 'IMP-RP-009', 'Social media backlash', 'Viral negative sentiment online', ARRAY['Reputational', 'Social Media'], ARRAY['social media', 'viral', 'backlash', 'online'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "reputational"}'::jsonb),
+('impact', 'IMP-RP-010', 'Industry reputation damage', 'Standing in industry or professional community', ARRAY['Reputational', 'Industry'], ARRAY['industry', 'standing', 'professional', 'community'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "reputational"}'::jsonb),
+
+-- LEGAL & REGULATORY IMPACTS (12)
+('impact', 'IMP-LR-001', 'Regulatory fines and penalties', 'Financial penalties from regulatory violations', ARRAY['Legal', 'Regulatory', 'Compliance'], ARRAY['fine', 'penalty', 'regulatory', 'violation'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "legal"}'::jsonb),
+('impact', 'IMP-LR-002', 'Litigation costs', 'Legal fees and settlement expenses', ARRAY['Legal', 'Litigation'], ARRAY['litigation', 'lawsuit', 'legal', 'settlement'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "legal"}'::jsonb),
+('impact', 'IMP-LR-003', 'License revocation or suspension', 'Loss of operating licenses or permits', ARRAY['Legal', 'Regulatory'], ARRAY['license', 'permit', 'revocation', 'suspension'], ARRAY['financial_services', 'healthcare', 'universal'], '{"severity_level": "Catastrophic", "impact_type": "legal"}'::jsonb),
+('impact', 'IMP-LR-004', 'Increased regulatory scrutiny', 'Heightened oversight and examination', ARRAY['Legal', 'Regulatory'], ARRAY['regulatory', 'scrutiny', 'examination', 'oversight'], ARRAY['financial_services', 'universal'], '{"severity_level": "Moderate", "impact_type": "legal"}'::jsonb),
+('impact', 'IMP-LR-005', 'Class action lawsuits', 'Multi-plaintiff litigation', ARRAY['Legal', 'Litigation'], ARRAY['class action', 'lawsuit', 'plaintiff', 'litigation'], ARRAY['universal'], '{"severity_level": "Severe", "impact_type": "legal"}'::jsonb),
+('impact', 'IMP-LR-006', 'Consent decree or mandate', 'Court-ordered compliance requirements', ARRAY['Legal', 'Regulatory'], ARRAY['consent decree', 'mandate', 'court order', 'compliance'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "legal"}'::jsonb),
+('impact', 'IMP-LR-007', 'Criminal prosecution', 'Criminal charges against company or executives', ARRAY['Legal', 'Criminal'], ARRAY['criminal', 'prosecution', 'charges', 'indictment'], ARRAY['universal'], '{"severity_level": "Catastrophic", "impact_type": "legal"}'::jsonb),
+('impact', 'IMP-LR-008', 'Regulatory sanctions', 'Non-financial sanctions from regulators', ARRAY['Legal', 'Regulatory'], ARRAY['sanction', 'regulatory', 'restriction', 'prohibition'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "legal"}'::jsonb),
+('impact', 'IMP-LR-009', 'Contract disputes', 'Legal disputes with counterparties', ARRAY['Legal', 'Contract'], ARRAY['contract', 'dispute', 'breach', 'damages'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "legal"}'::jsonb),
+('impact', 'IMP-LR-010', 'Intellectual property loss', 'Loss of patent, trademark, or IP rights', ARRAY['Legal', 'IP'], ARRAY['IP', 'patent', 'trademark', 'intellectual property'], ARRAY['technology', 'pharmaceuticals', 'universal'], '{"severity_level": "Major", "impact_type": "legal"}'::jsonb),
+('impact', 'IMP-LR-011', 'Data breach liability', 'Legal liability from privacy breaches', ARRAY['Legal', 'Privacy', 'Data'], ARRAY['data breach', 'privacy', 'liability', 'GDPR'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "legal"}'::jsonb),
+('impact', 'IMP-LR-012', 'Environmental liability', 'Financial responsibility for environmental damage', ARRAY['Legal', 'Environmental'], ARRAY['environmental', 'liability', 'cleanup', 'remediation'], ARRAY['manufacturing', 'mining', 'energy_utilities', 'universal'], '{"severity_level": "Severe", "impact_type": "legal"}'::jsonb),
+
+-- PEOPLE IMPACTS (8)
+('impact', 'IMP-PE-001', 'Employee injuries or fatalities', 'Workplace accidents causing harm', ARRAY['People', 'Safety'], ARRAY['injury', 'fatality', 'workplace', 'safety'], ARRAY['universal'], '{"severity_level": "Catastrophic", "impact_type": "people"}'::jsonb),
+('impact', 'IMP-PE-002', 'Employee morale decline', 'Reduced engagement and satisfaction', ARRAY['People', 'Morale'], ARRAY['morale', 'engagement', 'satisfaction', 'motivation'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "people"}'::jsonb),
+('impact', 'IMP-PE-003', 'Increased turnover', 'Higher voluntary employee departures', ARRAY['People', 'Retention'], ARRAY['turnover', 'attrition', 'departure', 'retention'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "people"}'::jsonb),
+('impact', 'IMP-PE-004', 'Talent acquisition challenges', 'Difficulty attracting qualified candidates', ARRAY['People', 'Recruitment'], ARRAY['recruitment', 'talent', 'hiring', 'candidates'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "people"}'::jsonb),
+('impact', 'IMP-PE-005', 'Skills gap emergence', 'Workforce lacking necessary capabilities', ARRAY['People', 'Skills'], ARRAY['skills', 'capability', 'gap', 'training'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "people"}'::jsonb),
+('impact', 'IMP-PE-006', 'Leadership vacuum', 'Loss of key leaders or succession failures', ARRAY['People', 'Leadership'], ARRAY['leadership', 'succession', 'executive', 'vacancy'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "people"}'::jsonb),
+('impact', 'IMP-PE-007', 'Workplace conflict escalation', 'Labor disputes or industrial action', ARRAY['People', 'Labor'], ARRAY['conflict', 'dispute', 'strike', 'labor'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "people"}'::jsonb),
+('impact', 'IMP-PE-008', 'Mental health and wellbeing decline', 'Stress-related issues affecting workforce', ARRAY['People', 'Wellbeing'], ARRAY['mental health', 'wellbeing', 'stress', 'burnout'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "people"}'::jsonb),
+
+-- CUSTOMER IMPACTS (8)
+('impact', 'IMP-CU-001', 'Customer churn', 'Increased customer defection to competitors', ARRAY['Customer', 'Retention'], ARRAY['churn', 'defection', 'customer', 'loss'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "customer"}'::jsonb),
+('impact', 'IMP-CU-002', 'Customer complaints surge', 'Increased volume of customer complaints', ARRAY['Customer', 'Satisfaction'], ARRAY['complaint', 'dissatisfaction', 'customer', 'feedback'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "customer"}'::jsonb),
+('impact', 'IMP-CU-003', 'NPS decline', 'Reduced Net Promoter Score or customer satisfaction', ARRAY['Customer', 'Satisfaction'], ARRAY['NPS', 'satisfaction', 'score', 'loyalty'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "customer"}'::jsonb),
+('impact', 'IMP-CU-004', 'Customer data exposure', 'Unauthorized access to customer information', ARRAY['Customer', 'Privacy'], ARRAY['data', 'privacy', 'breach', 'exposure'], ARRAY['universal'], '{"severity_level": "Severe", "impact_type": "customer"}'::jsonb),
+('impact', 'IMP-CU-005', 'Customer harm', 'Direct harm to customers from products or services', ARRAY['Customer', 'Safety'], ARRAY['harm', 'safety', 'product', 'injury'], ARRAY['consumer_goods', 'healthcare', 'universal'], '{"severity_level": "Catastrophic", "impact_type": "customer"}'::jsonb),
+('impact', 'IMP-CU-006', 'Contract cancellations', 'Customers terminating contracts early', ARRAY['Customer', 'Contract'], ARRAY['contract', 'cancellation', 'termination', 'customer'], ARRAY['universal'], '{"severity_level": "Major", "impact_type": "customer"}'::jsonb),
+('impact', 'IMP-CU-007', 'Reduced customer lifetime value', 'Decreased long-term value from customers', ARRAY['Customer', 'Value'], ARRAY['CLV', 'lifetime value', 'customer', 'revenue'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "customer"}'::jsonb),
+('impact', 'IMP-CU-008', 'Customer experience degradation', 'Worsened overall customer journey', ARRAY['Customer', 'Experience'], ARRAY['experience', 'journey', 'CX', 'service'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "customer"}'::jsonb),
+
+-- ENVIRONMENTAL IMPACTS (6)
+('impact', 'IMP-EN-001', 'Environmental contamination', 'Pollution of air, water, or soil', ARRAY['Environmental', 'ESG'], ARRAY['pollution', 'contamination', 'environmental', 'spill'], ARRAY['manufacturing', 'mining', 'oil_gas', 'universal'], '{"severity_level": "Severe", "impact_type": "environmental"}'::jsonb),
+('impact', 'IMP-EN-002', 'Carbon emissions increase', 'Higher greenhouse gas emissions', ARRAY['Environmental', 'ESG', 'Climate'], ARRAY['carbon', 'emissions', 'greenhouse', 'climate'], ARRAY['universal'], '{"severity_level": "Moderate", "impact_type": "environmental"}'::jsonb),
+('impact', 'IMP-EN-003', 'Resource depletion', 'Unsustainable consumption of natural resources', ARRAY['Environmental', 'ESG'], ARRAY['resource', 'depletion', 'sustainability', 'consumption'], ARRAY['manufacturing', 'mining', 'universal'], '{"severity_level": "Moderate", "impact_type": "environmental"}'::jsonb),
+('impact', 'IMP-EN-004', 'Ecosystem damage', 'Harm to natural habitats or biodiversity', ARRAY['Environmental', 'ESG'], ARRAY['ecosystem', 'biodiversity', 'habitat', 'wildlife'], ARRAY['agriculture', 'mining', 'energy_utilities', 'universal'], '{"severity_level": "Major", "impact_type": "environmental"}'::jsonb),
+('impact', 'IMP-EN-005', 'Climate transition costs', 'Expenses from adapting to low-carbon economy', ARRAY['Environmental', 'ESG', 'Climate'], ARRAY['climate', 'transition', 'adaptation', 'net zero'], ARRAY['energy_utilities', 'oil_gas', 'universal'], '{"severity_level": "Major", "impact_type": "environmental"}'::jsonb),
+('impact', 'IMP-EN-006', 'Waste management failures', 'Problems with waste disposal causing harm', ARRAY['Environmental', 'ESG'], ARRAY['waste', 'disposal', 'hazardous', 'management'], ARRAY['manufacturing', 'healthcare', 'universal'], '{"severity_level": "Moderate", "impact_type": "environmental"}'::jsonb),
+
+-- SYSTEMIC IMPACTS (4)
+('impact', 'IMP-SY-001', 'Market contagion', 'Risk spreading to other market participants', ARRAY['Systemic', 'Market'], ARRAY['contagion', 'systemic', 'market', 'spillover'], ARRAY['financial_services', 'banking', 'universal'], '{"severity_level": "Catastrophic", "impact_type": "systemic"}'::jsonb),
+('impact', 'IMP-SY-002', 'Industry-wide disruption', 'Impacts affecting entire industry sectors', ARRAY['Systemic', 'Industry'], ARRAY['industry', 'sector', 'disruption', 'widespread'], ARRAY['universal'], '{"severity_level": "Catastrophic", "impact_type": "systemic"}'::jsonb),
+('impact', 'IMP-SY-003', 'Critical infrastructure failure', 'Cascading failures in essential infrastructure', ARRAY['Systemic', 'Infrastructure'], ARRAY['infrastructure', 'critical', 'cascading', 'failure'], ARRAY['energy_utilities', 'telecommunications', 'universal'], '{"severity_level": "Catastrophic", "impact_type": "systemic"}'::jsonb),
+('impact', 'IMP-SY-004', 'Supply chain contagion', 'Disruption spreading through supply networks', ARRAY['Systemic', 'Supply Chain'], ARRAY['supply chain', 'contagion', 'network', 'cascade'], ARRAY['universal'], '{"severity_level": "Severe", "impact_type": "systemic"}'::jsonb)
+
+ON CONFLICT (code) DO UPDATE SET
+  name = EXCLUDED.name,
+  description = EXCLUDED.description,
+  category_hints = EXCLUDED.category_hints,
+  keyword_hints = EXCLUDED.keyword_hints,
+  industry_tags = EXCLUDED.industry_tags,
+  metadata = EXCLUDED.metadata,
+  updated_at = NOW();
+
+-- Verification
+DO $$
+DECLARE v_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO v_count FROM seed_master_library WHERE library_type = 'impact';
+  RAISE NOTICE '✓ Impacts seeded: % records', v_count;
+END $$;

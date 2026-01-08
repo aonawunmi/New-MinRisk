@@ -74,7 +74,7 @@ DECLARE
     'incident_summary',
     'external_events',
     
-    -- Org-level customizations
+    -- Org-level customizations (deleted only for org-specific cleanup)
     'org_controls',
     'org_kri_kci',
     'org_root_cause_kri_mapping',
@@ -97,22 +97,20 @@ DECLARE
     'rss_sources',
     
     -- Periods
-    'active_period',
+    'active_period'
     
-    -- Registers
-    'root_cause_register',
-    'impact_register',
-    'control_library',
-    'kri_kci_library',
-    
-    -- Global library tables
-    'global_root_cause_kri_mapping',
-    'global_impact_kci_mapping',
-    'global_control_task_mapping',
-    'global_control_library',
-    'global_kri_kci_library',
-    'global_root_cause_library',
-    'global_impact_library'
+    -- ============================================
+    -- PRESERVED TABLES (NEVER DELETED):
+    -- ============================================
+    -- Global libraries (system foundation - shared by all orgs):
+    --   global_root_cause_library, global_impact_library,
+    --   global_control_library, global_kri_kci_library,
+    --   global_root_cause_kri_mapping, global_impact_kci_mapping,
+    --   global_control_task_mapping
+    --
+    -- Views (not actual tables, just query result sets):
+    --   root_cause_register, impact_register,
+    --   control_library, kri_kci_library
   ];
   v_table TEXT;
   v_count BIGINT;

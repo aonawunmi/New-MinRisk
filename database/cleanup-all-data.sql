@@ -12,6 +12,7 @@ SET session_replication_role = 'replica';
 DO $$
 DECLARE
   tables_to_clear TEXT[] := ARRAY[
+    -- Junction/child tables first (due to FK constraints)
     'kri_risk_links',
     'incident_risk_links',
     'risk_control_links',
@@ -40,6 +41,7 @@ DECLARE
     'period_commits',
     'user_status_transitions',
     'user_role_transitions',
+    -- Main operational tables
     'risks',
     'controls',
     'kri_definitions',
@@ -47,32 +49,32 @@ DECLARE
     'incidents',
     'incident_summary',
     'external_events',
+    -- Org-level customizations
     'org_controls',
     'org_kri_kci',
     'org_root_cause_kri_mapping',
     'org_impact_kci_mapping',
     'org_root_causes',
     'org_impacts',
+    -- Appetite framework
     'risk_appetite_categories',
     'risk_appetite_statements',
     'risk_appetite',
     'risk_tolerance_exceptions',
+    -- Audit
     'audit_log',
     'audit_trail',
+    -- Intelligence
     'risk_keywords',
     'rss_sources',
-    'active_period',
-    'root_cause_register',
-    'impact_register',
-    'control_library',
-    'kri_kci_library',
-    'global_root_cause_kri_mapping',
-    'global_impact_kci_mapping',
-    'global_control_task_mapping',
-    'global_control_library',
-    'global_kri_kci_library',
-    'global_root_cause_library',
-    'global_impact_library'
+    -- Periods
+    'active_period'
+    -- =====================================================
+    -- PRESERVED (NOT DELETED):
+    -- Global libraries: global_root_cause_library, global_impact_library,
+    --   global_control_library, global_kri_kci_library, global_*_mapping
+    -- Views: root_cause_register, impact_register, control_library, kri_kci_library
+    -- =====================================================
   ];
   t TEXT;
   deleted_count INTEGER := 0;
