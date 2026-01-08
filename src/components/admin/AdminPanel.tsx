@@ -12,10 +12,12 @@ import HelpTab from './HelpTab';
 import OwnerMappingTool from './OwnerMappingTool';
 import DataCleanup from './DataCleanup';
 import LibraryGenerator from './LibraryGenerator';
+import LibrarySetupAlert from './LibrarySetupAlert';
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState('taxonomy');
+
   const [hasUnmappedOwners, setHasUnmappedOwners] = useState(false);
   const [checkingOwners, setCheckingOwners] = useState(true);
 
@@ -60,6 +62,8 @@ export default function AdminPanel() {
 
   return (
     <div style={{ width: '100%', padding: '0' }}>
+      <LibrarySetupAlert onNavigateToLibrary={() => setActiveTab('library')} />
+
       {/* Tab Navigation */}
       <div style={{
         display: 'flex',

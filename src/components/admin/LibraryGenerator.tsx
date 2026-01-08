@@ -671,6 +671,32 @@ export default function LibraryGenerator() {
                         </div>
                     )}
 
+                    {/* AI Options */}
+                    <div className="flex items-center space-x-2 p-4 border rounded-lg bg-slate-50">
+                        <Checkbox
+                            id="ai-mode"
+                            checked={useAI}
+                            onCheckedChange={(checked) => setUseAI(checked === true)}
+                        />
+                        <div className="flex-1">
+                            <label
+                                htmlFor="ai-mode"
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
+                            >
+                                <Sparkles className="h-4 w-4 text-purple-600" />
+                                AI-Enhanced Matching
+                            </label>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Use Claude AI to fuzzy-match your custom categories to standard risk domains and generate specific items.
+                            </p>
+                        </div>
+                        {useAI && (
+                            <Badge variant="secondary" className="bg-purple-100 text-purple-700 hover:bg-purple-200">
+                                Powered by Claude
+                            </Badge>
+                        )}
+                    </div>
+
                     {/* Category Selection */}
                     <div>
                         <h4 className="font-medium mb-3">Select Categories to Generate</h4>
