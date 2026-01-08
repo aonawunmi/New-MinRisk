@@ -81,6 +81,7 @@ interface CategoryMatch {
     categoryName: string;
     matchCount: number;
     selected: boolean;
+    aiEnhanced?: boolean;
 }
 
 interface GenerationResult {
@@ -90,8 +91,22 @@ interface GenerationResult {
     controlsAdded: number;
     krisAdded: number;
     kcisAdded: number;
+    aiGenerated?: number;
     errors: string[];
 }
+
+interface GenerationLog {
+    id: string;
+    created_at: string;
+    generation_mode: string;
+    root_causes_generated: number;
+    impacts_generated: number;
+    controls_generated: number;
+    kris_generated: number;
+    kcis_generated: number;
+    status: string;
+}
+
 
 export default function LibraryGenerator() {
     const { profile } = useAuth();
@@ -112,6 +127,13 @@ export default function LibraryGenerator() {
 
     // Current library counts
     const [currentCounts, setCurrentCounts] = useState<LibraryCounts | null>(null);
+
+    // AI and Refresh features
+    const [useAI, setUseAI] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const [generationHistory, setGenerationHistory] = useState<GenerationLog[]>([]);
+    const [showHistory, setShowHistory] = useState(false);
+
 
     useEffect(() => {
         if (profile?.organization_id) {
@@ -178,6 +200,9 @@ export default function LibraryGenerator() {
             // Load current library counts
             await loadCurrentCounts();
 
+            // Load generation history
+            await loadHistory();
+
         } catch (err: any) {
             console.error('Error loading data:', err);
             setError(err.message);
@@ -206,6 +231,34 @@ export default function LibraryGenerator() {
             console.error('Error loading current counts:', err);
         }
     }
+
+    async function loadHistory() {
+        try {
+            const { data } = await supabase
+                .from('library_generation_log')
+                .select('id, created_at, generation_mode, root_causes_generated, impacts_generated, controls_generated, kris_generated, kcis_generated, status')
+                .eq('organization_id', profile!.organization_id)
+                .order('created_at', { ascending: false })
+                .limit(5);
+
+            setGenerationHistory(data || []);
+        } catch (err) {
+            console.error('Error loading history:', err);
+        }
+    }
+
+    async function refreshLibrary() {
+        setRefreshing(true);
+        setError(null);
+
+        try {
+            // Re-run generation to pick up any new items from master library
+            await generateLibraries();
+        } finally {
+            setRefreshing(false);
+        }
+    }
+
 
     async function saveIndustryType(value: string) {
         setSavingIndustry(true);
@@ -589,26 +642,83 @@ export default function LibraryGenerator() {
                         <p className="text-sm text-gray-500">
                             Estimated items: <strong>{totalSelected}</strong> based on selected categories
                         </p>
-                        <Button
-                            onClick={generateLibraries}
-                            disabled={generating || categories.length === 0 || !industryType}
-                            className="gap-2"
-                        >
-                            {generating ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    Generating...
-                                </>
-                            ) : (
-                                <>
-                                    <Sparkles className="h-4 w-4" />
-                                    Generate Libraries
-                                </>
+                        <div className="flex gap-2">
+                            {currentCounts && (currentCounts.root_cause > 0 || currentCounts.control > 0) && (
+                                <Button
+                                    variant="outline"
+                                    onClick={refreshLibrary}
+                                    disabled={refreshing || generating}
+                                    className="gap-2"
+                                >
+                                    {refreshing ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <RefreshCw className="h-4 w-4" />
+                                    )}
+                                    Refresh
+                                </Button>
                             )}
-                        </Button>
+                            <Button
+                                onClick={generateLibraries}
+                                disabled={generating || categories.length === 0 || !industryType}
+                                className="gap-2"
+                            >
+                                {generating ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Generating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles className="h-4 w-4" />
+                                        Generate Libraries
+                                    </>
+                                )}
+                            </Button>
+                        </div>
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Generation History */}
+            {generationHistory.length > 0 && (
+                <Card>
+                    <CardHeader className="pb-3">
+                        <button
+                            onClick={() => setShowHistory(!showHistory)}
+                            className="flex items-center justify-between w-full text-left"
+                        >
+                            <CardTitle className="text-base">Generation History</CardTitle>
+                            <Badge variant="secondary">{generationHistory.length}</Badge>
+                        </button>
+                    </CardHeader>
+                    {showHistory && (
+                        <CardContent>
+                            <div className="space-y-2">
+                                {generationHistory.map(log => (
+                                    <div key={log.id} className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm">
+                                        <div>
+                                            <span className="font-medium">
+                                                {new Date(log.created_at).toLocaleDateString()}
+                                            </span>
+                                            <span className="ml-2 text-gray-500">
+                                                {log.generation_mode}
+                                            </span>
+                                        </div>
+                                        <div className="flex gap-3 text-gray-600">
+                                            <span>RC: {log.root_causes_generated}</span>
+                                            <span>I: {log.impacts_generated}</span>
+                                            <span>C: {log.controls_generated}</span>
+                                            <span>KRI: {log.kris_generated}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    )}
+                </Card>
+            )}
         </div>
     );
 }
+
