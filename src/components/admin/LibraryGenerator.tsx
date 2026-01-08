@@ -134,6 +134,10 @@ export default function LibraryGenerator() {
     const [generationHistory, setGenerationHistory] = useState<GenerationLog[]>([]);
     const [showHistory, setShowHistory] = useState(false);
 
+    // Industry lock feature
+    const [industryLocked, setIndustryLocked] = useState(false);
+    const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
+
 
     useEffect(() => {
         if (profile?.organization_id) {
@@ -242,6 +246,11 @@ export default function LibraryGenerator() {
                 .limit(5);
 
             setGenerationHistory(data || []);
+
+            // Lock industry if libraries have been generated
+            if (data && data.length > 0) {
+                setIndustryLocked(true);
+            }
         } catch (err) {
             console.error('Error loading history:', err);
         }
@@ -492,7 +501,7 @@ export default function LibraryGenerator() {
                         <Select
                             value={industryType || ''}
                             onValueChange={saveIndustryType}
-                            disabled={savingIndustry}
+                            disabled={savingIndustry || industryLocked}
                         >
                             <SelectTrigger className="w-[300px]">
                                 <SelectValue placeholder="Select industry..." />
@@ -509,7 +518,53 @@ export default function LibraryGenerator() {
                         {industryType && !savingIndustry && (
                             <CheckCircle2 className="h-4 w-4 text-green-500" />
                         )}
+                        {industryLocked && (
+                            <Badge variant="secondary" className="gap-1">
+                                <span>🔒 Locked</span>
+                            </Badge>
+                        )}
                     </div>
+
+                    {/* Locked state info and unlock option */}
+                    {industryLocked && (
+                        <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm text-amber-800">
+                                    Industry is locked after library generation. Changing it requires regenerating all library data.
+                                </p>
+                                {!showUnlockConfirm ? (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setShowUnlockConfirm(true)}
+                                        className="ml-4 text-amber-700 border-amber-300 hover:bg-amber-100"
+                                    >
+                                        Unlock
+                                    </Button>
+                                ) : (
+                                    <div className="flex gap-2 ml-4">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setShowUnlockConfirm(false)}
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            size="sm"
+                                            onClick={() => {
+                                                setIndustryLocked(false);
+                                                setShowUnlockConfirm(false);
+                                            }}
+                                        >
+                                            Confirm Unlock
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 
