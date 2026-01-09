@@ -62,6 +62,7 @@ import {
   ChevronRight,
   AlertCircle,
   CheckCircle,
+  FileSpreadsheet,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -271,6 +272,50 @@ export default function TaxonomyManagement() {
     setSuccess('Taxonomy exported successfully');
   }
 
+  function downloadTemplate() {
+    // Create sample template with example data
+    const sampleData = [
+      {
+        'Risk Category': 'Operational Risk',
+        'Category Description': 'Risks arising from internal processes, systems, and people',
+        'Sub-Category': 'Process Risk',
+        'Sub-Category Description': 'Risk of loss from inadequate or failed internal processes',
+      },
+      {
+        'Risk Category': 'Operational Risk',
+        'Category Description': 'Risks arising from internal processes, systems, and people',
+        'Sub-Category': 'Technology Risk',
+        'Sub-Category Description': 'Risk of loss from IT system failures or cyber incidents',
+      },
+      {
+        'Risk Category': 'Financial Risk',
+        'Category Description': 'Risks related to financial transactions and market movements',
+        'Sub-Category': 'Credit Risk',
+        'Sub-Category Description': 'Risk of loss from counterparty default or credit deterioration',
+      },
+      {
+        'Risk Category': 'Compliance Risk',
+        'Category Description': 'Risks from non-compliance with laws, regulations, and policies',
+        'Sub-Category': 'Regulatory Risk',
+        'Sub-Category Description': 'Risk of regulatory sanctions or penalties',
+      },
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(sampleData);
+
+    // Set column widths for better readability
+    ws['!cols'] = [
+      { wch: 20 },  // Risk Category
+      { wch: 60 },  // Category Description
+      { wch: 25 },  // Sub-Category
+      { wch: 60 },  // Sub-Category Description
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Taxonomy Template');
+    XLSX.writeFile(wb, 'MinRisk_Taxonomy_Template.xlsx');
+  }
+
   async function handleImport(event: React.ChangeEvent<HTMLInputElement>) {
     setError(null);
     setSuccess(null);
@@ -300,10 +345,9 @@ export default function TaxonomyManagement() {
       if (error) throw error;
 
       setSuccess(
-        `Import complete: ${result!.imported} imported, ${result!.skipped} skipped${
-          result!.errors.length > 0
-            ? `, ${result!.errors.length} errors`
-            : ''
+        `Import complete: ${result!.imported} imported, ${result!.skipped} skipped${result!.errors.length > 0
+          ? `, ${result!.errors.length} errors`
+          : ''
         }`
       );
 
@@ -358,18 +402,30 @@ export default function TaxonomyManagement() {
                 <Download className="h-4 w-4 mr-2" />
                 Export
               </Button>
-              <Button variant="outline" size="sm" asChild>
-                <label className="cursor-pointer">
-                  <Upload className="h-4 w-4 mr-2" />
-                  Import
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    className="hidden"
-                    onChange={handleImport}
-                  />
-                </label>
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="sm" asChild>
+                  <label className="cursor-pointer">
+                    <Upload className="h-4 w-4 mr-2" />
+                    Import
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      className="hidden"
+                      onChange={handleImport}
+                    />
+                  </label>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={downloadTemplate}
+                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                  title="Download sample template"
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-1" />
+                  Template
+                </Button>
+              </div>
             </div>
           </div>
         </CardHeader>
