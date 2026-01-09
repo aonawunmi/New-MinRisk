@@ -13,7 +13,6 @@ import OwnerMappingTool from './OwnerMappingTool';
 import DataCleanup from './DataCleanup';
 import LibraryGenerator from './LibraryGenerator';
 import LibrarySetupAlert from './LibrarySetupAlert';
-import { AIOptimizationSettings } from './AIOptimizationSettings';
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
@@ -56,7 +55,6 @@ export default function AdminPanel() {
     { id: 'users', label: 'User Management' },
     ...(hasUnmappedOwners ? [{ id: 'owner-mapping', label: 'Owner Mapping' }] : []),
     { id: 'periods', label: 'Period Management' },
-    { id: 'ai-optimization', label: 'AI Optimization' },
     { id: 'audit', label: 'Audit Trail' },
     { id: 'help', label: 'Help' },
     { id: 'settings', label: 'Organization Settings' },
@@ -120,7 +118,6 @@ export default function AdminPanel() {
         {activeTab === 'periods' && user && profile && (
           <PeriodManagement orgId={profile.organization_id} userId={user.id} />
         )}
-        {activeTab === 'ai-optimization' && <AIOptimizationSettings />}
         {activeTab === 'audit' && <AuditTrail />}
         {activeTab === 'help' && <HelpTab />}
         {activeTab === 'settings' && (
