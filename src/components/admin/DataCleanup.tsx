@@ -42,6 +42,7 @@ interface CleanupResult {
 export default function DataCleanup() {
     const { profile } = useAuth();
     const [scope, setScope] = useState<'current_org' | 'all_orgs'>('current_org');
+    const [resetTaxonomy, setResetTaxonomy] = useState(false);
     const [showConfirmation, setShowConfirmation] = useState(false);
     const [confirmText, setConfirmText] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -77,7 +78,8 @@ export default function DataCleanup() {
         try {
             const { data, error: rpcError } = await supabase.rpc('cleanup_operational_data', {
                 p_scope: scope,
-                p_organization_id: scope === 'current_org' ? profile?.organization_id : null
+                p_organization_id: scope === 'current_org' ? profile?.organization_id : null,
+                p_reset_taxonomy: resetTaxonomy
             });
 
             if (rpcError) throw rpcError;
@@ -103,7 +105,9 @@ export default function DataCleanup() {
         'Incidents',
         'Audit Log',
         'Risk Intelligence Data',
-        'Periods'
+        'Periods',
+        'Divisions & Departments',
+        'Organization Libraries'
     ];
 
     return (
@@ -143,10 +147,37 @@ export default function DataCleanup() {
                         {dataCategories.map((cat) => (
                             <li key={cat}>{cat}</li>
                         ))}
+                        {resetTaxonomy && (
+                            <li style={{ fontWeight: '600' }}>Risk Taxonomy (Categories & Subcategories)</li>
+                        )}
                     </ul>
                     <p style={{ marginTop: '12px', fontSize: '13px', color: '#059669', fontWeight: '500' }}>
                         ✓ User accounts and organizations will be preserved
                     </p>
+                    {resetTaxonomy && (
+                        <p style={{ marginTop: '4px', fontSize: '13px', color: '#2563eb', fontWeight: '500' }}>
+                            → Taxonomy will be reseeded with industry defaults
+                        </p>
+                    )}
+                </div>
+
+                {/* Taxonomy Reset Option */}
+                <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#fffbeb', borderRadius: '8px', border: '1px solid #fbbf24' }}>
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+                        <input
+                            type="checkbox"
+                            checked={resetTaxonomy}
+                            onChange={(e) => setResetTaxonomy(e.target.checked)}
+                            style={{ marginTop: '3px' }}
+                        />
+                        <div>
+                            <span style={{ fontWeight: '600', color: '#92400e' }}>Also reset Risk Taxonomy</span>
+                            <p style={{ fontSize: '13px', color: '#a16207', margin: '4px 0 0 0' }}>
+                                Clear and reseed risk categories/subcategories with industry defaults.
+                                Useful for starting fresh with a clean taxonomy structure.
+                            </p>
+                        </div>
+                    </label>
                 </div>
 
                 {/* Initiate Button */}
