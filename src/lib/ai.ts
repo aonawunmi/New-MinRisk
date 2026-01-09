@@ -43,22 +43,42 @@ async function callAI(prompt: string, maxTokens: number = 1024): Promise<string>
   console.log('Max tokens:', maxTokens);
 
   try {
-    const { data, error } = await supabase.functions.invoke('ai-refine', {
-      body: { prompt, maxTokens },
+    // Get the current session for auth token
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session) {
+      throw new Error('Authentication required. Please log in.');
+    }
+
+    // Direct fetch to bypass potential SDK URL construction issues
+    // Use the exact URL that we verified works (at least exists)
+    const projectRef = import.meta.env.VITE_SUPABASE_URL?.match(/https:\/\/([^\.]+)\./)?.[1];
+    if (!projectRef) throw new Error('Invalid Supabase URL');
+
+    // Explicitly construct the URL using the correct project ID (qrxwg...)
+    // This protects against any weird environment variable caching issues
+    const functionUrl = `https://${projectRef}.supabase.co/functions/v1/ai-refine`;
+
+    console.log('Fetching URL:', functionUrl);
+
+    const response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ prompt, maxTokens }),
     });
 
-    console.log('Edge function response:', { hasData: !!data, hasError: !!error });
-
-    if (error) {
-      console.error('Edge function error:', error);
-      throw new Error(error.message || 'AI service error');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Edge function error response:', response.status, errorText);
+      throw new Error(`Edge Function returned ${response.status}: ${errorText}`);
     }
 
-    if (!data) {
-      throw new Error('No response from AI service');
-    }
+    const data = await response.json();
+    console.log('Edge function response data:', data);
 
-    // The edge function returns { data: string, usage: object }
     if (!data.data) {
       console.error('Unexpected response format:', data);
       throw new Error('Invalid response from AI service');
@@ -66,6 +86,7 @@ async function callAI(prompt: string, maxTokens: number = 1024): Promise<string>
 
     console.log('AI response received successfully');
     return data.data;
+
   } catch (error) {
     console.error('AI call failed:', error);
 
@@ -79,8 +100,12 @@ async function callAI(prompt: string, maxTokens: number = 1024): Promise<string>
         throw new Error('Network error. Please check your internet connection and try again.');
       }
 
-      if (error.message.includes('Unauthorized') || error.message.includes('unauthorized')) {
+      if (error.message.includes('Unauthorized') || error.message.includes('unauthorized') || error.message.includes('401')) {
         throw new Error('Authentication error. Please try logging out and logging back in.');
+      }
+
+      if (error.message.includes('404')) {
+        throw new Error('AI Service Unreachable. Please contact support.');
       }
 
       // Return the original error message
@@ -586,8 +611,13 @@ IMPORTANT:
 - Return ONLY the JSON object, no other text.`;
 
     // Call Edge Function (secure server-side proxy)
+    // Construct robust URL
+    const projectRef = import.meta.env.VITE_SUPABASE_URL?.match(/https:\/\/([^\.]+)\./)?.[1];
+    const functionUrl = `https://${projectRef}.supabase.co/functions/v1/ai-refine`;
+
+    // Call Edge Function (secure server-side proxy)
     const response = await fetch(
-      `${supabase.supabaseUrl}/functions/v1/ai-refine`,
+      functionUrl,
       {
         method: 'POST',
         headers: {

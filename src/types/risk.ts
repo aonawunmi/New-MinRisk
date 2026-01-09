@@ -57,3 +57,5 @@ export interface Control {
 export interface RiskWithControls extends Risk {
   controls: Control[];
 }
+export type RiskCategory = string;
+export type RiskStatus = string;
