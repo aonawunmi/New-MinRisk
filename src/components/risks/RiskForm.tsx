@@ -14,6 +14,7 @@ import { refineRiskStatement, type RiskStatementRefinement, revalidateEditedStat
 import { createControl, getControlsForRisk, updateControl, deleteControl, calculateControlEffectiveness } from '@/lib/controls';
 import { getAlertsWithEventsForRisk, type RiskIntelligenceAlert, type ExternalEvent } from '@/lib/riskIntelligence';
 import { getOrganizationConfig, getLikelihoodOptions, getImpactOptions, getDIMELabel, type OrganizationConfig } from '@/lib/config';
+import { getDivisions, getDepartmentsByDivision, type Division, type Department } from '@/lib/divisions';
 import { listUsersInOrganization } from '@/lib/admin';
 import { isUserAdmin } from '@/lib/profiles';
 import { supabase } from '@/lib/supabase';
@@ -173,6 +174,11 @@ export default function RiskForm({
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
 
+  // Divisions and Departments state (from database tables)
+  const [dbDivisions, setDbDivisions] = useState<Division[]>([]);
+  const [dbDepartments, setDbDepartments] = useState<Department[]>([]);
+  const [loadingDivisions, setLoadingDivisions] = useState(false);
+
   // Load existing controls for a risk
   async function loadExistingControls(riskId: string) {
     setLoadingControls(true);
@@ -324,6 +330,39 @@ export default function RiskForm({
       console.error('Unexpected config load error:', err);
     } finally {
       setLoadingConfig(false);
+    }
+
+    // Also load divisions from database tables
+    await loadDivisionsFromDb();
+  }
+
+  async function loadDivisionsFromDb() {
+    setLoadingDivisions(true);
+    try {
+      const { data, error } = await getDivisions();
+      if (error) {
+        console.error('Failed to load divisions from db:', error);
+      } else {
+        setDbDivisions(data || []);
+      }
+    } catch (err) {
+      console.error('Unexpected error loading divisions:', err);
+    } finally {
+      setLoadingDivisions(false);
+    }
+  }
+
+  // Load departments when division changes
+  async function loadDepartmentsForDivision(divisionId: string | null) {
+    try {
+      const { data, error } = await getDepartmentsByDivision(divisionId);
+      if (error) {
+        console.error('Failed to load departments:', error);
+      } else {
+        setDbDepartments(data || []);
+      }
+    } catch (err) {
+      console.error('Error loading departments:', err);
     }
   }
 
@@ -1710,21 +1749,31 @@ export default function RiskForm({
                 <Label htmlFor="division">Division *</Label>
                 <Select
                   value={formData.division}
-                  onValueChange={(value) => handleChange('division', value)}
-                  disabled={loading || !orgConfig?.divisions?.length}
+                  onValueChange={(value) => {
+                    handleChange('division', value);
+                    // Clear department when division changes and load new departments
+                    handleChange('department', '');
+                    const selectedDiv = dbDivisions.find(d => d.name === value);
+                    if (selectedDiv) {
+                      loadDepartmentsForDivision(selectedDiv.id);
+                    } else {
+                      loadDepartmentsForDivision(null);
+                    }
+                  }}
+                  disabled={loading || loadingDivisions || dbDivisions.length === 0}
                 >
                   <SelectTrigger id="division">
-                    <SelectValue placeholder={orgConfig?.divisions?.length ? "Select division" : "No divisions configured"} />
+                    <SelectValue placeholder={dbDivisions.length > 0 ? "Select division" : "No divisions configured"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {orgConfig?.divisions?.filter(d => d && d.trim()).map((division) => (
-                      <SelectItem key={division} value={division}>
-                        {division}
+                    {dbDivisions.map((division) => (
+                      <SelectItem key={division.id} value={division.name}>
+                        {division.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {(!orgConfig?.divisions || orgConfig.divisions.length === 0) && (
+                {dbDivisions.length === 0 && !loadingDivisions && (
                   <p className="text-sm text-amber-600">No divisions configured. Please configure in Admin panel.</p>
                 )}
               </div>
@@ -1734,21 +1783,21 @@ export default function RiskForm({
                 <Select
                   value={formData.department}
                   onValueChange={(value) => handleChange('department', value)}
-                  disabled={loading || !orgConfig?.departments?.length}
+                  disabled={loading || dbDepartments.length === 0}
                 >
                   <SelectTrigger id="department">
-                    <SelectValue placeholder={orgConfig?.departments?.length ? "Select department" : "No departments configured"} />
+                    <SelectValue placeholder={formData.division ? (dbDepartments.length > 0 ? "Select department" : "No departments in this division") : "Select a division first"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {orgConfig?.departments?.filter(d => d && d.trim()).map((department) => (
-                      <SelectItem key={department} value={department}>
-                        {department}
+                    {dbDepartments.map((department) => (
+                      <SelectItem key={department.id} value={department.name}>
+                        {department.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {(!orgConfig?.departments || orgConfig.departments.length === 0) && (
-                  <p className="text-sm text-amber-600">No departments configured. Please configure in Admin panel.</p>
+                {formData.division && dbDepartments.length === 0 && (
+                  <p className="text-sm text-amber-600">No departments in this division. Configure in Admin panel.</p>
                 )}
               </div>
 

@@ -55,6 +55,7 @@ import {
   Tag,
   Shield,
 } from 'lucide-react';
+import OrganizationalStructure from './OrganizationalStructure';
 
 export default function RiskConfiguration() {
   const [config, setConfig] = useState<OrganizationConfig | null>(null);
@@ -262,79 +263,7 @@ export default function RiskConfiguration() {
 
         {/* Tab 1: Organizational Structure */}
         <TabsContent value="structure" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Divisions</CardTitle>
-              <CardDescription>
-                Define the divisions in your organization. These will appear as dropdown options when creating risks.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Enter division name..."
-                  value={newDivision}
-                  onChange={(e) => setNewDivision(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && addDivision()}
-                />
-                <Button onClick={addDivision} size="sm">
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {divisions.map((division) => (
-                  <Badge key={division} variant="secondary" className="text-sm py-1 px-3">
-                    {division}
-                    <X
-                      className="h-3 w-3 ml-2 cursor-pointer hover:text-red-600"
-                      onClick={() => removeDivision(division)}
-                    />
-                  </Badge>
-                ))}
-                {divisions.length === 0 && (
-                  <p className="text-sm text-gray-500">No divisions defined</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Departments</CardTitle>
-              <CardDescription>
-                Define the departments in your organization. These will appear as dropdown options when creating risks.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Enter department name..."
-                  value={newDepartment}
-                  onChange={(e) => setNewDepartment(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && addDepartment()}
-                />
-                <Button onClick={addDepartment} size="sm">
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {departments.map((department) => (
-                  <Badge key={department} variant="secondary" className="text-sm py-1 px-3">
-                    {department}
-                    <X
-                      className="h-3 w-3 ml-2 cursor-pointer hover:text-red-600"
-                      onClick={() => removeDepartment(department)}
-                    />
-                  </Badge>
-                ))}
-                {departments.length === 0 && (
-                  <p className="text-sm text-gray-500">No departments defined</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <OrganizationalStructure />
         </TabsContent>
 
         {/* Tab 2: Risk Labels */}
