@@ -1,6 +1,6 @@
 # MinRisk User Manual
 
-**Version 1.0** | *Enterprise Risk Management Platform*
+**Version 1.1** | *Enterprise Risk Management Platform* | *Updated: January 2026*
 
 ---
 
@@ -593,11 +593,28 @@ Set organizational parameters:
 
 | Setting | Description |
 |---------|-------------|
-| **Divisions** | Top-level organizational units |
-| **Departments** | Sub-units within divisions |
 | **Impact Scale** | 1-5 scale descriptors |
 | **Likelihood Scale** | 1-5 scale descriptors |
 | **Default Period** | Active risk assessment period |
+
+#### Division & Department Hierarchy
+
+MinRisk supports a hierarchical organizational structure where departments belong to divisions.
+
+**Managing Divisions:**
+1. Navigate to Admin → Risk Configuration → Organizational Structure
+2. Add new divisions using the input field
+3. Each division can contain multiple departments
+
+**Managing Departments:**
+1. Add departments within a specific division
+2. Or add unassigned departments and later assign them to divisions
+3. Departments are displayed grouped under their parent division
+
+**Cascading Selection in Risk Forms:**
+- When creating a risk, first select a Division
+- The Department dropdown automatically filters to show only departments in that division
+- This ensures proper organizational alignment for risk ownership
 
 ### 10.3 Appetite & Tolerance
 
@@ -632,6 +649,54 @@ Step 3: Enter:
 Step 4: Click "Send Invitation"
          → User receives email with setup link
 ```
+
+### 10.5 Data Cleanup
+
+Safely reset operational data when needed (e.g., for demos, testing, or starting fresh).
+
+**Accessing Data Cleanup:**
+1. Navigate to Admin → Data Cleanup
+2. Only available to Primary Admins and Super Admins
+
+**Cleanup Scope:**
+The cleanup operation removes the following data:
+- All risks (across all periods)
+- Controls and control linkages
+- KRIs/KCIs and their measurements
+- Risk appetite statements and categories
+- Incidents and incident mappings
+- Audit logs
+- Risk intelligence data
+- Periods
+- Divisions and departments
+- Organization-specific library items (root causes, impacts, controls, KRIs/KCIs)
+
+**What is Preserved:**
+- User accounts and organizations
+- Global/master library templates
+- Organization settings and configuration
+
+**Optional: Reset Taxonomy**
+- Check "Also reset Risk Taxonomy" to clear risk categories and subcategories
+- When checked, default categories are automatically reseeded based on industry type
+
+**Workflow: Execute Cleanup**
+
+```
+Step 1: Review what will be deleted
+    ↓
+Step 2: (Optional) Check "Also reset Risk Taxonomy"
+    ↓
+Step 3: Click "Delete Organization Data"
+    ↓
+Step 4: Type "DELETE ALL DATA" to confirm
+    ↓
+Step 5: Click "Confirm Delete"
+    ↓
+Results table shows per-table deletion counts
+```
+
+> ⚠️ **Warning**: This action cannot be undone. Always ensure you have backups before proceeding.
 
 ---
 
