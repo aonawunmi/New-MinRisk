@@ -23,6 +23,24 @@ import { DEFAULT_RSS_SOURCES, getRSSSources, updateScanStats, type RSSSource } f
 import { extractKeywords, getAllKeywords, matchesCategory, getKeywords, KEYWORD_CATEGORIES, type KeywordsMap } from './keywords.ts';
 import { USE_CASE_MODELS } from '../_shared/ai-models.ts';
 
+// AI Cost Optimization Modules
+import { checkDuplicate, addToDedupIndex, extractDomain } from './deduplication.ts';
+import {
+  calculateRelevanceScore,
+  loadPreFilterConfig,
+  loadOrgKeywords,
+  loadOrgCategories,
+  loadOrgIndustry,
+  type PreFilterConfig
+} from './prefilter.ts';
+import {
+  getCachedAnalysis,
+  cacheAnalysis,
+  createEventHash,
+  parseAnalysisForCache,
+  mapCacheToOrgRisks
+} from './intelCache.ts';
+
 // Get organization ID from request or use first organization (for cron)
 let organizationId: string = ''; // Initialize to avoid TS used-before-assigned error
 let authenticatedUser = false;
@@ -458,6 +476,12 @@ function applyKeywordFallback(
 
 /**
  * Create risk alerts from analysis
+ * 
+ * OPTIMIZATION LAYERS:
+ * Layer 1: Pre-filtering - Skip low-relevance events
+ * Layer 2: Deduplication - Skip already-seen events
+ * Layer 3: Caching - Use cached analysis when available
+ * Layer 4: AI Analysis - Only for events that pass all filters
  */
 async function createRiskAlerts(
   supabase: any,
@@ -467,10 +491,33 @@ async function createRiskAlerts(
   organizationId: string,
   keywordCategories: KeywordsMap
 ): Promise<number> {
-  console.log(`\n🤖 Analyzing ${storedEvents.length} events with AI...`);
+  console.log(`\n🤖 Analyzing ${storedEvents.length} events with AI Cost Optimization...`);
+
+  // Load optimization context
+  const [preFilterConfig, orgKeywords, orgCategories, orgIndustry] = await Promise.all([
+    loadPreFilterConfig(supabase, organizationId),
+    loadOrgKeywords(supabase, organizationId),
+    loadOrgCategories(supabase, organizationId),
+    loadOrgIndustry(supabase, organizationId)
+  ]);
+
+  console.log(`  📊 Optimization config loaded:`);
+  console.log(`     - Pre-filter: ${preFilterConfig.enabled ? 'ON' : 'OFF'} (threshold: ${preFilterConfig.threshold})`);
+  console.log(`     - Org keywords: ${orgKeywords.length}`);
+  console.log(`     - Org categories: ${orgCategories.length}`);
+
+  // Stats tracking
+  const stats = {
+    total: storedEvents.length,
+    filtered: 0,
+    deduplicated: 0,
+    cacheHits: 0,
+    aiAnalyzed: 0,
+    alertsCreated: 0
+  };
 
   let alertsCreated = 0;
-  const BATCH_SIZE = 3; // Analyze 3 events in parallel
+  const BATCH_SIZE = 3;
 
   // Process events in batches
   for (let i = 0; i < storedEvents.length; i += BATCH_SIZE) {
@@ -481,11 +528,115 @@ async function createRiskAlerts(
       try {
         console.log(`  🔍 Event: ${event.title.substring(0, 60)}...`);
 
-        // AI analysis
-        const analysis = await analyzeEventRelevance(event, risks, claudeApiKey);
+        // =========================================
+        // LAYER 1: Pre-filtering
+        // =========================================
+        if (preFilterConfig.enabled) {
+          const preFilterResult = calculateRelevanceScore(
+            {
+              title: event.title,
+              summary: event.summary,
+              published_at: event.published_at,
+              source_name: event.source_name
+            },
+            orgKeywords,
+            orgCategories,
+            orgIndustry,
+            preFilterConfig
+          );
 
-        // Apply keyword fallback
-        const finalAnalysis = applyKeywordFallback(event, analysis, risks, keywordCategories);
+          if (!preFilterResult.passed) {
+            console.log(`    ⏭️  Pre-filtered (score: ${preFilterResult.score}/${preFilterConfig.threshold})`);
+            stats.filtered++;
+
+            // Log filtered event for monitoring
+            await supabase.from('external_events')
+              .update({
+                filter_status: 'filtered_low_relevance',
+                relevance_score: preFilterResult.score,
+                filter_reason: preFilterResult.reasons.join('; ')
+              })
+              .eq('id', event.id);
+
+            return 0;
+          }
+
+          if (preFilterResult.bypassReason) {
+            console.log(`    🎯 Critical keyword bypass: ${preFilterResult.bypassReason}`);
+          }
+        }
+
+        // =========================================
+        // LAYER 2: Deduplication
+        // =========================================
+        const domain = extractDomain(event.source_url || '');
+        const dupCheck = await checkDuplicate(supabase, event.title, domain);
+
+        if (dupCheck.isDuplicate) {
+          console.log(`    ⏭️  Duplicate (similarity: ${(dupCheck.similarity! * 100).toFixed(0)}%)`);
+          stats.deduplicated++;
+
+          await supabase.from('external_events')
+            .update({
+              filter_status: 'filtered_duplicate',
+              filter_reason: `Similar to event ${dupCheck.matchedEventId}`
+            })
+            .eq('id', event.id);
+
+          return 0;
+        }
+
+        // Add to dedup index for future checks
+        await addToDedupIndex(supabase, event.id, event.title, domain);
+
+        // =========================================
+        // LAYER 3: Cache Check
+        // =========================================
+        const eventHash = createEventHash(event.title, event.source_url);
+        const cachedAnalysis = await getCachedAnalysis(supabase, eventHash);
+
+        let finalAnalysis;
+
+        if (cachedAnalysis) {
+          console.log(`    💾 Cache hit! Using cached analysis`);
+          stats.cacheHits++;
+
+          // Map cached analysis to org's risks
+          finalAnalysis = mapCacheToOrgRisks(cachedAnalysis, risks);
+
+          await supabase.from('external_events')
+            .update({ filter_status: 'cached' })
+            .eq('id', event.id);
+        } else {
+          // =========================================
+          // LAYER 4: AI Analysis (only for non-cached)
+          // =========================================
+          console.log(`    🤖 Running AI analysis...`);
+          stats.aiAnalyzed++;
+
+          // AI analysis
+          const analysis = await analyzeEventRelevance(event, risks, claudeApiKey);
+
+          // Apply keyword fallback
+          finalAnalysis = applyKeywordFallback(event, analysis, risks, keywordCategories);
+
+          // Cache the analysis for future use
+          const cacheableAnalysis = parseAnalysisForCache(analysis, event.title);
+          await cacheAnalysis(
+            supabase,
+            eventHash,
+            event.title,
+            event.source_url,
+            cacheableAnalysis,
+            undefined, // tokens_used - we don't track this currently
+            undefined, // model_version
+            event.id
+          );
+
+          await supabase.from('external_events')
+            .update({ filter_status: 'analyzed' })
+            .eq('id', event.id);
+        }
 
         // Create alerts if confidence threshold met
         if (finalAnalysis.relevant && finalAnalysis.confidence >= MIN_CONFIDENCE && finalAnalysis.risk_codes?.length > 0) {
@@ -550,7 +701,18 @@ async function createRiskAlerts(
     }
   }
 
-  console.log(`\n  ✅ Created approx ${alertsCreated} alerts`);
+  // Final stats
+  stats.alertsCreated = alertsCreated;
+
+  console.log(`\n  📊 Optimization Summary:`);
+  console.log(`     - Total events: ${stats.total}`);
+  console.log(`     - Pre-filtered: ${stats.filtered} (${((stats.filtered / stats.total) * 100).toFixed(0)}%)`);
+  console.log(`     - Deduplicated: ${stats.deduplicated} (${((stats.deduplicated / stats.total) * 100).toFixed(0)}%)`);
+  console.log(`     - Cache hits: ${stats.cacheHits}`);
+  console.log(`     - AI analyzed: ${stats.aiAnalyzed} (${((stats.aiAnalyzed / stats.total) * 100).toFixed(0)}% of total)`);
+  console.log(`     - Alerts created: ${stats.alertsCreated}`);
+  console.log(`     💰 AI Cost Reduction: ~${(100 - (stats.aiAnalyzed / stats.total) * 100).toFixed(0)}%`);
+
   return alertsCreated;
 }
 
