@@ -122,8 +122,8 @@ BEGIN
     RAISE EXCEPTION 'organization_id is required when scope is current_org';
   END IF;
 
-  -- Disable triggers temporarily
-  SET session_replication_role = 'replica';
+  -- NOTE: session_replication_role requires superuser, so we rely on proper
+  -- delete order (child tables before parent tables) defined in v_tables array
 
   -- ==============================================
   -- CLEANUP OPERATIONAL TABLES
@@ -219,9 +219,6 @@ BEGIN
       END IF;
     END IF;
   END IF;
-
-  -- Re-enable triggers
-  SET session_replication_role = 'origin';
 
   RETURN;
 END;
