@@ -217,11 +217,12 @@ export default function LibraryGenerator() {
 
     async function loadCurrentCounts(overrideIndustry?: string | null) {
         try {
+            // Query org-specific library tables (not global tables)
             const [rootCauses, impacts, controls, kris] = await Promise.all([
-                supabase.from('global_root_cause_library').select('*', { count: 'exact', head: true }),
-                supabase.from('global_impact_library').select('*', { count: 'exact', head: true }),
-                supabase.from('global_control_library').select('*', { count: 'exact', head: true }),
-                supabase.from('global_kri_kci_library').select('*', { count: 'exact', head: true }),
+                supabase.from('org_root_causes').select('*', { count: 'exact', head: true }),
+                supabase.from('org_impacts').select('*', { count: 'exact', head: true }),
+                supabase.from('org_controls').select('*', { count: 'exact', head: true }),
+                supabase.from('org_kri_kci').select('*', { count: 'exact', head: true }),
             ]);
 
             const counts = {
