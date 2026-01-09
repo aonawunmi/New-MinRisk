@@ -373,6 +373,63 @@ Track risk metrics over time:
 | **Incident Summary** | Monthly/quarterly incident stats |
 | **KRI Dashboard** | All indicators with breach status |
 
+### 7.4 Stakeholder Reports
+
+Generate formal reports tailored for critical stakeholders:
+
+**Report Types:**
+
+| Report | Audience | Content |
+|--------|----------|---------|
+| **CEO Executive Summary** | CEO, C-Suite | 1-2 page risk snapshot with pulse indicator |
+| **Board Risk Committee Report** | Board Members | 5-8 page comprehensive governance pack |
+| **Regulatory Compliance Report** | CBN, SEC, PENCOM | Formal submission meeting regulatory requirements |
+
+**Workflow: Generate Stakeholder Report**
+
+```
+Step 1: Navigate to Analytics → Reports tab
+    ↓
+Step 2: Select Report Type:
+         - CEO Executive Summary
+         - Board Risk Committee Report
+         - Regulatory Compliance Report
+    ↓
+Step 3: (If Regulatory) Select Regulator:
+         - CBN (Banking)
+         - SEC (Capital Markets)
+         - PENCOM (Pension)
+    ↓
+Step 4: Configure Periods:
+         - Primary Period (required)
+         - Comparison Period (optional, for trends)
+    ↓
+Step 5: Click "Preview Report"
+    ↓
+Step 6: Review on-screen:
+         - Edit narrative sections directly
+         - Click "AI Generate" for AI-written summaries
+    ↓
+Step 7: Click "Export PDF" to download
+```
+
+**AI-Powered Narratives:**
+- Each report includes editable executive summary sections
+- Click **AI Generate** to have Claude draft professional narratives
+- AI considers your actual risk data, metrics, and trends
+- Edit AI output directly in the preview before exporting
+
+**Report Contents:**
+
+| CEO Report | Board Report | Regulatory Report |
+|------------|--------------|-------------------|
+| Risk Pulse (Green/Amber/Red) | Executive Summary | Organization Info |
+| Key Metrics (4 cards) | Risk Appetite vs Exposure | Regulatory Framework |
+| Top 5 Risks table | Top 10 Risks table | Risk Taxonomy |
+| Executive Summary | KRI Breach Summary | Risk Register Extract |
+| Recommendations | Incident Summary | Control Environment |
+| | Period Comparison | Management Attestation |
+
 ---
 
 ## 8. KRI/KCI Management

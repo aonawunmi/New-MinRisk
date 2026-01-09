@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdvancedRiskHeatmap from './AdvancedRiskHeatmap';
 import HeatmapComparison from './HeatmapComparison';
 import EnhancedTrendsView from './EnhancedTrendsView';
+import ReportHub from '@/components/reports/ReportHub';
 
 export default function Analytics() {
   const [matrixSize, setMatrixSize] = useState<5 | 6>(5);
@@ -29,21 +30,19 @@ export default function Analytics() {
           <span className="text-sm text-gray-600">Matrix Size:</span>
           <button
             onClick={() => setMatrixSize(5)}
-            className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-              matrixSize === 5
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
+            className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${matrixSize === 5
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
           >
             5×5
           </button>
           <button
             onClick={() => setMatrixSize(6)}
-            className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-              matrixSize === 6
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
+            className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${matrixSize === 6
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
           >
             6×6
           </button>
@@ -72,12 +71,7 @@ export default function Analytics() {
         </TabsContent>
 
         <TabsContent value="reports" className="mt-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold mb-4">Reports</h3>
-            <p className="text-gray-600">
-              Custom reports and exports will be available here
-            </p>
-          </div>
+          <ReportHub />
         </TabsContent>
       </Tabs>
     </div>
