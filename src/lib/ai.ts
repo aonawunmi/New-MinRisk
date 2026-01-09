@@ -5,6 +5,7 @@
  */
 
 import { supabase } from './supabase';
+import { getCachedOrGenerate } from './aiCache';
 import type { ControlType, ControlTarget, DIMEScore } from '@/types/control';
 import type { RiskCategory, RiskStatus } from '@/types/risk';
 
@@ -205,8 +206,64 @@ export async function getAIControlRecommendations(
       return generateDemoSuggestions(riskTitle, category, inherentLikelihood, inherentImpact);
     }
 
-    // Construct the prompt
-    const prompt = `You are a risk management expert. Analyze the following risk and recommend appropriate controls.
+    // Use caching for control suggestions (7-day TTL)
+    // Cache key is based on category + risk level, not specific risk details
+    const riskLevel = inherentLikelihood * inherentImpact >= 15 ? 'high' :
+      inherentLikelihood * inherentImpact >= 8 ? 'medium' : 'low';
+
+    const cacheInputs = {
+      category: category.toLowerCase().trim(),
+      riskLevel,
+      division: division.toLowerCase().trim()
+    };
+
+    const { data: cachedResult, fromCache } = await getCachedOrGenerate<AISuggestedControl[]>(
+      'control_suggestion',
+      cacheInputs,
+      async () => {
+        // This function runs only on cache miss
+        return await generateControlSuggestionsFromAI(
+          riskTitle,
+          riskDescription,
+          category,
+          division,
+          inherentLikelihood,
+          inherentImpact
+        );
+      },
+      {
+        promptSummary: `Control suggestions for ${category} (${riskLevel} risk)`
+      }
+    );
+
+    if (fromCache) {
+      console.log(`[AI Cache] Using cached control suggestions for ${category}`);
+    }
+
+    return { data: cachedResult, error: null };
+  } catch (err) {
+    console.error('Unexpected error getting AI control recommendations:', err);
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error('Unknown error'),
+    };
+  }
+}
+
+/**
+ * Internal function to generate control suggestions from AI (called on cache miss)
+ */
+async function generateControlSuggestionsFromAI(
+  riskTitle: string,
+  riskDescription: string,
+  category: string,
+  division: string,
+  inherentLikelihood: number,
+  inherentImpact: number
+): Promise<AISuggestedControl[]> {
+
+  // Construct the prompt
+  const prompt = `You are a risk management expert. Analyze the following risk and recommend appropriate controls.
 
 RISK DETAILS:
 - Title: ${riskTitle}
@@ -254,50 +311,32 @@ Return your response as a valid JSON array of objects. Each object must have thi
 
 Return ONLY the JSON array, no other text.`;
 
-    // Call AI via edge function (to avoid CORS issues)
-    const contentText = await callAI(prompt, 4096);
+  // Call AI via edge function (to avoid CORS issues)
+  const contentText = await callAI(prompt, 4096);
 
-    // Extract JSON from response
-    const jsonMatch = contentText.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      return {
-        data: null,
-        error: new Error('Failed to parse AI response - no JSON array found'),
-      };
-    }
-
-    // Parse the JSON response
-    try {
-      const suggestions: AISuggestedControl[] = JSON.parse(jsonMatch[0]);
-
-      // Validate the suggestions
-      if (!Array.isArray(suggestions)) {
-        throw new Error('Response is not an array');
-      }
-
-      // Validate each suggestion has required fields
-      for (const suggestion of suggestions) {
-        if (!suggestion.name || !suggestion.description || !suggestion.control_type || !suggestion.target) {
-          throw new Error('Missing required fields in suggestion');
-        }
-      }
-
-      console.log(`AI generated ${suggestions.length} control suggestions for risk: ${riskTitle}`);
-      return { data: suggestions, error: null };
-    } catch (parseError) {
-      console.error('Failed to parse Claude response:', contentText);
-      return {
-        data: null,
-        error: new Error(`Failed to parse AI response: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`),
-      };
-    }
-  } catch (err) {
-    console.error('Unexpected error getting AI control recommendations:', err);
-    return {
-      data: null,
-      error: err instanceof Error ? err : new Error('Unknown error'),
-    };
+  // Extract JSON from response
+  const jsonMatch = contentText.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) {
+    throw new Error('Failed to parse AI response - no JSON array found');
   }
+
+  // Parse the JSON response
+  const suggestions: AISuggestedControl[] = JSON.parse(jsonMatch[0]);
+
+  // Validate the suggestions
+  if (!Array.isArray(suggestions)) {
+    throw new Error('Response is not an array');
+  }
+
+  // Validate each suggestion has required fields
+  for (const suggestion of suggestions) {
+    if (!suggestion.name || !suggestion.description || !suggestion.control_type || !suggestion.target) {
+      throw new Error('Missing required fields in suggestion');
+    }
+  }
+
+  console.log(`AI generated ${suggestions.length} control suggestions for risk: ${riskTitle}`);
+  return suggestions;
 }
 
 /**
