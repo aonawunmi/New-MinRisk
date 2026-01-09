@@ -25,12 +25,12 @@ export const AI_MODELS = {
    * - Risk appetite, KRI suggestions
    * - STANDARDIZED: All features now use this model for consistency
    */
-  SONNET_35: 'claude-3-5-sonnet-20240620',
+  SONNET_35: 'claude-3-5-haiku-20241022',
 
   /**
    * Sonnet 4.5 - Alias for Sonnet 3.5 (standardized)
    */
-  SONNET_45: 'claude-3-5-sonnet-20240620',
+  SONNET_45: 'claude-3-5-haiku-20241022',
 } as const;
 
 /**
