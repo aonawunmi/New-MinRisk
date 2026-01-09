@@ -130,31 +130,38 @@ BEGIN
   -- ==============================================
   FOREACH v_table IN ARRAY v_tables
   LOOP
-    IF EXISTS (SELECT FROM information_schema.tables WHERE information_schema.tables.table_name = v_table) THEN
-      SELECT EXISTS (
-        SELECT FROM information_schema.columns 
-        WHERE information_schema.columns.table_name = v_table 
-        AND column_name = 'organization_id'
-      ) INTO v_has_org_col;
+    BEGIN
+      IF EXISTS (SELECT FROM information_schema.tables WHERE information_schema.tables.table_name = v_table) THEN
+        SELECT EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE information_schema.columns.table_name = v_table 
+          AND column_name = 'organization_id'
+        ) INTO v_has_org_col;
 
-      IF p_scope = 'all_orgs' OR NOT v_has_org_col THEN
-        EXECUTE format('DELETE FROM %I WHERE true', v_table);
-        GET DIAGNOSTICS v_count = ROW_COUNT;
+        IF p_scope = 'all_orgs' OR NOT v_has_org_col THEN
+          EXECUTE format('DELETE FROM %I WHERE true', v_table);
+          GET DIAGNOSTICS v_count = ROW_COUNT;
+        ELSE
+          EXECUTE format('DELETE FROM %I WHERE organization_id = $1', v_table) USING p_organization_id;
+          GET DIAGNOSTICS v_count = ROW_COUNT;
+        END IF;
+
+        table_name := v_table;
+        rows_deleted := v_count;
+        status := 'cleared';
+        RETURN NEXT;
       ELSE
-        EXECUTE format('DELETE FROM %I WHERE organization_id = $1', v_table) USING p_organization_id;
-        GET DIAGNOSTICS v_count = ROW_COUNT;
+        table_name := v_table;
+        rows_deleted := 0;
+        status := 'not_found';
+        RETURN NEXT;
       END IF;
-
-      table_name := v_table;
-      rows_deleted := v_count;
-      status := 'cleared';
-      RETURN NEXT;
-    ELSE
+    EXCEPTION WHEN OTHERS THEN
       table_name := v_table;
       rows_deleted := 0;
-      status := 'not_found';
+      status := 'error: ' || SQLERRM;
       RETURN NEXT;
-    END IF;
+    END;
   END LOOP;
 
   -- ==============================================
