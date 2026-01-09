@@ -73,9 +73,24 @@ export async function createCategory(
       throw new Error('Description must be 200 characters or less');
     }
 
+    // Get user's organization_id
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile?.organization_id) {
+      throw new Error('No organization found for user');
+    }
+
     const { data, error } = await supabase
       .from('risk_categories')
       .insert({
+        organization_id: profile.organization_id,
         name: categoryData.name,
         description: categoryData.description,
       })
@@ -208,9 +223,24 @@ export async function createSubcategory(
       throw new Error('Description must be 200 characters or less');
     }
 
+    // Get user's organization_id
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile?.organization_id) {
+      throw new Error('No organization found for user');
+    }
+
     const { data, error } = await supabase
       .from('risk_subcategories')
       .insert({
+        organization_id: profile.organization_id,
         category_id: subcategoryData.category_id,
         name: subcategoryData.name,
         description: subcategoryData.description,
