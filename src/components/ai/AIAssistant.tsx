@@ -8,8 +8,9 @@
 import { useState, useEffect } from 'react';
 import { generateAIRisks, type AIGeneratedRisk } from '@/lib/ai';
 import { createRisk, getRisks } from '@/lib/risks';
-import { getActivePeriod } from '@/lib/periods-v2';
+import { getActivePeriod, formatPeriod } from '@/lib/periods-v2';
 import { getCategories as fetchTaxonomyCategories } from '@/lib/taxonomy';
+import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -34,6 +35,7 @@ import { Sparkles, Loader2, CheckCircle, XCircle, EyeOff } from 'lucide-react';
 
 
 export default function AIAssistant() {
+  const { profile } = useAuth();
   const [industry, setIndustry] = useState('');
   const [businessUnit, setBusinessUnit] = useState('');
   const [category, setCategory] = useState<string>('All Categories');
@@ -91,7 +93,8 @@ export default function AIAssistant() {
         businessUnit || industry,
         category,
         numberOfRisks,
-        additionalContext || undefined
+        additionalContext || undefined,
+        taxonomyCategories
       );
 
       if (aiError) {
@@ -110,9 +113,22 @@ export default function AIAssistant() {
   };
 
   const handleAddRiskToRegister = async (risk: AIGeneratedRisk, index: number) => {
+    if (!profile?.organization_id) {
+      alert('Organization context missing');
+      return;
+    }
+
     try {
       // Get active period
-      const { data: activePeriod } = await getActivePeriod();
+      const { data: activePeriodData } = await getActivePeriod(profile.organization_id);
+
+      // Determine period string
+      const periodString = activePeriodData
+        ? formatPeriod({
+          year: activePeriodData.current_period_year,
+          quarter: activePeriodData.current_period_quarter
+        })
+        : 'Q1 2025';
 
       // Get existing risks to check for code uniqueness
       const { data: existingRisks } = await getRisks();
@@ -137,7 +153,7 @@ export default function AIAssistant() {
         likelihood_inherent: risk.likelihood_inherent,
         impact_inherent: risk.impact_inherent,
         status: risk.status,
-        period: activePeriod || 'Q1 2025',
+        period: periodString,
         is_priority: false,
       });
 
@@ -158,8 +174,20 @@ export default function AIAssistant() {
   };
 
   const handleAddAllRisks = async () => {
+    if (!profile?.organization_id) {
+      alert('Organization context missing');
+      return;
+    }
+
     try {
-      const { data: activePeriod } = await getActivePeriod();
+      const { data: activePeriodData } = await getActivePeriod(profile.organization_id);
+
+      const periodString = activePeriodData
+        ? formatPeriod({
+          year: activePeriodData.current_period_year,
+          quarter: activePeriodData.current_period_quarter
+        })
+        : 'Q1 2025';
 
       // Get existing risks to check for code uniqueness
       const { data: existingRisks } = await getRisks();
@@ -191,7 +219,7 @@ export default function AIAssistant() {
           likelihood_inherent: risk.likelihood_inherent,
           impact_inherent: risk.impact_inherent,
           status: risk.status,
-          period: activePeriod || 'Q1 2025',
+          period: periodString,
           is_priority: false,
         });
 

@@ -390,6 +390,7 @@ function generateDemoRisks(
  * @param category - Risk category filter (or "All Categories")
  * @param numberOfRisks - Number of risks to generate
  * @param additionalContext - Optional additional context
+ * @param taxonomyCategories - Optional list of valid risk categories from the organization's taxonomy
  * @returns Array of generated risks
  */
 export async function generateAIRisks(
@@ -397,7 +398,8 @@ export async function generateAIRisks(
   businessUnit: string,
   category: RiskCategory | 'All Categories',
   numberOfRisks: number,
-  additionalContext?: string
+  additionalContext?: string,
+  taxonomyCategories?: string[]
 ): Promise<ApiResponse<AIGeneratedRisk[]>> {
   try {
     // Check if demo mode is enabled
@@ -413,6 +415,12 @@ export async function generateAIRisks(
 
     // Construct the prompt
     const categoryFilter = category === 'All Categories' ? 'across all categories' : `focusing on ${category} risks`;
+
+    // Construct taxonomy instruction
+    const taxonomyInstruction = taxonomyCategories && taxonomyCategories.length > 0
+      ? `\n4. **Category**: MUST be exactly one of the following: ${taxonomyCategories.map(c => `"${c}"`).join(', ')}`
+      : '4. **Category**: One of: "Operational", "Strategic", "Financial", "Compliance", "Technology", "Market", or "Reputational"';
+
     const prompt = `You are a risk management expert. Generate ${numberOfRisks} context-specific risks for the following organization.
 
 ORGANIZATION CONTEXT:
@@ -427,7 +435,7 @@ Generate ${numberOfRisks} specific, realistic risks that are relevant to this or
 1. **Risk Code**: A short code (e.g., "OPS-001", "FIN-002", "TEC-003")
 2. **Risk Title**: A clear, concise title (5-10 words)
 3. **Risk Description**: Detailed description of the risk (2-4 sentences)
-4. **Category**: One of: "Operational", "Strategic", "Financial", "Compliance", "Technology", "Market", or "Reputational"
+${taxonomyInstruction}
 5. **Division**: The business unit/department this risk affects
 6. **Owner**: Suggested risk owner role (e.g., "CFO", "CTO", "Operations Manager")
 7. **Inherent Likelihood**: Score from 1-5 (how likely without controls)
@@ -442,6 +450,7 @@ IMPORTANT GUIDELINES:
 - Likelihood and impact should be realistic (most risks will be 2-4 range)
 - Risk codes should match category (OPS=Operational, FIN=Financial, etc.)
 ${category !== 'All Categories' ? `- Focus ONLY on ${category} category risks` : ''}
+${taxonomyCategories && taxonomyCategories.length > 0 ? `- STRICTLY use only the provided risk categories. Do not invent new ones.` : ''}
 
 RESPONSE FORMAT:
 Return your response as a valid JSON array of objects. Each object must have this exact structure:
