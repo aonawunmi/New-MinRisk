@@ -254,37 +254,89 @@ function isBreached(
 
 /**
  * Evaluate breach rule (POINT_IN_TIME, SUSTAINED, N_BREACHES)
+ * Uses database functions for historical queries
+ */
+async function evaluateBreachRuleAsync(tolerance: ToleranceMetric): Promise<{
+    rule_met: boolean;
+    periods_remaining?: number;
+    breach_count?: number;
+}> {
+    switch (tolerance.breach_rule) {
+        case 'POINT_IN_TIME':
+            return { rule_met: true };
+
+        case 'SUSTAINED_N_PERIODS': {
+            const periodsRequired = tolerance.breach_rule_config?.periods || 3;
+
+            // Query consecutive breach periods from DB
+            const { data, error } = await supabase.rpc(
+                'count_consecutive_breach_periods',
+                {
+                    p_tolerance_id: tolerance.id,
+                    p_breach_type: 'SOFT'
+                }
+            );
+
+            const consecutivePeriods = error ? 0 : (data || 0);
+            const rule_met = consecutivePeriods >= periodsRequired;
+
+            return {
+                rule_met,
+                periods_remaining: rule_met ? 0 : (periodsRequired - consecutivePeriods)
+            };
+        }
+
+        case 'N_BREACHES_IN_WINDOW': {
+            const countRequired = tolerance.breach_rule_config?.count || 2;
+            const windowDays = tolerance.breach_rule_config?.window_days || 90;
+
+            // Query breach count in window from DB
+            const { data, error } = await supabase.rpc(
+                'count_breaches_in_window',
+                {
+                    p_tolerance_id: tolerance.id,
+                    p_window_days: windowDays,
+                    p_breach_type: 'SOFT'
+                }
+            );
+
+            const breachCount = error ? 0 : (data || 0);
+            const rule_met = breachCount >= countRequired;
+
+            return {
+                rule_met,
+                breach_count: breachCount
+            };
+        }
+
+        default:
+            return { rule_met: true };
+    }
+}
+
+/**
+ * Synchronous version for backward compatibility
+ * Falls back to POINT_IN_TIME behavior
  */
 function evaluateBreachRule(tolerance: ToleranceMetric): {
     rule_met: boolean;
     periods_remaining?: number;
     breach_count?: number;
 } {
-    // For now, implement POINT_IN_TIME (always met if breached)
-    // SUSTAINED and N_BREACHES require historical data - placeholder for Layer B
-    switch (tolerance.breach_rule) {
-        case 'POINT_IN_TIME':
-            return { rule_met: true };
-
-        case 'SUSTAINED_N_PERIODS':
-            // TODO: Query historical breaches
-            const periodsRequired = tolerance.breach_rule_config?.periods || 3;
-            return {
-                rule_met: false, // Placeholder - needs history query
-                periods_remaining: periodsRequired
-            };
-
-        case 'N_BREACHES_IN_WINDOW':
-            // TODO: Query historical breaches
-            const countRequired = tolerance.breach_rule_config?.count || 2;
-            return {
-                rule_met: false, // Placeholder - needs history query
-                breach_count: 0
-            };
-
-        default:
-            return { rule_met: true };
+    // For synchronous contexts, only POINT_IN_TIME is deterministic
+    if (tolerance.breach_rule === 'POINT_IN_TIME') {
+        return { rule_met: true };
     }
+
+    // For other rules, return "not yet met" - caller should use async version
+    const periodsRequired = tolerance.breach_rule_config?.periods || 3;
+    const countRequired = tolerance.breach_rule_config?.count || 2;
+
+    return {
+        rule_met: false,
+        periods_remaining: tolerance.breach_rule === 'SUSTAINED_N_PERIODS' ? periodsRequired : undefined,
+        breach_count: tolerance.breach_rule === 'N_BREACHES_IN_WINDOW' ? 0 : undefined
+    };
 }
 
 // ============================================================================
@@ -868,29 +920,41 @@ export async function updateRiskRAFScore(
 }
 
 // ============================================================================
-// BULK RECALCULATION (Placeholder for DB lock in Layer B)
+// BULK RECALCULATION (DB-Based Distributed Lock)
 // ============================================================================
 
 /**
  * Recalculate RAF scores for all risks in an organization
- * 
- * NOTE: In production, use DB advisory lock or recalc_runs table
- * Current implementation is single-process only
+ * Uses DB-based locking via recalc_runs table for distributed safety
  */
-let recalculationInProgress = false;
-
 export async function recalculateAllRAFScores(
-    organizationId: string
-): Promise<{ updated: number; errors: number }> {
-    // TODO: Replace with DB lock in Layer B
-    if (recalculationInProgress) {
-        console.log('⏸️ RAF recalculation already in progress, skipping...');
-        return { updated: 0, errors: 0 };
-    }
-
-    recalculationInProgress = true;
+    organizationId: string,
+    userId?: string
+): Promise<{ updated: number; errors: number; run_id?: string }> {
+    let runId: string | undefined;
 
     try {
+        // Acquire distributed lock via DB
+        const { data: lockResult, error: lockError } = await supabase.rpc(
+            'acquire_recalc_lock',
+            {
+                p_organization_id: organizationId,
+                p_run_type: 'FULL',
+                p_user_id: userId || null
+            }
+        );
+
+        if (lockError || !lockResult?.success) {
+            console.log('⏸️ RAF recalculation already in progress or lock failed');
+            return {
+                updated: 0,
+                errors: 0
+            };
+        }
+
+        runId = lockResult.run_id;
+        console.log(`🔒 Acquired recalc lock: ${runId}`);
+
         // Verify organization ownership
         const { data: orgCheck } = await supabase
             .from('organizations')
@@ -900,7 +964,8 @@ export async function recalculateAllRAFScores(
 
         if (!orgCheck) {
             console.error('Organization not found or access denied');
-            return { updated: 0, errors: 1 };
+            await completeRecalcRun(runId, 'FAILED', 0, 0, 0, 'Organization not found');
+            return { updated: 0, errors: 1, run_id: runId };
         }
 
         const { data: risks, error: fetchError } = await supabase
@@ -910,7 +975,8 @@ export async function recalculateAllRAFScores(
 
         if (fetchError || !risks) {
             console.error('Error fetching risks for bulk RAF recalculation:', fetchError);
-            return { updated: 0, errors: 1 };
+            await completeRecalcRun(runId, 'FAILED', 0, 0, 0, fetchError?.message || 'Fetch error');
+            return { updated: 0, errors: 1, run_id: runId };
         }
 
         let updated = 0;
@@ -926,10 +992,45 @@ export async function recalculateAllRAFScores(
             }
         }
 
+        // Complete the run successfully
+        await completeRecalcRun(runId, 'COMPLETED', risks.length, updated, errors);
+
         console.log(`📊 Bulk RAF recalculation complete: ${updated} updated, ${errors} errors`);
-        return { updated, errors };
-    } finally {
-        recalculationInProgress = false;
+        return { updated, errors, run_id: runId };
+
+    } catch (err) {
+        // Complete the run with failure status
+        if (runId) {
+            await completeRecalcRun(runId, 'FAILED', 0, 0, 0, String(err));
+        }
+        console.error('Unexpected error in recalculateAllRAFScores:', err);
+        return { updated: 0, errors: 1, run_id: runId };
+    }
+}
+
+/**
+ * Helper to complete a recalc run
+ */
+async function completeRecalcRun(
+    runId: string,
+    status: 'COMPLETED' | 'FAILED',
+    processed: number,
+    updated: number,
+    failed: number,
+    errorMessage?: string
+): Promise<void> {
+    try {
+        await supabase.rpc('complete_recalc_run', {
+            p_run_id: runId,
+            p_status: status,
+            p_risks_processed: processed,
+            p_risks_updated: updated,
+            p_risks_failed: failed,
+            p_error_message: errorMessage || null
+        });
+        console.log(`🔓 Released recalc lock: ${runId} (${status})`);
+    } catch (err) {
+        console.error('Failed to complete recalc run:', err);
     }
 }
 
@@ -1136,42 +1237,49 @@ export async function generateKRIFromTolerance(
 }
 
 /**
- * Legacy function: Sync KRI with tolerance
- * @deprecated Will be replaced with transactional RPC in Layer B
+ * Sync KRI with tolerance using atomic DB transaction
+ * Uses sync_kri_with_tolerance_atomic RPC for transactional safety
  */
 export async function syncKRIWithTolerance(
     kriId: string,
-    toleranceId: string
-): Promise<{ success: boolean; error: Error | null }> {
+    toleranceId: string,
+    userId?: string
+): Promise<{ success: boolean; error: Error | null; mapping?: ToleranceKRIMapping }> {
     try {
-        const { data: mapping, error: mapError } = await generateKRIFromTolerance(toleranceId);
+        // Use atomic RPC for transactional sync
+        const { data: result, error: rpcError } = await supabase.rpc(
+            'sync_kri_with_tolerance_atomic',
+            {
+                p_kri_id: kriId,
+                p_tolerance_id: toleranceId,
+                p_user_id: userId || null
+            }
+        );
 
-        if (mapError || !mapping) {
-            return { success: false, error: mapError };
+        if (rpcError) {
+            console.error('Error in atomic sync RPC:', rpcError);
+            return { success: false, error: new Error(rpcError.message) };
         }
 
-        const { error: updateError } = await supabase
-            .from('kri_definitions')
-            .update({
-                target_value: mapping.kriTarget,
-                threshold_yellow_upper: mapping.kriWarning,
-                threshold_red_upper: mapping.kriCritical,
-                unit_of_measure: mapping.unit,
-            })
-            .eq('id', kriId);
-
-        if (updateError) {
-            console.error('Error syncing KRI with tolerance:', updateError);
-            return { success: false, error: new Error(updateError.message) };
+        if (!result?.success) {
+            return {
+                success: false,
+                error: new Error(result?.error || 'Unknown error in sync')
+            };
         }
 
-        await supabase
-            .from('appetite_kri_thresholds')
-            .update({ kri_id: kriId })
-            .eq('id', toleranceId);
+        const mapping: ToleranceKRIMapping = {
+            toleranceId,
+            kriTarget: result.mapping?.kriTarget || 0,
+            kriWarning: result.mapping?.kriWarning || 0,
+            kriCritical: result.mapping?.kriCritical || 0,
+            unit: result.mapping?.unit || 'count',
+            description: `Synced via atomic RPC`
+        };
 
-        console.log(`✅ Synced KRI ${kriId} with tolerance ${toleranceId}`);
-        return { success: true, error: null };
+        console.log(`✅ Atomically synced KRI ${kriId} with tolerance ${toleranceId}`);
+        return { success: true, error: null, mapping };
+
     } catch (err) {
         console.error('Unexpected error syncing KRI:', err);
         return {
