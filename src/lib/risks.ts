@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { Risk, RiskWithControls, Control } from '@/types/risk';
+import { calculateRAFAdjustedScore, type AppetiteLevel } from './rafEngine';
 
 /**
  * Risk Management Service Layer
@@ -22,6 +23,8 @@ export interface CreateRiskData {
   status?: string;
   period?: string | null;
   is_priority?: boolean;
+  // RAF Integration
+  appetite_category_id?: string | null;
 }
 
 export interface UpdateRiskData extends Partial<CreateRiskData> {
@@ -262,6 +265,36 @@ export async function createRisk(
       riskData.category
     );
 
+    // Calculate RAF-adjusted score if appetite category is set
+    let rafData = {
+      raf_adjusted_score: null as number | null,
+      appetite_multiplier: 1.0,
+      out_of_appetite: false,
+    };
+
+    if (riskData.appetite_category_id) {
+      // Get appetite level for the category
+      const { data: category } = await supabase
+        .from('risk_appetite_categories')
+        .select('appetite_level')
+        .eq('id', riskData.appetite_category_id)
+        .single();
+
+      if (category?.appetite_level) {
+        const baseScore = riskData.likelihood_inherent * riskData.impact_inherent;
+        const rafResult = calculateRAFAdjustedScore(
+          baseScore,
+          category.appetite_level as AppetiteLevel
+        );
+        rafData = {
+          raf_adjusted_score: rafResult.adjustedScore,
+          appetite_multiplier: rafResult.multiplier,
+          out_of_appetite: rafResult.outOfAppetite,
+        };
+        console.log(`📊 RAF calculated: base=${baseScore}, adjusted=${rafResult.adjustedScore}, multiplier=${rafResult.multiplier}`);
+      }
+    }
+
     const { data, error } = await supabase
       .from('risks')
       .insert([
@@ -274,6 +307,8 @@ export async function createRisk(
           owner_id: riskData.owner_id || user.id, // Default to creator if not specified
           status: riskData.status || 'OPEN',
           is_priority: riskData.is_priority || false,
+          // RAF fields
+          ...rafData,
         },
       ])
       .select()
