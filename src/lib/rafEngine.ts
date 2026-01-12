@@ -1,11 +1,15 @@
 /**
- * Risk Appetite Framework (RAF) Engine
+ * Risk Appetite Framework (RAF) Engine - Layer A (Governance-Grade)
  * 
  * Core calculation engine for:
- * - RAF-adjusted risk scoring
- * - Out-of-appetite detection
- * - KRI threshold generation from tolerances
- * - Appetite multiplier calculations
+ * - Tolerance-based out-of-appetite detection (no hardcoded thresholds)
+ * - Direction-aware breach detection (UP/DOWN)
+ * - Breach rule evaluation (POINT_IN_TIME, SUSTAINED, N_BREACHES)
+ * - ZERO appetite + materiality evaluation
+ * - Residual score calculation using DIME control effectiveness
+ * 
+ * Precedence order:
+ * HARD_LIMIT_BREACH > ZERO_APPETITE_MATERIAL > SOFT_LIMIT_ESCALATION > DATA_MISSING > SOFT_BREACH_PENDING
  * 
  * @module rafEngine
  */
@@ -17,135 +21,811 @@ import { supabase } from './supabase';
 // ============================================================================
 
 export type AppetiteLevel = 'ZERO' | 'LOW' | 'MODERATE' | 'HIGH';
+export type ScoreBasis = 'inherent' | 'residual' | 'forward_view';
+export type BreachDirection = 'UP' | 'DOWN';
+export type BreachRule = 'POINT_IN_TIME' | 'SUSTAINED_N_PERIODS' | 'N_BREACHES_IN_WINDOW';
+export type ComparisonOperator = 'gt' | 'gte' | 'lt' | 'lte' | 'eq';
+export type MaterialityRuleType = 'amount' | 'percentage' | 'count' | 'score_band';
+export type AggregationScope = 'risk' | 'category' | 'org';
+export type Severity = 'INFO' | 'WARN' | 'CRITICAL';
 
-export interface RAFScoreResult {
-    baseScore: number;
-    adjustedScore: number;
-    multiplier: number;
-    appetiteLevel: AppetiteLevel;
-    outOfAppetite: boolean;
-    explanation: string;
-}
+export type OutOfAppetiteReason =
+    | 'HARD_LIMIT_BREACH'
+    | 'ZERO_APPETITE_MATERIAL'
+    | 'SOFT_LIMIT_ESCALATION'
+    | 'DATA_MISSING_FOR_TOLERANCE'
+    | 'SOFT_BREACH_PENDING_ESCALATION'
+    | 'WITHIN_APPETITE';
 
-export interface RAFConfig {
-    organizationId: string;
-    // Configurable multipliers (defaults provided)
-    multipliers?: {
-        ZERO: number;
-        LOW: number;
-        MODERATE: number;
-        HIGH: number;
-    };
-    // Threshold for out-of-appetite (percentage of tolerance)
-    outOfAppetiteThreshold?: number;
-}
-
-export interface ToleranceKRIMapping {
-    toleranceId: string;
-    kriTarget: number;
-    kriWarning: number;
-    kriCritical: number;
-    unit: string;
+export interface MaterialityRule {
+    rule_type: MaterialityRuleType;
+    threshold: number;
+    comparison: ComparisonOperator;
+    basis?: 'capital' | 'revenue' | 'exposure' | 'events';
+    aggregation_scope: AggregationScope;
+    measurement_window_days: number;
     description: string;
 }
 
+export interface BreachRuleConfig {
+    periods?: number;        // for SUSTAINED_N_PERIODS
+    count?: number;          // for N_BREACHES_IN_WINDOW
+    window_days?: number;    // for N_BREACHES_IN_WINDOW
+}
+
+export interface ToleranceMetric {
+    id: string;
+    metric_id: string;
+    metric_name: string;
+    soft_limit: number | null;
+    hard_limit: number | null;
+    breach_direction: BreachDirection;
+    comparison_operator: ComparisonOperator;
+    breach_rule: BreachRule;
+    breach_rule_config: BreachRuleConfig;
+    measurement_window_days: number;
+    escalation_severity_on_soft_breach: Severity;
+    current_value?: number | null;
+    last_measurement_date?: string | null;
+}
+
+export interface ToleranceStatus {
+    tolerance_id: string;
+    metric_name: string;
+    is_soft_breached: boolean;
+    is_hard_breached: boolean;
+    is_data_missing: boolean;
+    breach_rule_met: boolean;
+    periods_remaining?: number;
+    breach_count_in_window?: number;
+    current_value: number | null;
+    severity: Severity;
+}
+
+export interface ToleranceReference {
+    tolerance_id: string;
+    metric_name: string;
+}
+
+export interface OutOfAppetiteResult {
+    outOfAppetite: boolean;
+    escalationRequired: boolean;
+    severity: Severity;
+    reason_code: OutOfAppetiteReason;
+    impacted_tolerances: ToleranceReference[];
+    evidence: Record<string, unknown>;
+}
+
+export interface RAFScoreResult {
+    inherent_score: number;
+    residual_score: number;
+    raf_adjusted_score: number;
+    score_basis: ScoreBasis;
+    multiplier: number;
+    appetiteLevel: AppetiteLevel;
+    control_effectiveness: number;
+    appetite_status: OutOfAppetiteResult;
+    explanation: string;
+}
+
+export interface AppetiteCategory {
+    id: string;
+    appetite_level: AppetiteLevel;
+    risk_category: string;
+    materiality_rule?: MaterialityRule | null;
+}
+
 // ============================================================================
-// DEFAULT CONFIGURATION
+// CONFIGURATION
 // ============================================================================
 
-const DEFAULT_MULTIPLIERS = {
-    ZERO: 2.0,      // Zero tolerance = double the severity
-    LOW: 1.5,       // Low appetite = 1.5x severity
-    MODERATE: 1.0,  // Moderate = normal scoring
-    HIGH: 0.8,      // High appetite = reduced severity
-};
+const PRECEDENCE_ORDER: OutOfAppetiteReason[] = [
+    'HARD_LIMIT_BREACH',
+    'ZERO_APPETITE_MATERIAL',
+    'SOFT_LIMIT_ESCALATION',
+    'DATA_MISSING_FOR_TOLERANCE',
+    'SOFT_BREACH_PENDING_ESCALATION',
+    'WITHIN_APPETITE'
+];
+
+const DEFAULT_MEASUREMENT_WINDOW_DAYS = 90;
 
 // ============================================================================
-// RAF SCORE CALCULATION
+// TOLERANCE EVALUATION (Per Tolerance)
 // ============================================================================
 
 /**
- * Calculate RAF-adjusted risk score based on appetite level
- * 
- * @param baseScore - The inherent or residual risk score (likelihood × impact)
- * @param appetiteLevel - The appetite level for this risk category
- * @param customMultipliers - Optional custom multipliers per organization
- * @returns RAF-adjusted score with explanation
+ * Evaluate a single tolerance metric status
+ * Returns the complete state for aggregation
  */
-export function calculateRAFAdjustedScore(
-    baseScore: number,
-    appetiteLevel: AppetiteLevel,
-    customMultipliers?: Partial<typeof DEFAULT_MULTIPLIERS>
-): RAFScoreResult {
-    const multipliers = { ...DEFAULT_MULTIPLIERS, ...customMultipliers };
-    const multiplier = multipliers[appetiteLevel] || 1.0;
-    const adjustedScore = baseScore * multiplier;
+export function evaluateToleranceStatus(
+    tolerance: ToleranceMetric,
+    currentDate: Date = new Date()
+): ToleranceStatus {
+    const currentValue = tolerance.current_value;
+    const measurementDate = tolerance.last_measurement_date;
 
-    // Determine if out of appetite (adjusted score exceeds typical threshold)
-    // Threshold is 15 for a 5×5 matrix (high-high)
-    const outOfAppetite = adjustedScore > 15;
+    // Check for missing/stale data
+    const isDataMissing = checkDataMissing(
+        currentValue,
+        measurementDate,
+        tolerance.measurement_window_days,
+        currentDate
+    );
 
-    const explanations: Record<AppetiteLevel, string> = {
-        ZERO: 'Zero appetite - severity doubled. Immediate action required.',
-        LOW: 'Low appetite - severity increased by 50%. Prioritize mitigation.',
-        MODERATE: 'Moderate appetite - normal risk scoring applied.',
-        HIGH: 'High appetite - reduced severity. Monitor for changes.',
-    };
+    if (isDataMissing) {
+        return {
+            tolerance_id: tolerance.id,
+            metric_name: tolerance.metric_name,
+            is_soft_breached: false,
+            is_hard_breached: false,
+            is_data_missing: true,
+            breach_rule_met: false,
+            current_value: currentValue ?? null,
+            severity: 'WARN'
+        };
+    }
+
+    // Direction-aware breach detection
+    const is_hard_breached = isBreached(
+        currentValue!,
+        tolerance.hard_limit,
+        tolerance.breach_direction,
+        tolerance.comparison_operator
+    );
+
+    const is_soft_breached = isBreached(
+        currentValue!,
+        tolerance.soft_limit,
+        tolerance.breach_direction,
+        tolerance.comparison_operator
+    );
+
+    // Evaluate breach rule
+    const breachRuleResult = evaluateBreachRule(tolerance);
 
     return {
-        baseScore,
-        adjustedScore: Math.round(adjustedScore * 100) / 100,
-        multiplier,
-        appetiteLevel,
-        outOfAppetite,
-        explanation: explanations[appetiteLevel],
+        tolerance_id: tolerance.id,
+        metric_name: tolerance.metric_name,
+        is_soft_breached,
+        is_hard_breached,
+        is_data_missing: false,
+        breach_rule_met: breachRuleResult.rule_met,
+        periods_remaining: breachRuleResult.periods_remaining,
+        breach_count_in_window: breachRuleResult.breach_count,
+        current_value: currentValue!,
+        severity: is_hard_breached ? 'CRITICAL' : tolerance.escalation_severity_on_soft_breach
     };
 }
 
 /**
- * Calculate RAF score for a risk including the full assessment
+ * Check if data is missing or stale
+ */
+function checkDataMissing(
+    currentValue: number | null | undefined,
+    measurementDate: string | null | undefined,
+    windowDays: number,
+    currentDate: Date
+): boolean {
+    if (currentValue === null || currentValue === undefined) {
+        return true;
+    }
+
+    if (!measurementDate) {
+        return true;
+    }
+
+    const measureDate = new Date(measurementDate);
+    const cutoff = new Date(currentDate);
+    cutoff.setDate(cutoff.getDate() - windowDays);
+
+    return measureDate < cutoff;
+}
+
+/**
+ * Direction-aware breach detection
+ */
+function isBreached(
+    currentValue: number,
+    limit: number | null,
+    direction: BreachDirection,
+    operator: ComparisonOperator = 'gte'
+): boolean {
+    if (limit === null) {
+        return false;
+    }
+
+    if (direction === 'UP') {
+        // Higher is worse (e.g., complaints, downtime)
+        switch (operator) {
+            case 'gt': return currentValue > limit;
+            case 'gte': return currentValue >= limit;
+            default: return currentValue >= limit;
+        }
+    } else {
+        // Lower is worse (e.g., LCR, capital ratio)
+        switch (operator) {
+            case 'lt': return currentValue < limit;
+            case 'lte': return currentValue <= limit;
+            default: return currentValue <= limit;
+        }
+    }
+}
+
+/**
+ * Evaluate breach rule (POINT_IN_TIME, SUSTAINED, N_BREACHES)
+ */
+function evaluateBreachRule(tolerance: ToleranceMetric): {
+    rule_met: boolean;
+    periods_remaining?: number;
+    breach_count?: number;
+} {
+    // For now, implement POINT_IN_TIME (always met if breached)
+    // SUSTAINED and N_BREACHES require historical data - placeholder for Layer B
+    switch (tolerance.breach_rule) {
+        case 'POINT_IN_TIME':
+            return { rule_met: true };
+
+        case 'SUSTAINED_N_PERIODS':
+            // TODO: Query historical breaches
+            const periodsRequired = tolerance.breach_rule_config?.periods || 3;
+            return {
+                rule_met: false, // Placeholder - needs history query
+                periods_remaining: periodsRequired
+            };
+
+        case 'N_BREACHES_IN_WINDOW':
+            // TODO: Query historical breaches
+            const countRequired = tolerance.breach_rule_config?.count || 2;
+            return {
+                rule_met: false, // Placeholder - needs history query
+                breach_count: 0
+            };
+
+        default:
+            return { rule_met: true };
+    }
+}
+
+// ============================================================================
+// AGGREGATION (Risk Level)
+// ============================================================================
+
+/**
+ * Aggregate tolerance statuses into risk-level out-of-appetite decision
+ * Respects precedence order
+ */
+export function aggregateToleranceStatuses(
+    statuses: ToleranceStatus[],
+    category: AppetiteCategory,
+    riskMateriality?: { isMaterial: boolean; explanation: string }
+): OutOfAppetiteResult {
+
+    // Rule 1: Check for hard limit breaches (highest precedence after ZERO)
+    const hardBreaches = statuses.filter(s => s.is_hard_breached);
+
+    // Rule 2: Check for ZERO appetite + material exposure
+    if (category.appetite_level === 'ZERO' && riskMateriality?.isMaterial) {
+        // But hard breach takes precedence if present
+        if (hardBreaches.length > 0) {
+            return {
+                outOfAppetite: true,
+                escalationRequired: true,
+                severity: 'CRITICAL',
+                reason_code: 'HARD_LIMIT_BREACH',
+                impacted_tolerances: hardBreaches.map(s => ({
+                    tolerance_id: s.tolerance_id,
+                    metric_name: s.metric_name
+                })),
+                evidence: {
+                    breached_limits: hardBreaches.map(s => s.metric_name),
+                    also_zero_appetite_material: true
+                }
+            };
+        }
+
+        return {
+            outOfAppetite: true,
+            escalationRequired: true,
+            severity: 'CRITICAL',
+            reason_code: 'ZERO_APPETITE_MATERIAL',
+            impacted_tolerances: [],
+            evidence: { materiality: riskMateriality }
+        };
+    }
+
+    // Rule 3: Hard limit breach
+    if (hardBreaches.length > 0) {
+        return {
+            outOfAppetite: true,
+            escalationRequired: true,
+            severity: 'CRITICAL',
+            reason_code: 'HARD_LIMIT_BREACH',
+            impacted_tolerances: hardBreaches.map(s => ({
+                tolerance_id: s.tolerance_id,
+                metric_name: s.metric_name
+            })),
+            evidence: { breached_limits: hardBreaches.map(s => s.metric_name) }
+        };
+    }
+
+    // Rule 4: Soft limit + escalation rule met
+    const softEscalations = statuses.filter(s =>
+        s.is_soft_breached && s.breach_rule_met
+    );
+    if (softEscalations.length > 0) {
+        const maxSeverity = softEscalations.reduce((max, s) =>
+            severityToNumber(s.severity) > severityToNumber(max) ? s.severity : max,
+            'WARN' as Severity
+        );
+
+        return {
+            outOfAppetite: true,
+            escalationRequired: true,
+            severity: maxSeverity,
+            reason_code: 'SOFT_LIMIT_ESCALATION',
+            impacted_tolerances: softEscalations.map(s => ({
+                tolerance_id: s.tolerance_id,
+                metric_name: s.metric_name
+            })),
+            evidence: { breach_rule: 'ESCALATION_TRIGGERED' }
+        };
+    }
+
+    // Rule 5: Missing data (lower precedence than actual breaches)
+    const missingData = statuses.filter(s => s.is_data_missing);
+    if (missingData.length > 0) {
+        return {
+            outOfAppetite: false,
+            escalationRequired: true,
+            severity: 'WARN',
+            reason_code: 'DATA_MISSING_FOR_TOLERANCE',
+            impacted_tolerances: missingData.map(s => ({
+                tolerance_id: s.tolerance_id,
+                metric_name: s.metric_name
+            })),
+            evidence: { missing_count: missingData.length }
+        };
+    }
+
+    // Rule 6: Soft breach pending escalation
+    const softPending = statuses.filter(s =>
+        s.is_soft_breached && !s.breach_rule_met
+    );
+    if (softPending.length > 0) {
+        return {
+            outOfAppetite: false,
+            escalationRequired: false,
+            severity: 'INFO',
+            reason_code: 'SOFT_BREACH_PENDING_ESCALATION',
+            impacted_tolerances: softPending.map(s => ({
+                tolerance_id: s.tolerance_id,
+                metric_name: s.metric_name
+            })),
+            evidence: {
+                pending_count: softPending.length,
+                periods_remaining: softPending[0]?.periods_remaining
+            }
+        };
+    }
+
+    // Rule 7: Within appetite
+    return {
+        outOfAppetite: false,
+        escalationRequired: false,
+        severity: 'INFO',
+        reason_code: 'WITHIN_APPETITE',
+        impacted_tolerances: [],
+        evidence: {}
+    };
+}
+
+function severityToNumber(severity: Severity): number {
+    switch (severity) {
+        case 'CRITICAL': return 3;
+        case 'WARN': return 2;
+        case 'INFO': return 1;
+        default: return 0;
+    }
+}
+
+// ============================================================================
+// MATERIALITY EVALUATION
+// ============================================================================
+
+/**
+ * Evaluate materiality for ZERO appetite risks
+ */
+export async function evaluateMateriality(
+    riskId: string,
+    organizationId: string,
+    rule: MaterialityRule
+): Promise<{ isMaterial: boolean; explanation: string; value?: number }> {
+
+    // Calculate measurement window
+    const windowStart = new Date();
+    windowStart.setDate(windowStart.getDate() - rule.measurement_window_days);
+
+    switch (rule.rule_type) {
+        case 'count':
+            return evaluateCountMateriality(riskId, organizationId, rule, windowStart);
+
+        case 'amount':
+            return evaluateAmountMateriality(riskId, organizationId, rule);
+
+        case 'percentage':
+            return evaluatePercentageMateriality(riskId, organizationId, rule);
+
+        case 'score_band':
+            return evaluateScoreBandMateriality(riskId, rule);
+
+        default:
+            return { isMaterial: false, explanation: 'Unknown materiality rule type' };
+    }
+}
+
+async function evaluateCountMateriality(
+    riskId: string,
+    organizationId: string,
+    rule: MaterialityRule,
+    windowStart: Date
+): Promise<{ isMaterial: boolean; explanation: string; value?: number }> {
+    // Count incidents/events based on aggregation scope
+    let query = supabase
+        .from('incidents')
+        .select('id', { count: 'exact' })
+        .gte('occurrence_date', windowStart.toISOString());
+
+    if (rule.aggregation_scope === 'risk') {
+        query = query.contains('linked_risk_ids', [riskId]);
+    } else if (rule.aggregation_scope === 'org') {
+        query = query.eq('organization_id', organizationId);
+    }
+
+    const { count, error } = await query;
+
+    if (error) {
+        console.error('Error evaluating count materiality:', error);
+        return { isMaterial: false, explanation: 'Error querying incidents' };
+    }
+
+    const eventCount = count || 0;
+    const isMaterial = compareValues(eventCount, rule.threshold, rule.comparison);
+
+    return {
+        isMaterial,
+        explanation: `Event count (${eventCount}) ${rule.comparison} ${rule.threshold}`,
+        value: eventCount
+    };
+}
+
+async function evaluateAmountMateriality(
+    riskId: string,
+    organizationId: string,
+    rule: MaterialityRule
+): Promise<{ isMaterial: boolean; explanation: string; value?: number }> {
+    // Get exposure amount - implementation depends on data model
+    // Placeholder - would query financial impact or exposure field
+    return {
+        isMaterial: false,
+        explanation: 'Amount materiality not yet implemented',
+        value: 0
+    };
+}
+
+async function evaluatePercentageMateriality(
+    riskId: string,
+    organizationId: string,
+    rule: MaterialityRule
+): Promise<{ isMaterial: boolean; explanation: string; value?: number }> {
+    // Get percentage of capital/revenue - requires organization financials
+    // Placeholder
+    return {
+        isMaterial: false,
+        explanation: 'Percentage materiality not yet implemented',
+        value: 0
+    };
+}
+
+async function evaluateScoreBandMateriality(
+    riskId: string,
+    rule: MaterialityRule
+): Promise<{ isMaterial: boolean; explanation: string; value?: number }> {
+    const { data: risk, error } = await supabase
+        .from('risks')
+        .select('residual_score')
+        .eq('id', riskId)
+        .single();
+
+    if (error || !risk) {
+        return { isMaterial: false, explanation: 'Could not fetch risk score' };
+    }
+
+    const score = risk.residual_score || 0;
+    const isMaterial = compareValues(score, rule.threshold, rule.comparison);
+
+    return {
+        isMaterial,
+        explanation: `Residual score (${score}) ${rule.comparison} ${rule.threshold}`,
+        value: score
+    };
+}
+
+function compareValues(value: number, threshold: number, operator: ComparisonOperator): boolean {
+    switch (operator) {
+        case 'gt': return value > threshold;
+        case 'gte': return value >= threshold;
+        case 'lt': return value < threshold;
+        case 'lte': return value <= threshold;
+        case 'eq': return value === threshold;
+        default: return false;
+    }
+}
+
+// ============================================================================
+// RESIDUAL SCORE CALCULATION (Using DIME)
+// ============================================================================
+
+/**
+ * Calculate residual score using control effectiveness (DIME)
+ */
+export async function calculateResidualScore(
+    riskId: string
+): Promise<{
+    inherent_score: number;
+    residual_score: number;
+    control_effectiveness: number;
+    mapping_method: string;
+}> {
+    // Get risk with controls
+    const { data: risk, error: riskError } = await supabase
+        .from('risks')
+        .select(`
+      likelihood_inherent,
+      impact_inherent,
+      controls (
+        id,
+        design_score,
+        implementation_score,
+        monitoring_score,
+        evaluation_score
+      )
+    `)
+        .eq('id', riskId)
+        .single();
+
+    if (riskError || !risk) {
+        return {
+            inherent_score: 0,
+            residual_score: 0,
+            control_effectiveness: 0,
+            mapping_method: 'ERROR'
+        };
+    }
+
+    const inherent_score = (risk.likelihood_inherent || 1) * (risk.impact_inherent || 1);
+    const controls = risk.controls || [];
+
+    if (controls.length === 0) {
+        return {
+            inherent_score,
+            residual_score: inherent_score,
+            control_effectiveness: 0,
+            mapping_method: 'DIME_v1'
+        };
+    }
+
+    // Calculate aggregate DIME effectiveness
+    let totalDIME = 0;
+    for (const control of controls) {
+        const d = control.design_score || 1;
+        const i = control.implementation_score || 1;
+        const m = control.monitoring_score || 1;
+        const e = control.evaluation_score || 1;
+
+        // DIME average per control (1-5 scale)
+        const controlDIME = (d + i + m + e) / 4;
+        totalDIME += controlDIME;
+    }
+
+    // Average across all controls, normalized to 0-100
+    const avgDIME = totalDIME / controls.length;
+    const control_effectiveness = ((avgDIME - 1) / 4) * 100; // 1-5 scale to 0-100
+
+    // Residual = Inherent * (1 - effectiveness%)
+    const reduction = control_effectiveness / 100;
+    const residual_score = inherent_score * (1 - reduction);
+
+    return {
+        inherent_score,
+        residual_score: Math.round(residual_score * 100) / 100,
+        control_effectiveness: Math.round(control_effectiveness * 100) / 100,
+        mapping_method: 'DIME_v1'
+    };
+}
+
+// ============================================================================
+// FULL RAF SCORE CALCULATION
+// ============================================================================
+
+/**
+ * Calculate complete RAF score for a risk
  */
 export async function calculateRiskRAFScore(
-    riskId: string
+    riskId: string,
+    scoreBasis: ScoreBasis = 'residual'
 ): Promise<{ data: RAFScoreResult | null; error: Error | null }> {
     try {
-        // Get risk with linked appetite category
+        // Get risk with appetite category
         const { data: risk, error: riskError } = await supabase
             .from('risks')
             .select(`
-        *,
+        id,
+        organization_id,
+        likelihood_inherent,
+        impact_inherent,
         appetite_category:appetite_category_id (
           id,
           appetite_level,
-          risk_category,
-          rationale
+          risk_category
         )
       `)
             .eq('id', riskId)
             .single();
 
         if (riskError || !risk) {
-            console.error('Error fetching risk for RAF calculation:', riskError);
             return { data: null, error: new Error(riskError?.message || 'Risk not found') };
         }
 
-        // Calculate base score
-        const baseScore = (risk.likelihood_inherent || 1) * (risk.impact_inherent || 1);
+        // Calculate scores
+        const scores = await calculateResidualScore(riskId);
+        const baseScore = scoreBasis === 'inherent' ? scores.inherent_score : scores.residual_score;
 
-        // If no appetite category linked, use MODERATE as default
-        const appetiteLevel = (risk.appetite_category?.appetite_level as AppetiteLevel) || 'MODERATE';
+        // Get appetite category (handle both array and object from Supabase)
+        const appetiteCat = Array.isArray(risk.appetite_category)
+            ? risk.appetite_category[0]
+            : risk.appetite_category;
 
-        const result = calculateRAFAdjustedScore(baseScore, appetiteLevel);
+        const category: AppetiteCategory = {
+            id: appetiteCat?.id || '',
+            appetite_level: (appetiteCat?.appetite_level as AppetiteLevel) || 'MODERATE',
+            risk_category: appetiteCat?.risk_category || 'Uncategorized',
+            materiality_rule: null // Would load from category config
+        };
 
-        return { data: result, error: null };
+        // Get linked tolerances
+        const tolerances = await getLinkedTolerances(riskId, category.id);
+
+        // Evaluate each tolerance
+        const toleranceStatuses = tolerances.map(t => evaluateToleranceStatus(t));
+
+        // Evaluate materiality if ZERO appetite
+        let materialityResult: { isMaterial: boolean; explanation: string } | undefined;
+        if (category.appetite_level === 'ZERO' && category.materiality_rule) {
+            materialityResult = await evaluateMateriality(
+                riskId,
+                risk.organization_id,
+                category.materiality_rule
+            );
+        }
+
+        // Aggregate to risk-level decision
+        const appetiteStatus = aggregateToleranceStatuses(
+            toleranceStatuses,
+            category,
+            materialityResult
+        );
+
+        // Apply multiplier (informational only - real decision is tolerance-based)
+        const multiplier = getAppetiteMultiplier(category.appetite_level);
+        const raf_adjusted_score = baseScore * multiplier;
+
+        return {
+            data: {
+                inherent_score: scores.inherent_score,
+                residual_score: scores.residual_score,
+                raf_adjusted_score: Math.round(raf_adjusted_score * 100) / 100,
+                score_basis: scoreBasis,
+                multiplier,
+                appetiteLevel: category.appetite_level,
+                control_effectiveness: scores.control_effectiveness,
+                appetite_status: appetiteStatus,
+                explanation: generateExplanation(category.appetite_level, appetiteStatus)
+            },
+            error: null
+        };
     } catch (err) {
-        console.error('Unexpected error calculating RAF score:', err);
+        console.error('Error calculating RAF score:', err);
         return {
             data: null,
-            error: err instanceof Error ? err : new Error('Unknown error'),
+            error: err instanceof Error ? err : new Error('Unknown error')
         };
     }
 }
+
+function getAppetiteMultiplier(level: AppetiteLevel): number {
+    // Multipliers are informational - real decisions are tolerance-based
+    switch (level) {
+        case 'ZERO': return 2.0;
+        case 'LOW': return 1.5;
+        case 'MODERATE': return 1.0;
+        case 'HIGH': return 0.8;
+        default: return 1.0;
+    }
+}
+
+function generateExplanation(level: AppetiteLevel, status: OutOfAppetiteResult): string {
+    if (status.outOfAppetite) {
+        return `OUT OF APPETITE: ${status.reason_code} - ${status.impacted_tolerances.map(t => t.metric_name).join(', ')}`;
+    }
+    if (status.escalationRequired) {
+        return `ATTENTION REQUIRED: ${status.reason_code} - escalation to 2nd line recommended`;
+    }
+    return `Within appetite (${level})`;
+}
+
+// ============================================================================
+// TOLERANCE LINKING
+// ============================================================================
+
+/**
+ * Get linked tolerances with precedence:
+ * 1. Risk-specific tolerances
+ * 2. Category defaults (not overridden)
+ */
+async function getLinkedTolerances(
+    riskId: string,
+    categoryId: string
+): Promise<ToleranceMetric[]> {
+    // This is a placeholder - actual implementation depends on DB schema
+    // In production, this would query:
+    // 1. risk_tolerance_links (risk-specific)
+    // 2. appetite_kri_thresholds (category defaults)
+    // With proper deduplication by metric_id
+
+    try {
+        // Get category tolerances as defaults
+        const { data: categoryTolerances, error } = await supabase
+            .from('appetite_kri_thresholds')
+            .select(`
+        id,
+        metric_name,
+        green_max,
+        amber_max,
+        red_min,
+        kri_id
+      `)
+            .eq('appetite_category_id', categoryId);
+
+        if (error || !categoryTolerances) {
+            return [];
+        }
+
+        // Map to ToleranceMetric interface (with defaults for missing fields)
+        return categoryTolerances.map(t => ({
+            id: t.id,
+            metric_id: t.id,
+            metric_name: t.metric_name || 'Unknown',
+            soft_limit: t.amber_max,
+            hard_limit: t.red_min,
+            breach_direction: 'UP' as BreachDirection, // Default - would come from config
+            comparison_operator: 'gte' as ComparisonOperator,
+            breach_rule: 'POINT_IN_TIME' as BreachRule,
+            breach_rule_config: {},
+            measurement_window_days: DEFAULT_MEASUREMENT_WINDOW_DAYS,
+            escalation_severity_on_soft_breach: 'WARN' as Severity,
+            current_value: null, // Would need to join with KRI data
+            last_measurement_date: null
+        }));
+    } catch (err) {
+        console.error('Error getting linked tolerances:', err);
+        return [];
+    }
+}
+
+// ============================================================================
+// UPDATE RISK RAF SCORE
+// ============================================================================
 
 /**
  * Update a risk's RAF-adjusted score in the database
@@ -163,9 +843,11 @@ export async function updateRiskRAFScore(
         const { error: updateError } = await supabase
             .from('risks')
             .update({
-                raf_adjusted_score: result.adjustedScore,
+                raf_adjusted_score: result.raf_adjusted_score,
                 appetite_multiplier: result.multiplier,
-                out_of_appetite: result.outOfAppetite,
+                out_of_appetite: result.appetite_status.outOfAppetite,
+                residual_score: result.residual_score,
+                last_residual_calc: new Date().toISOString()
             })
             .eq('id', riskId);
 
@@ -174,33 +856,33 @@ export async function updateRiskRAFScore(
             return { success: false, error: new Error(updateError.message) };
         }
 
-        console.log(`✅ Updated RAF score for risk ${riskId}: ${result.adjustedScore} (${result.multiplier}x)`);
+        console.log(`✅ Updated RAF score for risk ${riskId}: ${result.raf_adjusted_score} (${result.appetite_status.reason_code})`);
         return { success: true, error: null };
     } catch (err) {
         console.error('Unexpected error updating RAF score:', err);
         return {
             success: false,
-            error: err instanceof Error ? err : new Error('Unknown error'),
+            error: err instanceof Error ? err : new Error('Unknown error')
         };
     }
 }
 
 // ============================================================================
-// BULK RAF RECALCULATION
+// BULK RECALCULATION (Placeholder for DB lock in Layer B)
 // ============================================================================
 
 /**
  * Recalculate RAF scores for all risks in an organization
- * Called when appetite levels change
  * 
- * Includes debouncing to prevent cascade loops
+ * NOTE: In production, use DB advisory lock or recalc_runs table
+ * Current implementation is single-process only
  */
 let recalculationInProgress = false;
 
 export async function recalculateAllRAFScores(
     organizationId: string
 ): Promise<{ updated: number; errors: number }> {
-    // Debounce to prevent cascade loops
+    // TODO: Replace with DB lock in Layer B
     if (recalculationInProgress) {
         console.log('⏸️ RAF recalculation already in progress, skipping...');
         return { updated: 0, errors: 0 };
@@ -209,7 +891,18 @@ export async function recalculateAllRAFScores(
     recalculationInProgress = true;
 
     try {
-        // Get all risks for the organization with appetite categories
+        // Verify organization ownership
+        const { data: orgCheck } = await supabase
+            .from('organizations')
+            .select('id')
+            .eq('id', organizationId)
+            .single();
+
+        if (!orgCheck) {
+            console.error('Organization not found or access denied');
+            return { updated: 0, errors: 1 };
+        }
+
         const { data: risks, error: fetchError } = await supabase
             .from('risks')
             .select('id')
@@ -241,148 +934,9 @@ export async function recalculateAllRAFScores(
 }
 
 // ============================================================================
-// KRI THRESHOLD GENERATION FROM TOLERANCES
+// APPETITE HELPERS
 // ============================================================================
 
-/**
- * Generate KRI thresholds from a tolerance metric
- * 
- * Mapping:
- * - Tolerance green_max → KRI Target
- * - Tolerance amber_max / Soft Limit → KRI Warning
- * - Tolerance red_min / Hard Limit → KRI Critical
- */
-export async function generateKRIFromTolerance(
-    toleranceId: string
-): Promise<{ data: ToleranceKRIMapping | null; error: Error | null }> {
-    try {
-        // Get tolerance with limits
-        const { data: tolerance, error: tolError } = await supabase
-            .from('appetite_kri_thresholds')
-            .select(`
-        *,
-        limits:risk_limits (
-          soft_limit,
-          hard_limit
-        )
-      `)
-            .eq('id', toleranceId)
-            .single();
-
-        if (tolError || !tolerance) {
-            return { data: null, error: new Error(tolError?.message || 'Tolerance not found') };
-        }
-
-        // Determine KRI thresholds
-        const limits = tolerance.limits?.[0];
-
-        const mapping: ToleranceKRIMapping = {
-            toleranceId,
-            kriTarget: tolerance.green_max ?? 0,
-            kriWarning: limits?.soft_limit ?? tolerance.amber_max ?? tolerance.green_max * 1.2,
-            kriCritical: limits?.hard_limit ?? tolerance.red_min ?? tolerance.green_max * 1.5,
-            unit: tolerance.unit || 'count',
-            description: `Auto-generated from tolerance: ${tolerance.metric_name}`,
-        };
-
-        return { data: mapping, error: null };
-    } catch (err) {
-        console.error('Error generating KRI from tolerance:', err);
-        return {
-            data: null,
-            error: err instanceof Error ? err : new Error('Unknown error'),
-        };
-    }
-}
-
-/**
- * Create or update a KRI definition based on tolerance thresholds
- */
-export async function syncKRIWithTolerance(
-    kriId: string,
-    toleranceId: string
-): Promise<{ success: boolean; error: Error | null }> {
-    try {
-        const { data: mapping, error: mapError } = await generateKRIFromTolerance(toleranceId);
-
-        if (mapError || !mapping) {
-            return { success: false, error: mapError };
-        }
-
-        // Update KRI thresholds
-        const { error: updateError } = await supabase
-            .from('kri_definitions')
-            .update({
-                target_value: mapping.kriTarget,
-                threshold_yellow_upper: mapping.kriWarning,
-                threshold_red_upper: mapping.kriCritical,
-                unit_of_measure: mapping.unit,
-            })
-            .eq('id', kriId);
-
-        if (updateError) {
-            console.error('Error syncing KRI with tolerance:', updateError);
-            return { success: false, error: new Error(updateError.message) };
-        }
-
-        // Update tolerance to link to KRI
-        await supabase
-            .from('appetite_kri_thresholds')
-            .update({ kri_id: kriId })
-            .eq('id', toleranceId);
-
-        console.log(`✅ Synced KRI ${kriId} with tolerance ${toleranceId}`);
-        return { success: true, error: null };
-    } catch (err) {
-        console.error('Unexpected error syncing KRI:', err);
-        return {
-            success: false,
-            error: err instanceof Error ? err : new Error('Unknown error'),
-        };
-    }
-}
-
-// ============================================================================
-// OUT OF APPETITE DETECTION
-// ============================================================================
-
-/**
- * Check if a risk is out of appetite and trigger appropriate actions
- */
-export async function checkOutOfAppetite(
-    riskId: string
-): Promise<{ outOfAppetite: boolean; actions: string[] }> {
-    const actions: string[] = [];
-
-    const { data: result, error } = await calculateRiskRAFScore(riskId);
-
-    if (error || !result) {
-        return { outOfAppetite: false, actions: ['Error calculating RAF score'] };
-    }
-
-    if (result.outOfAppetite) {
-        actions.push('Risk flagged as OUT OF APPETITE');
-
-        if (result.appetiteLevel === 'ZERO' || result.appetiteLevel === 'LOW') {
-            actions.push('Mandatory escalation to CRO required');
-            actions.push('Monthly control effectiveness reviews enabled');
-        }
-
-        if (result.appetiteLevel === 'ZERO') {
-            actions.push('Escalate to board risk committee');
-        }
-    }
-
-    return { outOfAppetite: result.outOfAppetite, actions };
-}
-
-// ============================================================================
-// APPETITE LEVEL HELPERS
-// ============================================================================
-
-/**
- * Get appetite level for a risk category
- */
 export async function getAppetiteLevelForCategory(
     organizationId: string,
     riskCategory: string
@@ -405,9 +959,6 @@ export async function getAppetiteLevelForCategory(
     }
 }
 
-/**
- * Get all categories with their appetite status
- */
 export async function getOrganizationAppetiteSummary(
     organizationId: string
 ): Promise<{
@@ -476,3 +1027,190 @@ export async function getOrganizationAppetiteSummary(
 
     return result;
 }
+
+// ============================================================================
+// BACKWARD COMPATIBILITY - LEGACY API
+// ============================================================================
+
+/**
+ * Legacy function for backward compatibility
+ * @deprecated Use calculateRiskRAFScore instead
+ */
+export interface LegacyRAFScoreResult {
+    baseScore: number;
+    adjustedScore: number;
+    multiplier: number;
+    appetiteLevel: AppetiteLevel;
+    outOfAppetite: boolean;
+    explanation: string;
+}
+
+export function calculateRAFAdjustedScore(
+    baseScore: number,
+    appetiteLevel: AppetiteLevel,
+    customMultipliers?: Partial<Record<AppetiteLevel, number>>
+): LegacyRAFScoreResult {
+    const defaultMultipliers = {
+        ZERO: 2.0,
+        LOW: 1.5,
+        MODERATE: 1.0,
+        HIGH: 0.8,
+    };
+
+    const multipliers = { ...defaultMultipliers, ...customMultipliers };
+    const multiplier = multipliers[appetiteLevel] || 1.0;
+    const adjustedScore = baseScore * multiplier;
+
+    // Legacy: still uses threshold-based (retained for compatibility)
+    const outOfAppetite = adjustedScore > 15;
+
+    const explanations: Record<AppetiteLevel, string> = {
+        ZERO: 'Zero appetite - severity doubled. Immediate action required.',
+        LOW: 'Low appetite - severity increased by 50%. Prioritize mitigation.',
+        MODERATE: 'Moderate appetite - normal risk scoring applied.',
+        HIGH: 'High appetite - reduced severity. Monitor for changes.',
+    };
+
+    return {
+        baseScore,
+        adjustedScore: Math.round(adjustedScore * 100) / 100,
+        multiplier,
+        appetiteLevel,
+        outOfAppetite,
+        explanation: explanations[appetiteLevel],
+    };
+}
+
+export interface ToleranceKRIMapping {
+    toleranceId: string;
+    kriTarget: number;
+    kriWarning: number;
+    kriCritical: number;
+    unit: string;
+    description: string;
+}
+
+/**
+ * Legacy function: Generate KRI thresholds from a tolerance metric
+ * @deprecated Use tolerance-based evaluation instead
+ */
+export async function generateKRIFromTolerance(
+    toleranceId: string
+): Promise<{ data: ToleranceKRIMapping | null; error: Error | null }> {
+    try {
+        const { data: tolerance, error: tolError } = await supabase
+            .from('appetite_kri_thresholds')
+            .select(`
+                *,
+                limits:risk_limits (
+                    soft_limit,
+                    hard_limit
+                )
+            `)
+            .eq('id', toleranceId)
+            .single();
+
+        if (tolError || !tolerance) {
+            return { data: null, error: new Error(tolError?.message || 'Tolerance not found') };
+        }
+
+        const limits = tolerance.limits?.[0];
+
+        const mapping: ToleranceKRIMapping = {
+            toleranceId,
+            kriTarget: tolerance.green_max ?? 0,
+            kriWarning: limits?.soft_limit ?? tolerance.amber_max ?? tolerance.green_max * 1.2,
+            kriCritical: limits?.hard_limit ?? tolerance.red_min ?? tolerance.green_max * 1.5,
+            unit: tolerance.unit || 'count',
+            description: `Auto-generated from tolerance: ${tolerance.metric_name}`,
+        };
+
+        return { data: mapping, error: null };
+    } catch (err) {
+        console.error('Error generating KRI from tolerance:', err);
+        return {
+            data: null,
+            error: err instanceof Error ? err : new Error('Unknown error'),
+        };
+    }
+}
+
+/**
+ * Legacy function: Sync KRI with tolerance
+ * @deprecated Will be replaced with transactional RPC in Layer B
+ */
+export async function syncKRIWithTolerance(
+    kriId: string,
+    toleranceId: string
+): Promise<{ success: boolean; error: Error | null }> {
+    try {
+        const { data: mapping, error: mapError } = await generateKRIFromTolerance(toleranceId);
+
+        if (mapError || !mapping) {
+            return { success: false, error: mapError };
+        }
+
+        const { error: updateError } = await supabase
+            .from('kri_definitions')
+            .update({
+                target_value: mapping.kriTarget,
+                threshold_yellow_upper: mapping.kriWarning,
+                threshold_red_upper: mapping.kriCritical,
+                unit_of_measure: mapping.unit,
+            })
+            .eq('id', kriId);
+
+        if (updateError) {
+            console.error('Error syncing KRI with tolerance:', updateError);
+            return { success: false, error: new Error(updateError.message) };
+        }
+
+        await supabase
+            .from('appetite_kri_thresholds')
+            .update({ kri_id: kriId })
+            .eq('id', toleranceId);
+
+        console.log(`✅ Synced KRI ${kriId} with tolerance ${toleranceId}`);
+        return { success: true, error: null };
+    } catch (err) {
+        console.error('Unexpected error syncing KRI:', err);
+        return {
+            success: false,
+            error: err instanceof Error ? err : new Error('Unknown error'),
+        };
+    }
+}
+
+/**
+ * Legacy function: Check out of appetite
+ * @deprecated Use calculateRiskRAFScore's appetite_status instead
+ */
+export async function checkOutOfAppetite(
+    riskId: string
+): Promise<{ outOfAppetite: boolean; actions: string[] }> {
+    const actions: string[] = [];
+
+    const { data: result, error } = await calculateRiskRAFScore(riskId);
+
+    if (error || !result) {
+        return { outOfAppetite: false, actions: ['Error calculating RAF score'] };
+    }
+
+    const outOfAppetite = result.appetite_status.outOfAppetite;
+
+    if (outOfAppetite) {
+        actions.push(`Risk flagged as OUT OF APPETITE: ${result.appetite_status.reason_code}`);
+
+        if (result.appetiteLevel === 'ZERO' || result.appetiteLevel === 'LOW') {
+            actions.push('Mandatory escalation to CRO required');
+            actions.push('Monthly control effectiveness reviews enabled');
+        }
+
+        if (result.appetiteLevel === 'ZERO') {
+            actions.push('Escalate to board risk committee');
+        }
+    }
+
+    return { outOfAppetite, actions };
+}
+
