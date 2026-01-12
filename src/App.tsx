@@ -28,6 +28,7 @@ import ImportExportManager from '@/components/importExport/ImportExportManager';
 import AIAssistant from '@/components/ai/AIAssistant';
 import AdminPanel from '@/components/admin/AdminPanel';
 import AdminCheck from '@/components/debug/AdminCheck';
+import RAFManagement from '@/components/raf/RAFManagement';
 import type { AuthState } from '@/types/auth';
 
 export default function App() {
@@ -205,6 +206,9 @@ export default function App() {
                   <TabsTrigger value="intelligence" className="text-xs sm:text-sm whitespace-nowrap">
                     <span className="hidden sm:inline">🧠 </span>Intel
                   </TabsTrigger>
+                  <TabsTrigger value="raf" className="text-xs sm:text-sm whitespace-nowrap">
+                    <span className="hidden sm:inline">🎯 </span>RAF
+                  </TabsTrigger>
                   <TabsTrigger value="admin" className="text-xs sm:text-sm whitespace-nowrap">
                     <span className="hidden sm:inline">⚙️ </span>Admin
                   </TabsTrigger>
@@ -271,6 +275,10 @@ export default function App() {
 
               <TabsContent value="intelligence">
                 <RiskIntelligenceManagement />
+              </TabsContent>
+
+              <TabsContent value="raf">
+                <RAFManagement />
               </TabsContent>
             </>
           )}
