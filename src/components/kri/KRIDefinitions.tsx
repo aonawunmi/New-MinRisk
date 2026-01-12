@@ -43,8 +43,11 @@ export default function KRIDefinitions() {
   const [risks, setRisks] = useState<Risk[]>([]);
   const [coverage, setCoverage] = useState<{
     total_risks: number;
-    risks_with_kris: number;
+    covered_risks?: number;
+    risks_with_kris?: number;
     coverage_percentage: number;
+    total_kris?: number;
+    active_kris?: number;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +89,15 @@ export default function KRIDefinitions() {
 
       setKris(krisResult.data || []);
       setRisks(risksResult.data || []);
-      setCoverage(coverageResult.data);
+      // Handle both old and new coverage stats format
+      if (coverageResult.data) {
+        const c = coverageResult.data as any;
+        setCoverage({
+          total_risks: c.total_risks || 0,
+          risks_with_kris: c.risks_with_kris || c.covered_risks || 0,
+          coverage_percentage: c.coverage_percentage || 0,
+        });
+      }
     } catch (err) {
       console.error('Load error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -103,13 +114,13 @@ export default function KRIDefinitions() {
 
       if (editingKRI) {
         // When editing: Only update KRI data, don't modify risk links (they're read-only)
-        const result = await updateKRI(editingKRI.id, kriData);
+        const result = await updateKRI({ ...kriData, id: editingKRI.id } as any);
         if (result.error) throw new Error(result.error.message);
         kriId = editingKRI.id;
         console.log('KRI updated:', kriId);
       } else {
         // When creating: Create KRI and link to risk if specified
-        const result = await createKRI(kriData);
+        const result = await createKRI(kriData as any);
         if (result.error) throw new Error(result.error.message);
         kriId = result.data?.id;
         console.log('KRI created with ID:', kriId);
@@ -431,13 +442,13 @@ export default function KRIDefinitions() {
                     </TableCell>
                     <TableCell className="font-medium">{kri.kri_name}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{kri.kri_type}</Badge>
+                      <Badge variant="outline">{kri.indicator_type || 'N/A'}</Badge>
                     </TableCell>
-                    <TableCell>{kri.unit_of_measure}</TableCell>
-                    <TableCell>{kri.frequency}</TableCell>
+                    <TableCell>{kri.measurement_unit || 'N/A'}</TableCell>
+                    <TableCell>{kri.collection_frequency || 'N/A'}</TableCell>
                     <TableCell className="text-xs">
-                      <div>Yellow: {kri.threshold_yellow_lower || '-'} - {kri.threshold_yellow_upper || '-'}</div>
-                      <div>Red: {kri.threshold_red_lower || '-'} - {kri.threshold_red_upper || '-'}</div>
+                      <div>Lower: {kri.lower_threshold ?? '-'}</div>
+                      <div>Upper: {kri.upper_threshold ?? '-'}</div>
                     </TableCell>
                     <TableCell>
                       <Button

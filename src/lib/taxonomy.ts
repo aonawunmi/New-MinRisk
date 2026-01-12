@@ -18,6 +18,9 @@ import type {
   TaxonomyExportRow,
 } from '@/types/taxonomy';
 
+// Re-export types for convenience
+export type { CategoryWithSubcategories } from '@/types/taxonomy';
+
 // ============================================================================
 // RISK CATEGORIES
 // ============================================================================

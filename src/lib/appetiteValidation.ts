@@ -18,6 +18,15 @@ import type {
   Result
 } from './appetiteTolerance';
 
+// Re-export types for convenience
+export type {
+  ChainValidationResult,
+  EnterpriseAppetiteStatus,
+  CategoryAppetiteStatus,
+  AppetiteStatus,
+  Result
+} from './appetiteTolerance';
+
 // ================================================================
 // 3. CHAIN VALIDATION (BLOCKING)
 // ================================================================
@@ -198,8 +207,8 @@ export async function approveRiskAppetiteStatement(
     return {
       success: false,
       error: `Cannot approve RAS: ${criticalGaps.length} critical gaps detected:\n\n` +
-             criticalGaps.map(g => `• ${g.category}: ${g.issue}`).join('\n') +
-             `\n\nResolve these issues before approval.`
+        criticalGaps.map(g => `• ${g.category}: ${g.issue}`).join('\n') +
+        `\n\nResolve these issues before approval.`
     };
   }
 

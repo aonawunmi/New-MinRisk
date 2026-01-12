@@ -90,9 +90,9 @@ export default function KRIDataEntry() {
 
     try {
       const result = await createKRIDataEntry({
-        kri_definition_id: selectedKRI,
-        value: parseFloat(formData.value),
-        period: formData.period || undefined,
+        kri_id: selectedKRI,
+        measurement_value: parseFloat(formData.value),
+        measurement_date: formData.period || undefined,
         notes: formData.notes || undefined,
       });
 
@@ -152,8 +152,8 @@ export default function KRIDataEntry() {
 
               {selectedKRIObj && (
                 <div className="bg-blue-50 rounded p-3 text-sm">
-                  <p className="font-medium">Unit: {selectedKRIObj.unit_of_measure}</p>
-                  <p className="text-gray-600">Frequency: {selectedKRIObj.frequency}</p>
+                  <p className="font-medium">Unit: {selectedKRIObj.measurement_unit || 'N/A'}</p>
+                  <p className="text-gray-600">Frequency: {selectedKRIObj.collection_frequency || 'N/A'}</p>
                 </div>
               )}
 
@@ -231,7 +231,7 @@ export default function KRIDataEntry() {
                         {new Date(entry.created_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="font-semibold">
-                        {entry.value} {selectedKRIObj?.unit_of_measure}
+                        {entry.measurement_value} {selectedKRIObj?.measurement_unit || ''}
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -239,8 +239,8 @@ export default function KRIDataEntry() {
                             entry.alert_status === 'green'
                               ? 'bg-green-500'
                               : entry.alert_status === 'yellow'
-                              ? 'bg-yellow-500'
-                              : 'bg-red-500'
+                                ? 'bg-yellow-500'
+                                : 'bg-red-500'
                           }
                         >
                           {entry.alert_status}

@@ -15,6 +15,7 @@ export interface UserProfile {
   id: string;
   organization_id: string | null;
   full_name: string;
+  email?: string; // Optional - populated from auth.users join when available
   role: UserRole;
   status: UserStatus;
   approved_at: string | null;

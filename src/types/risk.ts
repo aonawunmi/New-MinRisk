@@ -59,3 +59,27 @@ export interface RiskWithControls extends Risk {
 }
 export type RiskCategory = string;
 export type RiskStatus = string;
+export type DIMEScore = 1 | 2 | 3 | 4 | 5;
+
+/**
+ * Data for creating a new risk
+ */
+export interface CreateRiskData {
+  risk_code?: string;
+  risk_title: string;
+  risk_description: string;
+  division: string;
+  department: string;
+  category: string;
+  owner: string;
+  owner_id?: string | null;
+  likelihood_inherent: number;
+  impact_inherent: number;
+  status?: string;
+  period?: string | null;
+  is_priority?: boolean;
+  appetite_category_id?: string | null;
+  root_cause_id?: string | null;
+  impact_id?: string | null;
+  event_text?: string | null;
+}
