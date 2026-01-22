@@ -31,7 +31,7 @@ BEGIN
     v_user_id,
     '00000000-0000-0000-0000-000000000000',
     'user@acme.com',
-    crypt('User123!', gen_salt('bf')),
+    crypt('213Capital$', gen_salt('bf')),
     NOW(),
     NOW(),
     NOW(),
@@ -43,7 +43,7 @@ BEGIN
   )
   ON CONFLICT (id) DO UPDATE
   SET
-    encrypted_password = crypt('User123!', gen_salt('bf')),
+    encrypted_password = crypt('213Capital$', gen_salt('bf')),
     updated_at = NOW();
 
   -- Insert into auth.identities if not exists

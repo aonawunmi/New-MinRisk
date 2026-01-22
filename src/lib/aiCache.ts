@@ -11,7 +11,6 @@
  */
 
 import { supabase } from './supabase';
-import crypto from 'crypto';
 
 export interface CacheConfig {
     feature: 'library_generation' | 'control_suggestion';

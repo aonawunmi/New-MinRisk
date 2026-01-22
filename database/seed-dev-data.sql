@@ -3,7 +3,7 @@
 -- ============================================================================
 -- This script creates test data for development including:
 -- - Test organization (ACME Corp)
--- - Admin user (admin@acme.com / Admin123!)
+-- - Admin user (admin@acme.com / 213Capital$)
 -- - Sample risk configuration
 -- - Sample risks
 --
@@ -65,7 +65,7 @@ SET
 -- 3. Create Admin User in Supabase Auth
 -- ============================================================================
 -- NOTE: This creates the user in auth.users with email verification bypassed
--- Password: Admin123!
+-- Password: 213Capital$
 -- Email: admin@acme.com
 
 -- First, check if user exists
@@ -92,7 +92,7 @@ BEGIN
     v_user_id,
     '00000000-0000-0000-0000-000000000000',
     'admin@acme.com',
-    crypt('Admin123!', gen_salt('bf')),
+    crypt('213Capital$', gen_salt('bf')),
     NOW(),
     NOW(),
     NOW(),
@@ -104,7 +104,7 @@ BEGIN
   )
   ON CONFLICT (id) DO UPDATE
   SET
-    encrypted_password = crypt('Admin123!', gen_salt('bf')),
+    encrypted_password = crypt('213Capital$', gen_salt('bf')),
     updated_at = NOW();
 
   -- Insert into auth.identities if not exists
@@ -284,5 +284,5 @@ WHERE organization_id = '11111111-1111-1111-1111-111111111111';
 -- ============================================================================
 -- You can now login with:
 -- Email: admin@acme.com
--- Password: Admin123!
+-- Password: 213Capital$
 -- ============================================================================

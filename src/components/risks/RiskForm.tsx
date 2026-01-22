@@ -19,7 +19,7 @@ import { listUsersInOrganization } from '@/lib/admin';
 import { isUserAdmin } from '@/lib/profiles';
 import { supabase } from '@/lib/supabase';
 import type { Control, UpdateControlData } from '@/types/control';
-import type { Risk, CreateRiskData } from '@/types/risk';
+import type { Risk, RiskStatus, DIMEScore, CreateRiskData } from '@/types/risk';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -43,6 +43,8 @@ import { AlertCircle, Sparkles, Loader2, CheckCircle, X, Edit, AlertTriangle, Pl
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import TreatmentLogViewer from '@/components/riskIntelligence/TreatmentLogViewer';
+import RiskKRIBuilder from './RiskKRIBuilder';
+import { Activity, Settings2 } from 'lucide-react';
 
 interface RiskFormProps {
   open: boolean;
@@ -106,6 +108,10 @@ export default function RiskForm({
     impact_description: '',
     category: '',
   });
+
+  // KRI Builder State
+  const [showKRIBuilder, setShowKRIBuilder] = useState(false);
+
   const [savingCustom, setSavingCustom] = useState(false);
 
   // Admin access state
@@ -571,6 +577,7 @@ export default function RiskForm({
         impact_id: null,
         event_text: null,
       });
+
       setSelectedCategory('');
       setSelectedSubcategory('');
       setSelectedRootCauseId('');
@@ -709,10 +716,10 @@ export default function RiskForm({
               description: control.description,
               control_type: control.control_type,
               target: control.target,
-              design_score: control.design_score,
-              implementation_score: control.implementation_score,
-              monitoring_score: control.monitoring_score,
-              evaluation_score: control.evaluation_score,
+              design_score: control.design_score as DIMEScore,
+              implementation_score: control.implementation_score as DIMEScore,
+              monitoring_score: control.monitoring_score as DIMEScore,
+              evaluation_score: control.evaluation_score as DIMEScore,
               risk_id: riskId,
             });
             console.log(`Created manual control: ${control.name}`);
@@ -1091,10 +1098,10 @@ export default function RiskForm({
     for (const control of allControls) {
       // Use single source of truth from src/lib/controls.ts
       const effectiveness = calculateControlEffectiveness(
-        control.design_score,
-        control.implementation_score,
-        control.monitoring_score,
-        control.evaluation_score
+        control.design_score as DIMEScore,
+        control.implementation_score as DIMEScore,
+        control.monitoring_score as DIMEScore,
+        control.evaluation_score as DIMEScore
       );
 
       // Skip controls with 0 effectiveness
@@ -2969,20 +2976,20 @@ export default function RiskForm({
                               </div>
 
                               {/* Change indicators */}
-                              {(alert.likelihood_change !== null && alert.likelihood_change !== 0) ||
+                              {(alert.suggested_likelihood_change !== null && alert.suggested_likelihood_change !== 0) ||
                                 (alert.impact_change !== null && alert.impact_change !== 0) ? (
                                 <div className="flex gap-3 mb-3">
-                                  {alert.likelihood_change !== null && alert.likelihood_change !== 0 && (
+                                  {alert.suggested_likelihood_change !== null && alert.suggested_likelihood_change !== 0 && (
                                     <div className="flex items-center gap-1">
                                       <span className="text-xs text-gray-600">Likelihood:</span>
                                       <span
-                                        className={`px-2 py-0.5 text-xs font-semibold rounded ${alert.likelihood_change > 0
+                                        className={`px-2 py-0.5 text-xs font-semibold rounded ${alert.suggested_likelihood_change > 0
                                           ? 'bg-red-100 text-red-700'
                                           : 'bg-green-100 text-green-700'
                                           }`}
                                       >
-                                        {alert.likelihood_change > 0 ? '+' : ''}
-                                        {alert.likelihood_change}
+                                        {alert.suggested_likelihood_change > 0 ? '+' : ''}
+                                        {alert.suggested_likelihood_change}
                                       </span>
                                     </div>
                                   )}
@@ -3015,15 +3022,13 @@ export default function RiskForm({
                                   )}
 
                                   {/* AI Reasoning */}
-                                  {alert.ai_reasoning && (
-                                    <div>
-                                      <p className="text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
-                                        <Sparkles className="h-3 w-3 text-purple-600" />
-                                        AI Analysis:
-                                      </p>
-                                      <p className="text-xs text-gray-600 bg-purple-50 p-2 rounded border border-purple-200">
-                                        {alert.ai_reasoning}
-                                      </p>
+                                  {alert.reasoning && (
+                                    <div className="bg-blue-50/50 p-2 rounded text-xs text-gray-600 border border-blue-100/50">
+                                      <div className="flex items-center gap-1 text-blue-700 font-medium mb-1">
+                                        <Sparkles className="h-3 w-3" />
+                                        AI Analysis
+                                      </div>
+                                      {alert.reasoning}
                                     </div>
                                   )}
 
@@ -3048,13 +3053,37 @@ export default function RiskForm({
                                     </div>
                                   )}
                                 </div>
-                              )}
+                              )
+                              }
                             </CardContent>
                           </Card>
                         );
                       })}
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Risk Indicators Section - Only show when editing/saved */}
+            {editingRisk && (
+              <Card className="border-blue-200 bg-blue-50 mt-6">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-blue-600" />
+                    Risk Indicators & Monitoring
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-600">
+                      Define Key Risk Indicators (KRIs) to monitor this risk. You can use AI to generate leading and lagging indicators.
+                    </p>
+                    <Button type="button" size="sm" onClick={() => setShowKRIBuilder(true)} className="bg-blue-600 hover:bg-blue-700">
+                      <Settings2 className="h-4 w-4 mr-2" />
+                      Manage KRIs
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -3092,12 +3121,12 @@ export default function RiskForm({
                 </Button>
               )}
             </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+          </form >
+        </DialogContent >
+      </Dialog >
 
       {/* Custom Root Cause Dialog */}
-      <Dialog open={showCustomRootCause} onOpenChange={setShowCustomRootCause}>
+      < Dialog open={showCustomRootCause} onOpenChange={setShowCustomRootCause} >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Custom Root Cause</DialogTitle>
@@ -3173,10 +3202,10 @@ export default function RiskForm({
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* Custom Impact Dialog */}
-      <Dialog open={showCustomImpact} onOpenChange={setShowCustomImpact}>
+      < Dialog open={showCustomImpact} onOpenChange={setShowCustomImpact} >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Custom Impact</DialogTitle>
@@ -3252,7 +3281,23 @@ export default function RiskForm({
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog >
+
+      {/* KRI Builder Dialog */}
+      {editingRisk && (
+        <RiskKRIBuilder
+          open={showKRIBuilder}
+          onOpenChange={setShowKRIBuilder}
+          riskId={editingRisk.id}
+          riskCode={editingRisk.risk_code}
+          riskTitle={formData.risk_title}
+          riskDescription={formData.risk_description}
+          riskCategory={selectedCategory || editingRisk.category}
+          rootCause={rootCauses.find(r => r.id === selectedRootCauseId)?.cause_name || rootCauses.find(r => r.id === editingRisk.root_cause_id)?.cause_name || undefined}
+          impact={impacts.find(i => i.id === selectedImpactId)?.impact_name || impacts.find(i => i.id === editingRisk.impact_id)?.impact_name || undefined}
+          onRiskUpdated={onSuccess}
+        />
+      )}
     </>
   );
 }

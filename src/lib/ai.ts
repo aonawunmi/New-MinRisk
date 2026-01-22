@@ -969,3 +969,127 @@ function generateDemoRevalidation(
     }, 1000);
   });
 }
+
+/**
+ * AI-suggested KRI structure
+ */
+export interface AISuggestedKRI {
+  kri_name: string;
+  description: string;
+  kri_type: 'Leading' | 'Lagging' | 'Concurrent';
+  measurement_unit: 'Percentage' | 'Number' | 'Currency' | 'Time' | 'Ratio' | 'Boolean';
+  collection_frequency: 'Daily' | 'Weekly' | 'Monthly' | 'Quarterly' | 'Annually' | 'Real-time';
+  threshold_green: number | null;
+  threshold_amber: number | null;
+  threshold_red: number | null;
+  direction: 'Higher is Better' | 'Lower is Better';
+  reasoning: string; // Why this KRI is effective for this risk
+}
+
+/**
+ * Generate AI-recommended KRIs for a specific risk
+ */
+export async function generateAIKRISuggestionsForRisk(
+  riskTitle: string,
+  riskDescription: string,
+  category: string,
+  rootCause: string,
+  impact: string
+): Promise<ApiResponse<AISuggestedKRI[]>> {
+  try {
+    const useDemoMode = import.meta.env.VITE_AI_DEMO_MODE === 'true';
+
+    if (useDemoMode) {
+      return generateDemoKRISuggestions(riskTitle, category);
+    }
+
+    const prompt = `You are a risk management expert. Analyze the following risk and recommend Key Risk Indicators (KRIs).
+
+RISK DETAILS:
+- Risk: ${riskTitle}
+- Description: ${riskDescription}
+- Category: ${category}
+- Root Cause: ${rootCause}
+- Potential Impact: ${impact}
+
+TASK:
+Recommend 3-5 specific, quantitative Key Risk Indicators (KRIs) to monitor this risk.
+Ensure a mix of Leading (predictive), Lagging (outcome-based), and Concurrent indicators.
+
+For each KRI, provide:
+1. **Name**: Clear name (e.g., "Staff Turnover Rate")
+2. **Description**: What is measured and how.
+3. **Type**: Leading, Lagging, or Concurrent.
+4. **Unit**: Percentage, Number, Currency, Time, Ratio, or Boolean.
+5. **Frequency**: How often it should be collected.
+6. **Thresholds**: Suggested numeric thresholds for Green (Safe), Amber (Warning), Red (Breach).
+7. **Direction**: "Higher is Better" or "Lower is Better".
+8. **Reasoning**: Why this KRI effectively monitors this specific risk.
+
+RESPONSE FORMAT:
+Return valid JSON array with this exact structure:
+{
+  "kri_name": "string",
+  "description": "string",
+  "kri_type": "Leading" | "Lagging" | "Concurrent",
+  "measurement_unit": "Percentage" | "Number" | "Currency" | "Time" | "Ratio" | "Boolean",
+  "collection_frequency": "Daily" | "Weekly" | "Monthly" | "Quarterly" | "Annually" | "Real-time",
+  "threshold_green": number,
+  "threshold_amber": number,
+  "threshold_red": number,
+  "direction": "Higher is Better" | "Lower is Better",
+  "reasoning": "string"
+}
+
+Return ONLY the JSON array, no other text.`;
+
+    const contentText = await callAI(prompt, 2048);
+
+    // Extract JSON
+    const jsonMatch = contentText.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      throw new Error('No JSON array found in AI response');
+    }
+
+    const suggestions: AISuggestedKRI[] = JSON.parse(jsonMatch[0]);
+    return { data: suggestions, error: null };
+
+  } catch (err) {
+    console.error('Error generating KRIs:', err);
+    return { data: null, error: err instanceof Error ? err : new Error('Unknown error') };
+  }
+}
+
+function generateDemoKRISuggestions(riskTitle: string, category: string): Promise<ApiResponse<AISuggestedKRI[]>> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const suggestions: AISuggestedKRI[] = [
+        {
+          kri_name: `Number of ${category} Incidents`,
+          description: `Count of confirmed ${category.toLowerCase()} incidents reported in the period.`,
+          kri_type: 'Lagging',
+          measurement_unit: 'Number',
+          collection_frequency: 'Monthly',
+          threshold_green: 0,
+          threshold_amber: 2,
+          threshold_red: 5,
+          direction: 'Lower is Better',
+          reasoning: 'Direct measure of risk materialization frequency.'
+        },
+        {
+          kri_name: `${category} Control Failures`,
+          description: 'Percentage of control tests that failed.',
+          kri_type: 'Leading',
+          measurement_unit: 'Percentage',
+          collection_frequency: 'Quarterly',
+          threshold_green: 95,
+          threshold_amber: 90,
+          threshold_red: 85,
+          direction: 'Higher is Better',
+          reasoning: 'Control weakness is a leading indicator of future incidents.'
+        }
+      ];
+      resolve({ data: suggestions, error: null });
+    }, 1500);
+  });
+}

@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 // Configuration - Targeting Production/Staging as requested
 const BASE_URL = 'https://new-minrisk-production-dec.onrender.com';
 const EMAIL = 'admin1@acme.com';
-const PASSWORD = 'TestPass123!';
+const PASSWORD = '213Capital$';
 const RISK_CODE = 'REP-005';
 
 test.describe('MinRisk End-to-End System Test', () => {

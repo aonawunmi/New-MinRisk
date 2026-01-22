@@ -670,28 +670,31 @@ export async function calculateResidualScore(
     // Calculate aggregate DIME effectiveness
     let totalDIME = 0;
     for (const control of controls) {
-        const d = control.design_score || 1;
-        const i = control.implementation_score || 1;
-        const m = control.monitoring_score || 1;
-        const e = control.evaluation_score || 1;
+        const d = control.design_score || 0;
+        const i = control.implementation_score || 0;
+        const m = control.monitoring_score || 0;
+        const e = control.evaluation_score || 0;
 
-        // DIME average per control (1-5 scale)
+        // DIME average per control (0-3 scale)
         const controlDIME = (d + i + m + e) / 4;
         totalDIME += controlDIME;
     }
 
-    // Average across all controls, normalized to 0-100
+    // Average effectiveness across all controls (0-3 scale)
     const avgDIME = totalDIME / controls.length;
-    const control_effectiveness = ((avgDIME - 1) / 4) * 100; // 1-5 scale to 0-100
 
-    // Residual = Inherent * (1 - effectiveness%)
-    const reduction = control_effectiveness / 100;
-    const residual_score = inherent_score * (1 - reduction);
+    // Convert to percentage (max score is 3)
+    // 3.0 -> 100% effectiveness
+    // 0.0 -> 0% effectiveness
+    const effectiveness = Math.min(100, Math.max(0, (avgDIME / 3) * 100));
+
+    // Residual Risk = Inherent Risk * (1 - Effectiveness)
+    const residual_score = inherent_score * (1 - (effectiveness / 100));
 
     return {
         inherent_score,
         residual_score: Math.round(residual_score * 100) / 100,
-        control_effectiveness: Math.round(control_effectiveness * 100) / 100,
+        control_effectiveness: Math.round(effectiveness * 100) / 100,
         mapping_method: 'DIME_v1'
     };
 }
@@ -1216,14 +1219,49 @@ export async function generateKRIFromTolerance(
         }
 
         const limits = tolerance.limits?.[0];
+        const metricType = tolerance.metric_type || 'MAXIMUM';
+
+        // For MAXIMUM metrics (e.g., NPL Ratio ≤ 5%): lower is better
+        // For MINIMUM metrics (e.g., LCR ≥ 100%): higher is better
+        // For RANGE metrics: must be within bounds
+
+        let kriTarget: number;
+        let kriWarning: number;
+        let kriCritical: number;
+
+        if (metricType === 'MINIMUM') {
+            // For MINIMUM metrics (e.g., LCR must be >= 100%)
+            // Target = red_min (what you need to stay above)
+            // Warning = when approaching the minimum
+            // Critical = below minimum
+            kriTarget = tolerance.red_min ?? 100;
+            kriWarning = tolerance.amber_max ?? (kriTarget * 1.1); // Slightly above critical
+            kriCritical = tolerance.red_min ?? 100;
+        } else if (metricType === 'RANGE') {
+            // For RANGE metrics
+            kriTarget = tolerance.green_max ?? 0;
+            kriWarning = limits?.soft_limit ?? tolerance.amber_max ?? kriTarget * 1.2;
+            kriCritical = limits?.hard_limit ?? tolerance.red_min ?? kriTarget * 1.5;
+        } else {
+            // For MAXIMUM metrics (default) - e.g., NPL Ratio <= 5%
+            // Target = green_max (ideal upper bound)
+            // Warning = amber_max (approaching limit)
+            // Critical = red_min (breach)
+            kriTarget = tolerance.green_max ?? 0;
+            kriWarning = limits?.soft_limit ?? tolerance.amber_max ?? (kriTarget * 1.5);
+            kriCritical = limits?.hard_limit ?? tolerance.red_min ?? (kriTarget * 2);
+        }
+
+        // Round to 2 decimal places to avoid floating point issues
+        const round = (n: number) => Math.round(n * 100) / 100;
 
         const mapping: ToleranceKRIMapping = {
             toleranceId,
-            kriTarget: tolerance.green_max ?? 0,
-            kriWarning: limits?.soft_limit ?? tolerance.amber_max ?? tolerance.green_max * 1.2,
-            kriCritical: limits?.hard_limit ?? tolerance.red_min ?? tolerance.green_max * 1.5,
-            unit: tolerance.unit || 'count',
-            description: `Auto-generated from tolerance: ${tolerance.metric_name}`,
+            kriTarget: round(kriTarget),
+            kriWarning: round(kriWarning),
+            kriCritical: round(kriCritical),
+            unit: tolerance.unit || '%',
+            description: `Auto-generated from tolerance: ${tolerance.metric_name}. Metric type: ${metricType}. Green: ≤${tolerance.green_max ?? 'N/A'}, Amber: ≤${tolerance.amber_max ?? 'N/A'}, Red: ≥${tolerance.red_min ?? 'N/A'}`,
         };
 
         return { data: mapping, error: null };

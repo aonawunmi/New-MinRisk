@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 const BASE_URL = 'https://new-minrisk-production-dec.onrender.com';
 const EMAIL = 'admin1@acme.com';
-const PASSWORD = 'TestPass123!';
+const PASSWORD = '213Capital$';
 
 test('Production Sanity Check', async ({ page }) => {
     console.log(`1. Navigating to Login: ${BASE_URL}/login`);

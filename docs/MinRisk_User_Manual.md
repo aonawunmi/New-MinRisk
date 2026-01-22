@@ -141,6 +141,19 @@ Step 8: Click "Create Risk"
 - **Edit**: Click risk row → Modify fields → Save
 - **Delete**: Click risk row → Delete (unlinking controls/KRIs, not deleting)
 
+### 3.5 Risk Indicators (KRIs)
+Link quantitative metrics to monitor risks proactively.
+
+**Adding KRIs to a Risk:**
+1. Open a Risk (Edit mode)
+2. Scroll to **Risk Indicators & Monitoring**
+3. Click **Manage KRIs**
+4. Use **AI Suggestions** to generate relevant indicators:
+   - Leading (Predictive)
+   - Lagging (Outcome)
+   - Concurrent (Real-time)
+5. Select and link suggestions to the risk
+
 ---
 
 ## 4. Control Management
@@ -616,19 +629,242 @@ MinRisk supports a hierarchical organizational structure where departments belon
 - The Department dropdown automatically filters to show only departments in that division
 - This ensures proper organizational alignment for risk ownership
 
-### 10.3 Appetite & Tolerance
+### 10.3 Risk Appetite Framework (RAF)
 
-Define risk boundaries:
+The Risk Appetite Framework is MinRisk's governance-grade engine for defining, monitoring, and enforcing risk boundaries across your organization.
 
-**Risk Appetite Statement:**
-- Version-controlled document
-- Board approval tracking
-- Effective date ranges
+#### 10.3.1 Understanding the Framework
 
-**Tolerance Metrics:**
-- Per-category thresholds
-- Metric types: Range, Maximum, Minimum, Directional
-- Automatic breach detection
+**Three-Layer Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  LAYER 1: RISK APPETITE STATEMENT (Board Level)            │
+│  "We accept moderate operational risk to achieve growth"   │
+├─────────────────────────────────────────────────────────────┤
+│  LAYER 2: APPETITE CATEGORIES (Per Risk Category)          │
+│  Strategic: HIGH | Operational: MODERATE | Credit: LOW     │
+├─────────────────────────────────────────────────────────────┤
+│  LAYER 3: TOLERANCE METRICS (Quantitative Boundaries)      │
+│  NPL Ratio ≤ 5% | System Uptime ≥ 99.5% | CAR ≥ 15%       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**How RAF Integrates with Existing Components:**
+
+| Component | Role | RAF Integration |
+|-----------|------|-----------------|
+| **Appetite & Tolerance Tab** | Define boundaries | RAF Engine evaluates these definitions |
+| **KRI Tab** | Track metrics | Tolerance metrics can auto-link to KRIs |
+| **Breaches Tab** | Monitor violations | RAF Engine detects & records breaches |
+| **Risk Register** | Individual risks | RAF adjusts risk scores based on appetite status |
+
+#### 10.3.2 Risk Appetite Statement
+
+The foundational document expressing your organization's willingness to take risks.
+
+**Workflow: Create Appetite Statement**
+
+```
+Step 1: Navigate to Risk Appetite → Appetite Statement
+    ↓
+Step 2: Click "Create New Statement"
+    ↓
+Step 3: Enter:
+         - Statement Text (governance language)
+         - Effective From date
+         - Next Review Date
+    ↓
+Step 4: Submit for approval workflow
+    ↓
+Step 5: Once approved, statement becomes active
+         → Previous version marked as SUPERSEDED
+```
+
+**Version Control:**
+- Only one APPROVED statement active at a time
+- Historical versions preserved for audit
+- Board approval tracking with timestamps
+
+#### 10.3.3 Appetite Categories
+
+Set risk appetite levels per risk category (e.g., "LOW appetite for Credit Risk").
+
+**Appetite Levels:**
+
+| Level | Description | Typical Metrics |
+|-------|-------------|-----------------|
+| **ZERO** | No tolerance | Must be 0% breach |
+| **LOW** | Minimal acceptance | Tight thresholds |
+| **MODERATE** | Balanced approach | Standard thresholds |
+| **HIGH** | Growth-oriented | Wider acceptable ranges |
+
+**Workflow: Configure Category Appetite**
+
+```
+Step 1: Navigate to Risk Appetite → Categories
+    ↓
+Step 2: Select a risk category (e.g., "Operational Risk")
+    ↓
+Step 3: Set Appetite Level (Zero/Low/Moderate/High)
+    ↓
+Step 4: Add Rationale (e.g., "Board decision per meeting 2025-12")
+    ↓
+Step 5: Save → Category now governed by RAF Engine
+```
+
+#### 10.3.4 Tolerance Metrics
+
+Quantitative boundaries that trigger breaches when exceeded.
+
+**Metric Types:**
+
+| Type | Description | Example |
+|------|-------------|---------|
+| **MAXIMUM** | Value must stay below limit | NPL Ratio ≤ 5% |
+| **MINIMUM** | Value must stay above limit | CAR ≥ 15% |
+| **RANGE** | Value must stay within bounds | Cost/Income 40-60% |
+| **DIRECTIONAL** | Change must not exceed % | Score change ≤ 10%/month |
+
+**Threshold Levels (Traffic Light):**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  GREEN    │  Within acceptable range                   │
+├───────────┼─────────────────────────────────────────────┤
+│  AMBER    │  Soft limit breached - Warning             │
+├───────────┼─────────────────────────────────────────────┤
+│  RED      │  Hard limit breached - Escalation required │
+└───────────┴─────────────────────────────────────────────┘
+```
+
+**Workflow: Create Tolerance Metric**
+
+```
+Step 1: Navigate to Risk Appetite → Tolerance Metrics
+    ↓
+Step 2: Click "Add Metric"
+    ↓
+Step 3: Configure:
+         - Metric Name (e.g., "NPL Ratio")
+         - Metric Type (Maximum/Minimum/Range/Directional)
+         - Link to Appetite Category
+    ↓
+Step 4: Set Thresholds:
+         - Green Zone: 0% - 3%
+         - Amber Zone: 3% - 5%
+         - Red Zone: > 5%
+    ↓
+Step 5: (Optional) Link to KRI:
+         - Select existing KRI to auto-feed values
+         - (Note: New KRIs must be created from the Risk context first)
+    ↓
+Step 6: Set Breach Rules:
+         - POINT_IN_TIME: Breach on first violation
+         - SUSTAINED: Breach after N consecutive periods
+         - N_BREACHES: Breach after N violations in window
+    ↓
+Step 7: Configure Escalation:
+         - Who to notify on Amber
+         - Who to notify on Red
+         - SLA for remediation
+    ↓
+Step 8: Save → Metric now monitored by RAF Engine
+```
+
+#### 10.3.5 Tolerance-Linked KRIs
+
+When a tolerance metric is linked to a KRI, the system automatically:
+
+1. **Syncs values**: KRI measurements feed directly into tolerance evaluation
+2. **Inherits thresholds**: KRI thresholds auto-configured from tolerance limits
+3. **Creates alerts**: Breaches appear in both KRI Alerts and RAF Breaches tabs
+
+**Visual Indicator:**
+- Tolerance-linked KRIs show a 🔗 icon in the KRI list
+- These KRIs cannot have thresholds manually edited (controlled by tolerance)
+
+#### 10.3.6 Breach Detection & Management
+
+The RAF Engine continuously evaluates tolerance metrics and detects breaches.
+
+**Breach Lifecycle:**
+
+```
+DETECTED → OPEN → IN_PROGRESS → RESOLVED
+                              → BOARD_ACCEPTED (exception)
+```
+
+**Viewing Breaches:**
+
+1. Navigate to Risk Appetite → Breaches
+2. Filter by:
+   - Status (Open/In Progress/Resolved/Board Accepted)
+   - Severity (Amber/Red)
+   - Category
+   - Date range
+
+**Responding to a Breach:**
+
+```
+Step 1: Click breach to view details
+    ↓
+Step 2: Review:
+         - Current vs threshold value
+         - Trend history
+         - Linked metric/KRI
+    ↓
+Step 3: Choose action:
+         A) Acknowledge → Status becomes IN_PROGRESS
+         B) Add Remediation Plan → Set owner, due date
+         C) Request Board Exception → For acceptable risk
+    ↓
+Step 4: Track remediation progress
+    ↓
+Step 5: When resolved:
+         - Add resolution notes
+         - Mark as Resolved
+         - Value returns to Green zone
+```
+
+**Board Exception (Risk Acceptance):**
+
+For risks that exceed appetite but are accepted by the Board:
+
+1. Click "Request Board Exception"
+2. Enter rationale and supporting documentation
+3. Set temporary threshold (adjusted limit)
+4. Set exception valid until date
+5. Submit for Board approval
+6. Once approved, breach status → BOARD_ACCEPTED
+
+#### 10.3.7 RAF Engine Features (Layer B)
+
+The underlying engine provides:
+
+| Feature | Description |
+|---------|-------------|
+| **Distributed-Safe Recalculation** | Database locking prevents race conditions in multi-user environments |
+| **Atomic KRI Sync** | Tolerance-KRI linking is transactional (all-or-nothing) |
+| **Historical Breach Rules** | SUSTAINED and N_BREACHES rules query historical data |
+| **Auto-Escalation** | Configurable notifications on breach detection |
+| **Audit Trail** | Full history of breaches, resolutions, and exceptions |
+
+#### 10.3.8 Enterprise Status Dashboard
+
+View organization-wide appetite status:
+
+1. Navigate to Risk Appetite → Dashboard
+2. See aggregate status:
+   - Overall: GREEN/AMBER/RED (worst-case aggregation)
+   - Per-category status breakdown
+   - Active breach count by severity
+   - Trend over time
+
+**Status Aggregation Logic:**
+- Any RED in any category → Enterprise status is RED
+- Any AMBER (no RED) → Enterprise status is AMBER
+- All GREEN → Enterprise status is GREEN
 
 ### 10.4 User Management
 

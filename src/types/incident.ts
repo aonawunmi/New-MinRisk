@@ -191,6 +191,7 @@ export interface CreateIncidentInput {
   occurred_at: string; // ISO date string
   visibility_scope?: VisibilityScope;
   linked_risk_codes?: string[];
+  financial_impact?: number | null;
 }
 
 export interface UpdateIncidentInput {
@@ -199,6 +200,7 @@ export interface UpdateIncidentInput {
   incident_type?: string;
   severity?: IncidentSeverity;
   occurred_at?: string;
+  financial_impact?: number | null;
   // Status changes require admin role (enforced by trigger)
 }
 

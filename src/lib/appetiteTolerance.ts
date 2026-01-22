@@ -563,7 +563,7 @@ export async function detectAndRecordBreach(
 async function resolveBreach(
   organizationId: string,
   metricId: string
-): Promise<Result> {
+): Promise<Result<AppetiteBreach | null>> {
 
   const { data: user } = await supabase.auth.getUser();
 
@@ -583,7 +583,7 @@ async function resolveBreach(
     return { success: false, error: error.message };
   }
 
-  return { success: true };
+  return { success: true, data: null };
 }
 
 /**

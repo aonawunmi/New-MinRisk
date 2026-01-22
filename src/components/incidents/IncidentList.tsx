@@ -279,9 +279,9 @@ export function IncidentList({ onSelectIncident, onNewIncident }: IncidentListPr
                     </TableCell>
                     <TableCell className="font-medium max-w-xs">
                       <div className="truncate">{incident.title}</div>
-                      {incident.linked_risk_code && (
+                      {incident.linked_risk_titles && incident.linked_risk_titles.length > 0 && (
                         <div className="text-xs text-muted-foreground mt-1">
-                          Linked to: {incident.linked_risk_code}
+                          Linked to: {incident.linked_risk_titles.join(', ')}
                         </div>
                       )}
                     </TableCell>
@@ -294,7 +294,7 @@ export function IncidentList({ onSelectIncident, onNewIncident }: IncidentListPr
                       </span>
                     </TableCell>
                     <TableCell>
-                      <Badge className={getStatusBadgeClass(incident.status)}>
+                      <Badge className={getStatusBadgeClass(incident.status as IncidentStatus)}>
                         {incident.status}
                       </Badge>
                     </TableCell>

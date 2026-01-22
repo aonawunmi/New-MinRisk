@@ -5,7 +5,7 @@ test.setTimeout(180000);
 
 const BASE_URL = 'https://new-minrisk-production-dec.onrender.com';
 const EMAIL = 'admin1@acme.com';
-const PASSWORD = 'TestPass123!';
+const PASSWORD = '213Capital$';
 const RISK_TITLE = `E2E Test Risk ${Date.now()}`;
 const CONTROL_NAME = `E2E Test Control ${Date.now()}`;
 

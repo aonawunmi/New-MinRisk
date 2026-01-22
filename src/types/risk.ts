@@ -59,7 +59,7 @@ export interface RiskWithControls extends Risk {
 }
 export type RiskCategory = string;
 export type RiskStatus = string;
-export type DIMEScore = 1 | 2 | 3 | 4 | 5;
+export type DIMEScore = 0 | 1 | 2 | 3;
 
 /**
  * Data for creating a new risk

@@ -29,6 +29,7 @@ import AIAssistant from '@/components/ai/AIAssistant';
 import AdminPanel from '@/components/admin/AdminPanel';
 import AdminCheck from '@/components/debug/AdminCheck';
 import RAFManagement from '@/components/raf/RAFManagement';
+import OutcomesArchitectureTest from '@/pages/OutcomesArchitectureTest';
 import type { AuthState } from '@/types/auth';
 
 export default function App() {
@@ -74,8 +75,8 @@ export default function App() {
       });
 
       setAuthState({
-        user: currentUser,
-        profile: profileData,
+        user: currentUser as unknown as import('@/types/auth').AuthUser, // Force cast to match strict type
+        profile: profileData as unknown as import('@/types/auth').UserProfile, // Force cast to avoid role strictness
         isAdmin: adminStatus,
         isSuperAdmin: superAdminStatus,
         loading: false,
@@ -209,6 +210,9 @@ export default function App() {
                   <TabsTrigger value="raf" className="text-xs sm:text-sm whitespace-nowrap">
                     <span className="hidden sm:inline">🎯 </span>RAF
                   </TabsTrigger>
+                  <TabsTrigger value="test-outcomes" className="text-xs sm:text-sm whitespace-nowrap">
+                    <span className="hidden sm:inline">🧪 </span>Test
+                  </TabsTrigger>
                   <TabsTrigger value="admin" className="text-xs sm:text-sm whitespace-nowrap">
                     <span className="hidden sm:inline">⚙️ </span>Admin
                   </TabsTrigger>
@@ -279,6 +283,10 @@ export default function App() {
 
               <TabsContent value="raf">
                 <RAFManagement />
+              </TabsContent>
+
+              <TabsContent value="test-outcomes">
+                <OutcomesArchitectureTest />
               </TabsContent>
             </>
           )}

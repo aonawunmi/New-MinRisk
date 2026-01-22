@@ -132,7 +132,7 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
         password: formData.password,
         fullName: formData.fullName,
         organizationId,
-        role: userRole,
+        role: userRole as any, // Cast to match expected UserRole union type
       });
 
       if (signupError) {

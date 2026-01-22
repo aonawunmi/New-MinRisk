@@ -59,12 +59,12 @@ import {
 import { supabase } from '@/lib/supabase';
 import {
     getOrganizationAppetiteSummary,
-    generateKRIFromTolerance,
     recalculateAllRAFScores,
     type AppetiteLevel,
 } from '@/lib/rafEngine';
 import { getBreachStatistics } from '@/lib/breachManagement';
 import BreachDashboard from './BreachDashboard';
+import CoverageBuilder from './CoverageBuilder';
 
 // ============================================================================
 // TYPES
@@ -92,12 +92,15 @@ interface ToleranceMetric {
     id: string;
     appetite_category_id: string;
     metric_name: string;
+    metric_description?: string;
     metric_type: 'RANGE' | 'MAXIMUM' | 'MINIMUM' | 'DIRECTIONAL';
     unit: string;
     green_max: number | null;
     amber_max: number | null;
     red_min: number | null;
     is_active: boolean;
+    status?: string;
+    coverage_count?: number;  // Number of KRIs linked
 }
 
 interface RiskLimit {
@@ -137,6 +140,7 @@ function getMultiplierForLevel(level: AppetiteLevel): number {
 
 export default function RAFManagement() {
     const [organizationId, setOrganizationId] = useState<string | null>(null);
+    const [userId, setUserId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
 
@@ -154,11 +158,16 @@ export default function RAFManagement() {
     const [limitForm, setLimitForm] = useState({ soft: '', hard: '' });
     const [recalculating, setRecalculating] = useState(false);
 
+    // Coverage builder state
+    const [showCoverageBuilder, setShowCoverageBuilder] = useState(false);
+    const [coverageTolerance, setCoverageTolerance] = useState<ToleranceMetric | null>(null);
+
     // Load organization ID
     useEffect(() => {
         async function loadOrgId() {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
+                setUserId(user.id);
                 const { data: profile } = await supabase
                     .from('user_profiles')
                     .select('organization_id')
@@ -193,12 +202,32 @@ export default function RAFManagement() {
                 .eq('organization_id', organizationId);
             setCategories(cats || []);
 
-            // Load tolerances
+            // Load tolerances and coverage counts
             const { data: tols } = await supabase
-                .from('appetite_kri_thresholds')
+                .from('appetite_kri_thresholds') // Using view for now, will migrate to tolerance_limits eventually
                 .select('*')
                 .eq('organization_id', organizationId);
-            setTolerances(tols || []);
+
+            // Calculate coverage counts
+            const { data: coverage } = await supabase
+                .from('tolerance_kri_coverage')
+                .select('tolerance_limit_id')
+                .eq('organization_id', organizationId);
+
+            // Map coverage counts
+            const coverageMap = new Map<string, number>();
+            coverage?.forEach(c => {
+                const current = coverageMap.get(c.tolerance_limit_id) || 0;
+                coverageMap.set(c.tolerance_limit_id, current + 1);
+            });
+
+            // Merge counts into tolerances
+            const tolsWithCoverage = (tols || []).map(t => ({
+                ...t,
+                coverage_count: coverageMap.get(t.id) || 0
+            }));
+
+            setTolerances(tolsWithCoverage);
 
             // Load limits
             const { data: lims } = await supabase
@@ -264,19 +293,6 @@ export default function RAFManagement() {
             setLimitForm({ soft: '', hard: '' });
         } catch (err) {
             console.error('Error adding limit:', err);
-        }
-    };
-
-    // Handle generate KRI from tolerance
-    const handleGenerateKRI = async (toleranceId: string) => {
-        try {
-            const { data: mapping, error } = await generateKRIFromTolerance(toleranceId);
-            if (mapping) {
-                console.log('Generated KRI mapping:', mapping);
-                // Here you would create or update a KRI with these thresholds
-            }
-        } catch (err) {
-            console.error('Error generating KRI:', err);
         }
     };
 
@@ -533,11 +549,13 @@ export default function RAFManagement() {
                 {/* Tolerances Tab */}
                 <TabsContent value="tolerances" className="space-y-4">
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Tolerance Metrics & Limits</CardTitle>
-                            <CardDescription>
-                                Quantified thresholds with soft and hard limits
-                            </CardDescription>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <div>
+                                <CardTitle>Tolerance Metrics & Limits</CardTitle>
+                                <CardDescription>
+                                    Configure tolerances and link KRIs for early warning coverage
+                                </CardDescription>
+                            </div>
                         </CardHeader>
                         <CardContent>
                             {tolerances.length === 0 ? (
@@ -560,10 +578,22 @@ export default function RAFManagement() {
                                                     <div>
                                                         <div className="flex items-center gap-2">
                                                             <h4 className="font-medium">{tol.metric_name}</h4>
-                                                            {tol.is_active ? (
-                                                                <Badge variant="outline" className="bg-green-50 text-green-700">Active</Badge>
+                                                            {/* Coverage status badge */}
+                                                            {tol.coverage_count !== undefined && tol.coverage_count > 0 ? (
+                                                                <Badge variant="outline" className="bg-green-50 text-green-700">
+                                                                    {tol.coverage_count} KRI{tol.coverage_count > 1 ? 's' : ''} linked
+                                                                </Badge>
                                                             ) : (
-                                                                <Badge variant="outline">Inactive</Badge>
+                                                                <Badge variant="outline" className="bg-red-50 text-red-700">
+                                                                    No Coverage
+                                                                </Badge>
+                                                            )}
+                                                            {/* Status badge */}
+                                                            {tol.status === 'approved' && (
+                                                                <Badge variant="outline" className="bg-blue-50 text-blue-700">Approved</Badge>
+                                                            )}
+                                                            {tol.status === 'draft' && (
+                                                                <Badge variant="outline">Draft</Badge>
                                                             )}
                                                         </div>
                                                         <p className="text-sm text-muted-foreground">
@@ -574,10 +604,18 @@ export default function RAFManagement() {
                                                         <Button
                                                             variant="outline"
                                                             size="sm"
-                                                            onClick={() => handleGenerateKRI(tol.id)}
+                                                            onClick={() => {
+                                                                setCoverageTolerance(tol);
+                                                                setShowCoverageBuilder(true);
+                                                            }}
                                                         >
                                                             <Zap className="mr-1 h-3 w-3" />
-                                                            Generate KRI
+                                                            Manage Coverage
+                                                            {tol.coverage_count !== undefined && tol.coverage_count > 0 && (
+                                                                <Badge variant="secondary" className="ml-1 text-xs">
+                                                                    {tol.coverage_count}
+                                                                </Badge>
+                                                            )}
                                                         </Button>
                                                         <Button
                                                             variant="outline"
@@ -677,6 +715,15 @@ export default function RAFManagement() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Coverage Builder Modal */}
+            <CoverageBuilder
+                open={showCoverageBuilder}
+                onOpenChange={setShowCoverageBuilder}
+                tolerance={coverageTolerance}
+                organizationId={organizationId || ''}
+                onCoverageUpdated={loadData}
+            />
         </div>
     );
 }

@@ -117,7 +117,7 @@ export async function createIncident(input: CreateIncidentInput) {
         p_occurred_at: input.occurred_at,
         p_visibility_scope: input.visibility_scope || 'REPORTER_ONLY',
         p_linked_risk_codes: input.linked_risk_codes || [],
-        p_financial_impact: input.financial_impact ? parseFloat(input.financial_impact) : null
+        p_financial_impact: input.financial_impact || null
       })
       .single();
 

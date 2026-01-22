@@ -68,6 +68,7 @@ export interface TreatmentLogEntry {
   notes: string | null;
   applied_by: string;
   applied_at: string;
+  deleted_at?: string | null;
 }
 
 export interface AIRelevanceAnalysis {

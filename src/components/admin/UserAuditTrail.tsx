@@ -119,8 +119,8 @@ export default function UserAuditTrail() {
             .select('id, full_name')
             .in('id', allIds);
 
-          const emailMap = new Map(users?.users.map(u => [u.id, u.email]) || []);
-          const nameMap = new Map(profiles?.map(p => [p.id, p.full_name]) || []);
+          const emailMap = new Map((users?.users.map(u => [u.id, u.email]) || []) as Iterable<readonly [string, string]>);
+          const nameMap = new Map((profiles?.map(p => [p.id, p.full_name]) || []) as Iterable<readonly [string, string]>);
 
           for (const item of statusData) {
             // Filter by transition type
@@ -178,8 +178,8 @@ export default function UserAuditTrail() {
             .select('id, full_name')
             .in('id', allIds);
 
-          const emailMap = new Map(users?.users.map(u => [u.id, u.email]) || []);
-          const nameMap = new Map(profiles?.map(p => [p.id, p.full_name]) || []);
+          const emailMap = new Map((users?.users.map(u => [u.id, u.email]) || []) as Iterable<readonly [string, string]>);
+          const nameMap = new Map((profiles?.map(p => [p.id, p.full_name]) || []) as Iterable<readonly [string, string]>);
 
           for (const item of roleData) {
             entries.push({

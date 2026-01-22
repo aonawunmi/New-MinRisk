@@ -90,12 +90,16 @@ export interface KRIAlert {
   resolved_at: string | null;
   resolution_notes: string | null;
   created_at: string;
+  // Flattened from joins
+  kri_code?: string;
+  kri_name?: string;
 }
 
 export interface KRIRiskLink {
   id: string;
   kri_id: string;
-  risk_id: string;  // Changed from risk_code to risk_id (UUID)
+  risk_id: string;
+  risk_code?: string; // Optional - may or may not be populated
   ai_link_confidence: number | null;
   linked_by: string | null;
   created_at: string;
@@ -157,10 +161,7 @@ export async function getKRIDefinitions(): Promise<{
       .select(`
         *,
         kri_risk_links (
-          risk_id,
-          risks:risk_id (
-            risk_code
-          )
+          risk_id
         )
       `)
       .order('kri_code', { ascending: true });
@@ -171,9 +172,10 @@ export async function getKRIDefinitions(): Promise<{
     }
 
     // Flatten the nested kri_risk_links data into linked_risk_codes array
+    // Note: We store risk_id UUIDs now, but keep the field name for compatibility
     const krisWithLinks = data?.map((kri: any) => ({
       ...kri,
-      linked_risk_codes: kri.kri_risk_links?.map((link: any) => link.risks?.risk_code).filter(Boolean) || [],
+      linked_risk_codes: kri.kri_risk_links?.map((link: any) => link.risk_id).filter(Boolean) || [],
       kri_risk_links: undefined, // Remove nested data
     }));
 
@@ -470,8 +472,8 @@ export async function createKRIDataEntry(
               ? kri.upper_threshold!
               : kri.lower_threshold!
             : kri.threshold_direction === 'above'
-            ? kri.lower_threshold!
-            : kri.upper_threshold!,
+              ? kri.lower_threshold!
+              : kri.upper_threshold!,
       });
     }
 
@@ -718,10 +720,10 @@ export async function linkKRIToRisk(
       return { data: null, error: new Error('User not authenticated') };
     }
 
-    // Check if input is UUID (risk_id) or code (risk_code)
+    // Resolve to risk_id (UUID) - the database uses risk_id as the primary link
     let riskId = riskCodeOrId;
 
-    // If it looks like a risk_code (not UUID format), look up the risk_id
+    // If it doesn't look like a UUID, look up the risk_id from risk_code
     if (!riskCodeOrId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
       const { data: risk, error: riskError } = await supabase
         .from('risks')
@@ -741,7 +743,7 @@ export async function linkKRIToRisk(
       .insert([
         {
           kri_id: kriId,
-          risk_id: riskId,  // Now using risk_id (UUID)
+          risk_id: riskId,
           ai_link_confidence: aiConfidence || null,
           linked_by: user.id,
         },
@@ -772,10 +774,10 @@ export async function getKRIsForRisk(
   riskCodeOrId: string  // Can accept either risk_code or risk_id
 ): Promise<{ data: any[] | null; error: Error | null }> {
   try {
-    // Check if input is UUID (risk_id) or code (risk_code)
+    // Resolve to risk_id (UUID) - the database uses risk_id as the primary link
     let riskId = riskCodeOrId;
 
-    // If it looks like a risk_code (not UUID format), look up the risk_id
+    // If it doesn't look like a UUID, look up the risk_id from risk_code
     if (!riskCodeOrId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
       const { data: risk, error: riskError } = await supabase
         .from('risks')
@@ -786,7 +788,6 @@ export async function getKRIsForRisk(
       if (riskError || !risk) {
         return { data: null, error: new Error('Risk not found') };
       }
-
       riskId = risk.id;
     }
 
@@ -795,10 +796,12 @@ export async function getKRIsForRisk(
       .select(
         `
         *,
-        kri_definitions (*)
+        kri_definitions (
+          *
+        )
       `
       )
-      .eq('risk_id', riskId);  // Now using risk_id (UUID)
+      .eq('risk_id', riskId);
 
     if (error) {
       console.error('Get KRIs for risk error:', error.message);
@@ -1036,9 +1039,9 @@ export async function generateAIKRISuggestions(
     }
 
     // Build prompt for AI
-    const prompt = `Analyze this risk and generate 3-5 specific, actionable KRI suggestions.
+    const prompt = `Analyze this risk and generate 3 - 5 specific, actionable KRI suggestions.
 
-RISKS:
+      RISKS:
 ${targetRisks.map((r) => `
 - Code: ${r.risk_code}
 - Title: ${r.risk_title}
@@ -1048,27 +1051,27 @@ ${targetRisks.map((r) => `
 - Impact: ${r.impact_inherent}/5
 `).join('\n')}
 
-CRITICAL: Your response must be ONLY a JSON array. No markdown, no code blocks, no explanation - just the raw JSON array starting with [ and ending with ].
+    CRITICAL: Your response must be ONLY a JSON array. No markdown, no code blocks, no explanation - just the raw JSON array starting with [ and ending with ].
 
-Each KRI object must have these exact fields:
-{
-  "kri_name": "Clear name",
-  "description": "What this measures",
-  "category": "Risk category",
-  "indicator_type": "leading" OR "lagging" OR "concurrent",
-  "measurement_unit": "Count" OR "Percentage" OR "Days" etc,
-  "data_source": "Where data comes from",
-  "collection_frequency": "Daily" OR "Weekly" OR "Monthly" OR "Quarterly" OR "Annually",
-  "target_value": number,
-  "lower_threshold": number,
-  "upper_threshold": number,
-  "threshold_direction": "above" OR "below" OR "between",
-  "responsible_user": "Role/team name",
-  "linked_risk_code": "The risk code",
-  "reasoning": "Why this KRI is effective"
-}
+    Each KRI object must have these exact fields:
+    {
+      "kri_name": "Clear name",
+      "description": "What this measures",
+      "category": "Risk category",
+      "indicator_type": "leading" OR "lagging" OR "concurrent",
+      "measurement_unit": "Count" OR "Percentage" OR "Days" etc,
+      "data_source": "Where data comes from",
+      "collection_frequency": "Daily" OR "Weekly" OR "Monthly" OR "Quarterly" OR "Annually",
+      "target_value": number,
+      "lower_threshold": number,
+      "upper_threshold": number,
+      "threshold_direction": "above" OR "below" OR "between",
+      "responsible_user": "Role/team name",
+      "linked_risk_code": "The risk code",
+      "reasoning": "Why this KRI is effective"
+    }
 
-Return the JSON array now:`;
+    Return the JSON array now: `;
 
     // Call AI via Supabase Edge Function (to avoid CORS issues)
     console.log('Calling Supabase Edge Function for AI KRI generation...');
@@ -1093,7 +1096,7 @@ Return the JSON array now:`;
       console.error('AI error details:', functionData.details);
       return {
         data: null,
-        error: new Error(`AI Error: ${functionData.error}. ${functionData.details || ''}`),
+        error: new Error(`AI Error: ${functionData.error}. ${functionData.details || ''} `),
       };
     }
 
@@ -1106,6 +1109,78 @@ Return the JSON array now:`;
     }
 
     console.log(`AI generated ${functionData.suggestions.length} KRI suggestions`);
+    return { data: functionData.suggestions, error: null };
+  } catch (err) {
+    console.error('Unexpected AI KRI suggestion error:', err);
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error('Unknown error'),
+    };
+  }
+}
+
+/**
+ * Generate AI KRI suggestions based on Tolerance Limits
+ */
+export async function generateAIKRISuggestionsForTolerance(
+  tolerance: any // Typed as any to avoid circular imports, but effectively ToleranceLimit
+): Promise<{ data: AIKRISuggestion[] | null; error: Error | null }> {
+  try {
+    // Build prompt for AI
+    const prompt = `Analyze this Risk Tolerance Limit and generate 3 specific, actionable KRI suggestions that would effectively monitor it.
+
+TOLERANCE LIMIT:
+    - Metric Name: ${tolerance.metric_name}
+    - Type: ${tolerance.metric_type}
+    - Unit: ${tolerance.unit}
+    - Green(Safe) Max: ${tolerance.green_max ?? 'N/A'}
+    - Amber(Warning) Max: ${tolerance.amber_max ?? 'N/A'}
+    - Red(Breach) Min: ${tolerance.red_min ?? 'N/A'}
+
+    CRITICAL: Your response must be ONLY a JSON array.No markdown, no code blocks, no explanation - just the raw JSON array starting with [and ending with ].
+
+    Each KRI object must have these exact fields:
+    {
+      "kri_name": "Clear name",
+      "description": "What this measures",
+      "category": "Operational",
+      "indicator_type": "leading" OR "lagging" OR "concurrent",
+      "measurement_unit": "${tolerance.unit}",
+      "data_source": "Where data comes from",
+      "collection_frequency": "Daily" OR "Weekly" OR "Monthly" OR "Quarterly" OR "Annually",
+      "target_value": number(aligned with Green Max),
+      "lower_threshold": number(aligned with Red Min if applicable),
+      "upper_threshold": number(aligned with Amber Max if applicable),
+      "threshold_direction": "above" OR "below" OR "outside",
+      "responsible_user": "Role/team name",
+      "reasoning": "Why this KRI covers this tolerance"
+    }
+
+    Return the JSON array now: `;
+
+    // Call AI via Supabase Edge Function
+    console.log('Calling Supabase Edge Function for Tolerance KRI generation...');
+
+    const { data: functionData, error: functionError } = await supabase.functions.invoke('generate-kri-suggestions', {
+      body: { prompt },
+    });
+
+    if (functionError) {
+      console.error('Edge function error:', functionError);
+      return {
+        data: null,
+        error: new Error(functionError.message || 'Edge function failed'),
+      };
+    }
+
+    if (functionData?.error) {
+      return { data: null, error: new Error(`AI Error: ${functionData.error} `) };
+    }
+
+    if (!functionData?.suggestions) {
+      return { data: null, error: new Error('No suggestions returned from AI') };
+    }
+
     return { data: functionData.suggestions, error: null };
   } catch (err) {
     console.error('Unexpected AI KRI suggestion error:', err);

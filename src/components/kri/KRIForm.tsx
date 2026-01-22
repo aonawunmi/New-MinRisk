@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/lib/supabase';
+import { Link2 } from 'lucide-react';
 import type { KRIDefinition } from '@/lib/kri';
 import { generateAIKRISuggestions, type AIKRISuggestion } from '@/lib/kri';
 import { getRisks } from '@/lib/risks';
@@ -254,6 +256,19 @@ export default function KRIForm({ kri, onSave, onCancel }: KRIFormProps) {
         </div>
       )}
 
+      {/* Linked Risk Section Removed (Duplicate) */}
+
+      {/* NEW: Linked Tolerances Section (Read Only) */}
+      {kri && (
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            <Link2 className="h-4 w-4" />
+            Linked Tolerances (Coverage)
+          </Label>
+          <LinkedTolerancesList kriId={kri.id} />
+        </div>
+      )}
+
       {/* AI Suggestions Display */}
       {showSuggestions && aiSuggestions.length > 0 && (
         <div className="space-y-3 border rounded-lg p-4 bg-gray-50">
@@ -284,11 +299,10 @@ export default function KRIForm({ kri, onSave, onCancel }: KRIFormProps) {
             {aiSuggestions.map((suggestion, idx) => (
               <Card
                 key={idx}
-                className={`cursor-pointer transition-all ${
-                  selectedSuggestions.has(idx)
-                    ? 'border-green-500 border-2 bg-green-50'
-                    : 'hover:shadow-md hover:border-gray-300'
-                }`}
+                className={`cursor-pointer transition-all ${selectedSuggestions.has(idx)
+                  ? 'border-green-500 border-2 bg-green-50'
+                  : 'hover:shadow-md hover:border-gray-300'
+                  }`}
                 onClick={() => handleSuggestionToggle(idx)}
               >
                 <CardContent className="pt-4">
@@ -339,12 +353,19 @@ export default function KRIForm({ kri, onSave, onCancel }: KRIFormProps) {
             {kri.linked_risk_codes && kri.linked_risk_codes.length > 0 ? (
               <div>
                 <p className="font-medium text-gray-900">
-                  {kri.linked_risk_codes[0]}
-                  {risks.find(r => r.risk_code === kri.linked_risk_codes![0]) && (
-                    <span className="text-gray-600 ml-2">
-                      - {risks.find(r => r.risk_code === kri.linked_risk_codes![0])?.risk_title}
-                    </span>
-                  )}
+                  {(() => {
+                    const riskIdentifier = kri.linked_risk_codes[0];
+                    // Try to find risk by ID (UUID) since that's what we store now
+                    // But fallback to code check just in case legacy data exists
+                    const risk = risks.find(r => r.id === riskIdentifier) ||
+                      risks.find(r => r.risk_code === riskIdentifier);
+
+                    if (risk) {
+                      return `${risk.risk_code} - ${risk.risk_title}`;
+                    }
+                    // Fallback to displaying the raw identifier if risk not found (or still loading)
+                    return riskIdentifier;
+                  })()}
                 </p>
               </div>
             ) : (
@@ -359,7 +380,7 @@ export default function KRIForm({ kri, onSave, onCancel }: KRIFormProps) {
             </SelectTrigger>
             <SelectContent>
               {risks.map((risk) => (
-                <SelectItem key={risk.id} value={risk.risk_code}>
+                <SelectItem key={risk.id} value={risk.id}>
                   {risk.risk_code} - {risk.risk_title}
                 </SelectItem>
               ))}
@@ -536,5 +557,62 @@ export default function KRIForm({ kri, onSave, onCancel }: KRIFormProps) {
         </Button>
       </div>
     </form>
+  );
+}
+
+function LinkedTolerancesList({ kriId }: { kriId: string }) {
+  const [tolerances, setTolerances] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase
+      .from('tolerance_kri_coverage')
+      .select(`
+        id,
+        coverage_strength,
+        signal_type,
+        tolerance:tolerance_limits (
+          id,
+          metric_name,
+          unit,
+          metric_type
+        )
+      `)
+      .eq('kri_id', kriId)
+      .then(({ data, error }) => {
+        if (!error && data) {
+          setTolerances(data);
+        }
+        setLoading(false);
+      });
+  }, [kriId]);
+
+  if (loading) return <div className="text-xs text-muted-foreground">Loading coverage links...</div>;
+
+  if (tolerances.length === 0) {
+    return (
+      <div className="text-sm text-gray-500 italic p-2 bg-gray-50 rounded border border-dashed">
+        Not linked to any RAF Tolerances.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {tolerances.map((link) => (
+        <div key={link.id} className="flex items-center justify-between p-2 bg-slate-50 border rounded text-sm">
+          <div>
+            <div className="font-medium text-slate-900">{link.tolerance?.metric_name}</div>
+            <div className="text-xs text-slate-500">
+              {link.tolerance?.metric_type} • {link.tolerance?.unit}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Badge variant="outline" className="text-[10px] h-5">{link.coverage_strength}</Badge>
+            <Badge variant="outline" className="text-[10px] h-5">{link.signal_type}</Badge>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

@@ -1,7 +1,7 @@
-# MinRisk User Manual
+# MinRisk User Training Manual
 
-**Version:** 2.0
-**Last Updated:** December 2024
+**Version:** 3.0  
+**Last Updated:** January 2026  
 **Application:** MinRisk - Enterprise Risk Management Platform
 
 ---
@@ -10,15 +10,22 @@
 
 1. [Introduction](#introduction)
 2. [Getting Started](#getting-started)
-3. [User Roles](#user-roles)
+3. [User Roles & Permissions](#user-roles--permissions)
 4. [Dashboard Overview](#dashboard-overview)
 5. [Risk Register](#risk-register)
-6. [Risk Analytics & Reports](#risk-analytics--reports)
-7. [Risk Intelligence](#risk-intelligence)
-8. [Period Management](#period-management)
-9. [Admin Functions](#admin-functions)
-10. [Best Practices](#best-practices)
-11. [FAQ](#faq)
+6. [Control Management & DIME Framework](#control-management--dime-framework)
+7. [Key Risk Indicators (KRIs) & Key Control Indicators (KCIs)](#key-risk-indicators-kris--key-control-indicators-kcis)
+8. [Risk Appetite Framework](#risk-appetite-framework)
+9. [Incident Management](#incident-management)
+10. [Risk Analytics & Reports](#risk-analytics--reports)
+11. [Risk Intelligence](#risk-intelligence)
+12. [Period Management](#period-management)
+13. [Administrator Guide](#administrator-guide)
+14. [Import/Export Data](#importexport-data)
+15. [Best Practices](#best-practices)
+16. [Troubleshooting](#troubleshooting)
+17. [Glossary](#glossary)
+18. [FAQ](#faq)
 
 ---
 
@@ -26,22 +33,26 @@
 
 ### What is MinRisk?
 
-MinRisk is an enterprise risk management platform that helps organizations:
-- **Identify and track risks** across the organization
-- **Assess risk severity** using likelihood and impact scoring
-- **Manage controls** to mitigate risks
-- **Monitor key risk indicators (KRIs)** in real-time
-- **Track historical risk data** across quarters
-- **Generate analytics and reports** for stakeholders
+MinRisk is an enterprise risk management (ERM) platform that enables organizations to:
 
-### Key Features
+- **Identify and assess risks** using structured likelihood × impact scoring
+- **Manage controls** with the DIME effectiveness framework
+- **Monitor key indicators** (KRIs and KCIs) with threshold-based alerting
+- **Track incidents** and link them to risks for root cause analysis
+- **Define risk appetite** at enterprise and category levels
+- **Generate analytics and reports** for board, regulatory, and management needs
+- **Maintain historical records** with immutable quarterly snapshots
 
-✅ **Continuous Risk Management** - Risks maintain their identity across time periods
-✅ **Historical Tracking** - View risks as they existed in past quarters
-✅ **Residual Risk Calculation** - Automatic calculation based on control effectiveness
-✅ **Visual Analytics** - Interactive heatmaps, trends, and comparisons
-✅ **AI-Powered Intelligence** - Automated risk alerts from external threat feeds
-✅ **Multi-tenant** - Secure data isolation for each organization
+### Key Capabilities
+
+| Capability | Description |
+|------------|-------------|
+| **Continuous Risk Register** | Risks maintain identity across periods; never cloned or deleted |
+| **DIME Control Framework** | Design, Implementation, Monitoring, Evaluation scoring |
+| **Risk Appetite Framework** | Enterprise appetite levels with tolerance metrics |
+| **Incident Management** | Report, investigate, and link incidents to risks |
+| **AI-Powered Intelligence** | Automated threat detection from external sources |
+| **Multi-tenant Architecture** | Secure data isolation per organization |
 
 ---
 
@@ -56,58 +67,73 @@ MinRisk is an enterprise risk management platform that helps organizations:
 2. **Login Credentials**
    - Enter your email address
    - Enter your password
-   - Click "Sign In"
+   - Click **"Sign In"**
 
 3. **First-Time Setup** (New Users)
-   - You'll be prompted to set your password
-   - Choose a strong password (minimum 8 characters)
    - Complete your profile information
+   - Wait for administrator approval
+   - You'll receive email notification when approved
 
-### Dashboard Orientation
-
-After logging in, you'll see the **Dashboard** - your home base:
+### Navigation Overview
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Risk Dashboard                                  │
-├─────────────────────────────────────────────────┤
-│  Total Risks: 42  |  Avg Inherent: 12.5         │
-│  Extreme: 5       |  High: 12                   │
-├─────────────────────────────────────────────────┤
-│  [Risk Level Distribution Chart]                │
-│  [Risk Status Chart]                            │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  MinRisk                                    [User Menu] ▼   │
+├─────────────────────────────────────────────────────────────┤
+│  Dashboard | Risks | Analytics | Incidents | Risk Intel | Admin │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│                    [Main Content Area]                      │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+**Tab Descriptions:**
+
+| Tab | Purpose | Roles |
+|-----|---------|-------|
+| **Dashboard** | Overview metrics, charts, top risks | All users |
+| **Risks** | Risk Register - view/add/edit risks | All users (edit: Risk Manager+) |
+| **Analytics** | Heatmaps, trends, period comparison | All users |
+| **Incidents** | Report and manage incidents | All users |
+| **Risk Intel** | AI-powered threat intelligence | Admin only |
+| **Admin** | User management, configuration | Admin only |
 
 ---
 
-## User Roles
+## User Roles & Permissions
 
-### Regular User
-**What you can do:**
-- ✅ View risks in your division/department
-- ✅ View the dashboard and analytics
-- ✅ View risk history
-- ❌ Cannot add/edit/delete risks
-- ❌ Cannot access admin functions
+### Role Hierarchy
 
-### Risk Manager
-**What you can do:**
-- ✅ Everything a Regular User can do, PLUS:
-- ✅ Add new risks
-- ✅ Edit existing risks
-- ✅ Add controls and KRIs
-- ✅ Update risk assessments
-- ❌ Cannot access admin functions
+```
+┌─────────────────────────────────────────────┐
+│                   ADMIN                      │
+│  (Full access + user management + config)   │
+├─────────────────────────────────────────────┤
+│              RISK MANAGER                    │
+│  (Can create/edit risks, controls, KRIs)    │
+├─────────────────────────────────────────────┤
+│                  USER                        │
+│  (View only - dashboard, risks, reports)    │
+└─────────────────────────────────────────────┘
+```
 
-### Admin
-**What you can do:**
-- ✅ Everything a Risk Manager can do, PLUS:
-- ✅ Manage users (approve, assign roles)
-- ✅ Configure organization settings
-- ✅ Commit quarterly periods
-- ✅ Manage risk intelligence
-- ✅ Access all admin functions
+### Detailed Permissions Matrix
+
+| Feature | User | Risk Manager | Admin |
+|---------|------|--------------|-------|
+| View Dashboard | ✅ | ✅ | ✅ |
+| View Risk Register | ✅ | ✅ | ✅ |
+| Add/Edit Risks | ❌ | ✅ | ✅ |
+| Add/Edit Controls | ❌ | ✅ | ✅ |
+| Report Incidents | ✅ | ✅ | ✅ |
+| Manage Incidents | ❌ | ✅ | ✅ |
+| View Analytics | ✅ | ✅ | ✅ |
+| Export Reports | ✅ | ✅ | ✅ |
+| Risk Intelligence | ❌ | ❌ | ✅ |
+| User Management | ❌ | ❌ | ✅ |
+| Period Commit | ❌ | ❌ | ✅ |
+| System Configuration | ❌ | ❌ | ✅ |
 
 ---
 
@@ -115,314 +141,499 @@ After logging in, you'll see the **Dashboard** - your home base:
 
 ### Key Metrics Cards
 
-**Total Risks**
-- Shows the count of all active risks
-- Color: Blue
-- Click to view Risk Register
+The dashboard displays four primary metric cards:
 
-**Avg Inherent Risk**
-- Average risk score before controls
-- Color: Orange
-- Formula: Average of (Likelihood × Impact) for all risks
+| Card | Description | Calculation |
+|------|-------------|-------------|
+| **Total Risks** | Count of active risks | All risks with status ≠ CLOSED |
+| **Avg Inherent Risk** | Risk before controls | Mean of (L × I) across all risks |
+| **Avg Residual Risk** | Risk after controls | Mean of residual scores |
+| **Control Quality** | DIME effectiveness | Mean of (D+I+M+E)/12 across controls |
 
-**Avg Residual Risk**
-- Average risk score after controls
-- Color: Blue
-- Lower is better (shows control effectiveness)
+### Dashboard Charts
 
-**Control Quality**
-- Average DIME score across all controls
-- Color: Green
-- Shows percentage (0-100%)
-- DIME = Design, Implementation, Monitoring, Evaluation
+**1. Risk Level Distribution**
+Shows count of risks by severity level:
+- 🟥 **Extreme**: Score ≥ 15
+- 🟧 **High**: Score 10-14
+- 🟨 **Medium**: Score 5-9
+- 🟩 **Low**: Score < 5
 
-### Charts
+**2. Risk Status Distribution**
+Shows risks by workflow status:
+- **OPEN**: Newly identified
+- **MONITORING**: Under active monitoring
+- **APPROVED**: Accepted by management
+- **CLOSED**: Mitigated or no longer applicable
 
-**Risk Level Distribution**
-- Bar chart showing count by severity:
-  - Extreme (Red): Score ≥ 15
-  - High (Orange): Score 10-14
-  - Medium (Yellow): Score 5-9
-  - Low (Green): Score < 5
-
-**Risk Status Distribution**
-- Shows risks by status:
-  - OPEN: Newly identified
-  - MONITORING: Under active monitoring
-  - APPROVED: Accepted by management
-  - CLOSED: Mitigated or no longer applicable
-
-**Risks by Division/Department**
-- Pie chart showing risk distribution
-- Helps identify high-risk areas
-
-**Top 10 Risks Table**
-- Lists highest inherent risks
-- Click any risk to view details
+**3. Top 10 Risks Table**
+Lists highest inherent risks with quick-view details.
 
 ---
 
 ## Risk Register
 
-The **Risk Register** is your central repository for all organizational risks.
+### Understanding Risks
 
-### Viewing Risks
+A **risk** is a potential event that could negatively impact the organization's objectives. Each risk has:
 
-**Current Period Banner**
+- **Inherent Risk**: The risk level assuming NO controls exist
+- **Residual Risk**: The risk level AFTER controls are applied
+- **Risk Score**: Likelihood × Impact (1-25 scale on 5×5 matrix)
+
+### Risk Scoring Matrix
+
 ```
-┌─────────────────────────────────────────────────┐
-│ 📅 Current Period: Q4 2024                      │
-└─────────────────────────────────────────────────┘
+        I M P A C T
+        1    2    3    4    5
+    ┌────┬────┬────┬────┬────┐
+  5 │  5 │ 10 │ 15 │ 20 │ 25 │  EXTREME (≥15)
+L   ├────┼────┼────┼────┼────┤
+I 4 │  4 │  8 │ 12 │ 16 │ 20 │  HIGH (10-14)
+K   ├────┼────┼────┼────┼────┤
+E 3 │  3 │  6 │  9 │ 12 │ 15 │  MEDIUM (5-9)
+L   ├────┼────┼────┼────┼────┤
+I 2 │  2 │  4 │  6 │  8 │ 10 │  LOW (<5)
+H   ├────┼────┼────┼────┼────┤
+O 1 │  1 │  2 │  3 │  4 │  5 │
+O   └────┴────┴────┴────┴────┘
+D
 ```
-- Shows which quarter you're currently working in
-- All new risks are created in this period
-
-**Risk Table Columns:**
-
-| Column | Description |
-|--------|-------------|
-| **Code** | Unique identifier (e.g., OPS-001) |
-| **Title** | Brief risk description |
-| **Category** | Risk type (Operational, Financial, etc.) |
-| **Status** | Current status (OPEN, MONITORING, etc.) |
-| **Inherent** | Risk score before controls (L×I) |
-| **Residual** | Risk score after controls (L×I) |
-| **Level** | EXTREME, HIGH, MEDIUM, LOW |
-| **Created** | Date risk was added |
 
 ### Adding a New Risk
 
-1. Click **"+ Add Risk"** button
-2. Fill in the form:
+**Step-by-Step:**
+
+1. Navigate to **Risks** tab
+2. Click **"+ Add Risk"** button
+3. Complete the form:
 
 **Basic Information:**
-- **Risk Code**: Auto-generated (e.g., OPS-001)
-- **Risk Title**: Clear, concise description
-- **Risk Description**: Detailed explanation of the risk
-- **Category**: Select from dropdown
-  - Operational
-  - Strategic
-  - Financial
-  - Compliance
-  - Technology
-  - Market
-  - Reputational
+| Field | Description | Example |
+|-------|-------------|---------|
+| Risk Code | Auto-generated | OPS-001 |
+| Risk Title | Clear, concise | "Data Center Outage" |
+| Description | Detailed explanation | "Unplanned downtime affecting..." |
+| Category | Risk type | Operational, Technology, etc. |
 
-**Division & Ownership:**
-- **Division**: Select organizational division
-- **Department**: Select department
-- **Owner**: Risk owner (responsible person)
+**Organizational Assignment:**
+| Field | Description |
+|-------|-------------|
+| Division | Organizational division |
+| Department | Specific department |
+| Owner | Person accountable for the risk |
 
-**Inherent Risk Assessment** (Before Controls):
-- **Likelihood**: 1-5 scale
-  - 1 = Rare
-  - 2 = Unlikely
-  - 3 = Possible
-  - 4 = Likely
-  - 5 = Almost Certain
+**Inherent Assessment:**
+| Field | Scale | Description |
+|-------|-------|-------------|
+| Likelihood | 1-5 | Probability of occurrence |
+| Impact | 1-5 | Severity if it occurs |
 
-- **Impact**: 1-5 scale
-  - 1 = Minimal
-  - 2 = Low
-  - 3 = Moderate
-  - 4 = High
-  - 5 = Severe
+**Likelihood Scale:**
+| Score | Label | Meaning |
+|-------|-------|---------|
+| 1 | Rare | <10% chance in 12 months |
+| 2 | Unlikely | 10-30% chance |
+| 3 | Possible | 30-50% chance |
+| 4 | Likely | 50-80% chance |
+| 5 | Almost Certain | >80% chance |
 
-- **Inherent Score**: Auto-calculated (Likelihood × Impact)
+**Impact Scale:**
+| Score | Label | Meaning |
+|-------|-------|---------|
+| 1 | Minimal | Negligible effect |
+| 2 | Low | Minor disruption, easily recovered |
+| 3 | Moderate | Significant disruption, recoverable |
+| 4 | High | Major disruption, difficult recovery |
+| 5 | Severe | Critical impact, potential failure |
 
-3. Click **"Save Risk"**
+4. Click **"Save Risk"**
 
-### Editing a Risk
+---
 
-1. Click the **Edit** button (✏️) next to any risk
-2. Modify any fields
-3. Update likelihood/impact if changed
-4. Click **"Save Changes"**
+## Control Management & DIME Framework
 
-**Note:** Changes are tracked in the risk history.
+### What is a Control?
 
-### Adding Controls
+A **control** is an action, process, or mechanism that reduces risk by:
+- **Preventive**: Stops the risk from occurring
+- **Detective**: Identifies when a risk event occurs
+- **Corrective**: Reduces impact after occurrence
 
-Controls are mitigation actions that reduce risk.
+### Control Target
 
-1. Open a risk for editing
-2. Scroll to **"Controls"** section
-3. Click **"+ Add Control"**
-4. Fill in control details:
-   - **Control Name**: What is being done
-   - **Control Description**: How it works
-   - **Control Type**:
-     - Preventive (stops risk from occurring)
-     - Detective (identifies when risk occurs)
-     - Corrective (fixes impact after occurrence)
-   - **DIME Scores** (0-3 each):
-     - **Design**: How well designed? (0=None, 3=Excellent)
-     - **Implementation**: How well implemented?
-     - **Monitoring**: How well monitored?
-     - **Evaluation**: How regularly evaluated?
+Each control targets either:
+- **Likelihood**: Reduces the probability of occurrence
+- **Impact**: Reduces the severity if it occurs
 
-5. Click **"Save Control"**
+### The DIME Framework
 
-**Residual Risk** is automatically recalculated based on control effectiveness.
+DIME assesses control effectiveness across four dimensions:
+
+| Dimension | Question | What It Measures |
+|-----------|----------|------------------|
+| **D**esign | Is it well-designed? | Appropriateness of the control for the risk |
+| **I**mplementation | Is it properly implemented? | Actual deployment and operation |
+| **M**onitoring | Is it actively monitored? | Ongoing oversight and tracking |
+| **E**valuation | Is it regularly evaluated? | Periodic testing and improvement |
+
+### DIME Scoring Scale (0-3)
+
+| Score | Label | Description |
+|-------|-------|-------------|
+| 0 | None/Non-existent | Dimension not addressed at all |
+| 1 | Weak/Inadequate | Significant gaps or deficiencies |
+| 2 | Adequate | Meets minimum requirements |
+| 3 | Strong/Excellent | Best practice, fully effective |
+
+### Control Effectiveness Formula
+
+```
+Effectiveness = (D + I + M + E) / 12
+```
+
+**Result Range:** 0% to 100%
+
+### ⚠️ CRITICAL RULE: Design and Implementation
+
+> **If Design = 0 OR Implementation = 0, the control effectiveness is ZERO.**
+
+**Rationale:** A control cannot work if it is:
+- Not designed (D=0): No plan exists
+- Not implemented (I=0): Plan exists but not deployed
+
+**The M and E dimensions can be 0 without zeroing the effectiveness** - the control still works, but isn't monitored or evaluated.
+
+### DIME Decision Table
+
+| D | I | M | E | Effectiveness | Notes |
+|---|---|---|---|---------------|-------|
+| 0 | Any | Any | Any | **0%** | No design = no control |
+| Any | 0 | Any | Any | **0%** | Not implemented = no control |
+| 3 | 3 | 3 | 3 | 100% | Maximum effectiveness |
+| 3 | 3 | 0 | 0 | 50% | Works but not monitored |
+| 2 | 2 | 2 | 2 | 67% | Adequate across all dimensions |
+| 1 | 1 | 1 | 1 | 33% | Weak but present |
+
+### Worked Examples
+
+**Example 1: Strong Control**
+- Design: 3, Implementation: 3, Monitoring: 2, Evaluation: 2
+- Effectiveness = (3+3+2+2) / 12 = 10/12 = **83%**
+
+**Example 2: Unimplemented Control**
+- Design: 3, Implementation: 0, Monitoring: 0, Evaluation: 0
+- Effectiveness = **0%** (I=0 triggers zero rule)
+
+**Example 3: Weak Control**
+- Design: 1, Implementation: 1, Monitoring: 1, Evaluation: 0
+- Effectiveness = (1+1+1+0) / 12 = 3/12 = **25%**
 
 ### Residual Risk Calculation
 
-The system automatically calculates residual risk:
+The system calculates residual risk using:
 
 ```
-Residual Likelihood = Inherent Likelihood - (Control Reduction)
-Residual Impact = Inherent Impact - (Control Reduction)
-
-Control Reduction = (Average DIME Score / 100) × Max Reduction Factor
+Residual = GREATEST(1, Inherent - ROUND((Inherent - 1) × MAX_Effectiveness))
 ```
+
+**Key Points:**
+- Uses the **MAXIMUM** effectiveness of controls targeting each dimension
+- **Likelihood controls** reduce residual likelihood
+- **Impact controls** reduce residual impact
+- Residual cannot go below 1
 
 **Example:**
-- Inherent: Likelihood=4, Impact=5 (Score=20, EXTREME)
-- 3 controls with average DIME=75%
-- Residual: Likelihood=2, Impact=3 (Score=6, MEDIUM)
-- Risk reduced from EXTREME to MEDIUM! ✅
+- Inherent: L=4, I=5 (Score=20, EXTREME)
+- Likelihood control: 75% effective
+- Impact control: 50% effective
+
+Calculation:
+- Residual L = max(1, 4 - round((4-1) × 0.75)) = max(1, 4 - 2) = 2
+- Residual I = max(1, 5 - round((5-1) × 0.50)) = max(1, 5 - 2) = 3
+- Residual Score = 2 × 3 = **6 (MEDIUM)**
+
+---
+
+## Key Risk Indicators (KRIs) & Key Control Indicators (KCIs)
+
+### What are KRIs and KCIs?
+
+| Type | Full Name | Purpose | Targets |
+|------|-----------|---------|---------|
+| **KRI** | Key Risk Indicator | Early warning signal | **Likelihood** |
+| **KCI** | Key Control Indicator | Control performance measure | **Impact** |
+
+### KRI Examples by Category
+
+| Category | KRI Example | Threshold Example |
+|----------|-------------|-------------------|
+| Technology | System uptime % | Green: >99.5%, Yellow: 99-99.5%, Red: <99% |
+| Operational | Process error rate | Green: <1%, Yellow: 1-3%, Red: >3% |
+| Financial | Liquidity ratio | Green: >1.5, Yellow: 1.2-1.5, Red: <1.2 |
+| Compliance | Audit findings open | Green: <5, Yellow: 5-10, Red: >10 |
+
+### Threshold Configuration
+
+Each KRI/KCI has threshold levels:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    RED (Critical)                    │
+│  ───────────── Red Upper Threshold ─────────────    │
+│                  YELLOW (Warning)                    │
+│  ───────────── Yellow Upper Threshold ──────────    │
+│                   GREEN (Normal)                     │
+│  ───────────── Yellow Lower Threshold ──────────    │
+│                  YELLOW (Warning)                    │
+│  ───────────── Red Lower Threshold ─────────────    │
+│                    RED (Critical)                    │
+└─────────────────────────────────────────────────────┘
+```
+
+### Traffic Light Status
+
+| Status | Color | Meaning | Action Required |
+|--------|-------|---------|-----------------|
+| GREEN | 🟢 | Within normal limits | Continue monitoring |
+| YELLOW | 🟡 | Approaching threshold | Investigate, prepare response |
+| RED | 🔴 | Threshold breached | Immediate escalation required |
+
+### Adding KRI Data
+
+1. Navigate to the risk with linked KRIs
+2. Click on the **KRI** section
+3. Enter the current value
+4. System automatically:
+   - Calculates status (GREEN/YELLOW/RED)
+   - Records breach if threshold exceeded
+   - Updates risk appetite status
+
+---
+
+## Risk Appetite Framework
+
+### Understanding Risk Appetite
+
+**Risk Appetite** is the amount and type of risk an organization is willing to accept in pursuit of its objectives.
+
+### Enterprise Appetite Levels
+
+| Level | Label | Enterprise Meaning |
+|-------|-------|-------------------|
+| **ZERO** | No Tolerance | Risks threatening regulatory licence, solvency, or fundamental trust are not acceptable under any circumstances |
+| **LOW** | Low Tolerance | Only limited, short-duration exposure acceptable; breaches require immediate escalation and remediation |
+| **MODERATE** | Moderate Tolerance | Managed volatility is acceptable within approved limits and controls |
+| **HIGH** | High Tolerance | Willingness to accept material volatility in pursuit of strategic objectives |
+
+### Appetite Categories
+
+Organizations define appetite by risk category:
+
+| Category | Typical Appetite | Rationale |
+|----------|------------------|-----------|
+| Compliance | ZERO | Regulatory breaches unacceptable |
+| Reputation | LOW | Protect brand and trust |
+| Operational | MODERATE | Accept some process variability |
+| Strategic | HIGH | Accept volatility for growth |
+
+### Tolerance Metrics
+
+Each appetite category has measurable tolerance metrics:
+
+**Example: Operational Risk Appetite = MODERATE**
+
+| Metric | Target | Yellow Threshold | Red Threshold |
+|--------|--------|------------------|---------------|
+| System Downtime | <4 hrs/month | 4-8 hrs | >8 hrs |
+| Process Errors | <1% | 1-3% | >3% |
+| Incident Count | <5/month | 5-10 | >10 |
+
+### Appetite Status Calculation
+
+The system calculates appetite status by:
+
+1. Checking all linked KRIs against their thresholds
+2. Aggregating to tolerance level
+3. Rolling up to category level
+4. Computing overall enterprise status
+
+**Traffic Light Rules:**
+- Any RED KRI → Category status = RED
+- Any YELLOW KRI (no RED) → Category status = YELLOW
+- All GREEN → Category status = GREEN
+
+### Breach Management
+
+When a tolerance breach occurs:
+
+1. **Detection**: System identifies threshold violation
+2. **Alert**: Notifications sent to relevant stakeholders
+3. **Escalation**: Based on severity (CRO for Red breaches)
+4. **Remediation**: Action plan documented
+5. **Resolution**: Breach closed with approval
+
+---
+
+## Incident Management
+
+### What is an Incident?
+
+An **incident** is an event that has occurred and may indicate a risk materializing or control failure.
+
+### Incident Types
+
+| Type | Description | Examples |
+|------|-------------|----------|
+| Near Miss | Almost happened | System nearly failed |
+| Operational | Process/system failure | Outage, error |
+| Security | Information security | Breach, unauthorized access |
+| Compliance | Regulatory issue | Violation, audit finding |
+| Financial | Monetary loss | Fraud, error |
+
+### Incident Severity
+
+| Level | Label | Description |
+|-------|-------|-------------|
+| 1 | Minor | Minimal impact, easily resolved |
+| 2 | Low | Limited impact, normal resolution |
+| 3 | Moderate | Significant impact, requires attention |
+| 4 | High | Major impact, senior attention required |
+| 5 | Critical | Severe impact, immediate executive attention |
+
+### Reporting an Incident
+
+**Any user can report an incident:**
+
+1. Navigate to **Incidents** tab
+2. Click **"+ Report Incident"**
+3. Complete the form:
+   - **Title**: Clear description
+   - **Description**: What happened, when, where
+   - **Type**: Select incident type
+   - **Severity**: 1-5 scale
+   - **Date**: When it occurred
+   - **Financial Impact**: If applicable (optional)
+
+4. Click **"Submit"**
+
+### Visibility Scopes
+
+| Scope | Who Can See |
+|-------|-------------|
+| **Reporter Only** | Only the person who reported |
+| **Department** | Reporter's department members |
+| **Organization** | All organization users |
+
+### Linking Incidents to Risks
+
+Incidents can be linked to risks to:
+- Track risk materialization
+- Support root cause analysis
+- Validate risk assessments
+- Justify control improvements
+
+**To link:**
+1. Open the incident
+2. Click **"Link to Risks"**
+3. Select relevant risks
+4. Add reasoning (optional)
+
+### Incident Lifecycle
+
+```
+┌─────────┐   ┌────────────┐   ┌──────────┐   ┌────────┐
+│ REPORTED │ → │ INVESTIGATING │ → │ RESOLVED │ → │ CLOSED │
+└─────────┘   └────────────┘   └──────────┘   └────────┘
+                    ↓
+              ┌─────────┐
+              │  VOIDED │ (Admin only - erroneous entry)
+              └─────────┘
+```
 
 ---
 
 ## Risk Analytics & Reports
 
-### Advanced Risk Heatmap
-
-**Purpose:** Visualize risk distribution across likelihood and impact.
+### Risk Heatmap
 
 **Features:**
-- **Matrix Size**: 5×5 or 6×6
-- **View Toggle**: Show Inherent / Residual risks
-- **Filters**: Search, division, department, category, owner, status
-- **Period Selector**: View current or historical data
-- **Export**: Download as PNG or JPEG
-
-**How to Use:**
-
-1. Navigate to **Analytics → Risk Analysis**
-2. Select **Matrix Size** (5×5 or 6×6)
-3. Toggle **Show Inherent** / **Show Residual**
-4. Apply filters as needed
-5. Select **View Period**:
-   - **Current (Live Data)**: Real-time risk data
-   - **Q3 2024**: Historical snapshot
-6. Click cells to see risks in that category
-7. Click **Export Heatmap** to download
+- 5×5 or 6×6 matrix display
+- Toggle Inherent/Residual view
+- Filter by division, department, category, owner
+- Period selector for historical views
+- Export as PNG/JPEG
 
 **Color Coding:**
-- 🟥 Red: EXTREME risk (Score ≥ 15)
-- 🟧 Orange: HIGH risk (Score 10-14)
-- 🟨 Yellow: MEDIUM risk (Score 5-9)
-- 🟩 Green: LOW risk (Score < 5)
+| Risk Level | Color | Score Range |
+|------------|-------|-------------|
+| Extreme | 🔴 Red | ≥15 |
+| High | 🟠 Orange | 10-14 |
+| Medium | 🟡 Yellow | 5-9 |
+| Low | 🟢 Green | <5 |
 
 ### Period Comparison
 
-**Purpose:** Compare risk profiles between two quarters.
+Compare risk profiles between two periods:
+1. Select Period 1 (earlier)
+2. Select Period 2 (later)
+3. View side-by-side heatmaps
+4. See risk migration analysis
 
-**How to Use:**
+### Trend Analysis
 
-1. Navigate to **Analytics → Period Comparison**
-2. Select **Period 1** (earlier)
-3. Select **Period 2** (later)
-4. Click **"Compare"**
+Track metrics over time:
+- Risk count by level
+- Average inherent/residual scores
+- Control effectiveness trends
+- Incident frequency
 
-**What You'll See:**
-- **Comparison Summary**:
-  - Total risk count change
-  - Average inherent risk change
-  - Average residual risk change
-  - Risk reduction percentage
+### Export Reports
 
-- **Side-by-Side Heatmaps**:
-  - Left: Period 1 risks
-  - Right: Period 2 risks
-  - Color-coded borders show changes
-
-- **Risk Migration Analysis**:
-  - Escalated risks (got worse)
-  - De-escalated risks (got better)
-
-### Trends
-
-**Purpose:** Track risk metrics over multiple quarters.
-
-**Charts Available:**
-
-1. **Risk Count Trends**
-   - Line chart showing total risks, extreme, and high over time
-
-2. **Risk Level Distribution Over Time**
-   - Stacked area chart showing LOW/MEDIUM/HIGH/EXTREME
-
-3. **Risk Status Distribution by Period**
-   - Bar chart showing IDENTIFIED/UNDER REVIEW/APPROVED/MONITORING/CLOSED
-
-4. **Risk Migration Analysis**
-   - Select two periods
-   - See which risks changed severity levels
-
-**Summary Cards:**
-- Total Risks (with period-over-period change)
-- Extreme Risks (with trend indicator)
-- High Risks
-- Periods Tracked
+Available report formats:
+- **Board Report**: Executive summary for governance
+- **Regulatory Report**: Detailed compliance documentation
+- **CEO Report**: Strategic risk overview
+- **Custom Export**: CSV/Excel data export
 
 ---
 
 ## Risk Intelligence
 
-**Purpose:** Automated monitoring of external threat intelligence to identify relevant risks.
+### Overview
 
-### How It Works
+Risk Intelligence uses AI to:
+- Monitor external threat feeds
+- Analyze relevance to your risks
+- Generate actionable alerts
+- Suggest control improvements
 
-1. **External Events**:
-   - Admins add cybersecurity threats, market changes, regulatory updates
-   - Can integrate RSS feeds for automation
+### RSS Feed Sources
 
-2. **AI Analysis**:
-   - Claude AI analyzes each event
-   - Matches events to your existing risks
-   - Assigns confidence score (0-100%)
+**Built-in Categories:**
+| Category | Sources |
+|----------|---------|
+| Cybersecurity | CISA, NIST, security vendors |
+| Regulatory | Central banks, regulators |
+| Market | Financial news, economic data |
+| Technology | Tech news, vulnerability feeds |
 
-3. **Alerts Generated**:
-   - High-confidence matches create alerts
-   - Shows suggested controls
-   - Provides impact assessment
+### Alert Workflow
 
-### Viewing Alerts
+1. **Event Detected**: RSS feeds scanned
+2. **AI Analysis**: Claude AI matches to risks
+3. **Alert Created**: With confidence score
+4. **Review**: Admin reviews alert
+5. **Action**: Accept (apply) or Reject
 
-1. Navigate to **Risk Intelligence** tab
-2. See list of alerts:
-   - **Pending**: Awaiting review
-   - **Accepted**: Applied to risks
-   - **Rejected**: Dismissed
-   - **Archived**: Historical
+### Alert Actions
 
-3. For each alert:
-   - View matched risk
-   - Read AI reasoning
-   - See suggested controls
-   - View impact assessment
-
-### Acting on Alerts
-
-**Accept Alert:**
-1. Click **"Accept"**
-2. Confirm you want to apply changes
-3. Risk is automatically updated:
-   - Likelihood/impact may increase
-   - Treatment log entry created
-   - Alert marked as "Accepted"
-
-**Reject Alert:**
-1. Click **"Reject"**
-2. Provide reason (optional)
-3. Alert marked as "Rejected"
-
-**Undo Applied Alert:**
-1. Click **"Undo"** on accepted alert
-2. Risk reverts to previous state
-3. Treatment log entry created
+| Action | Effect |
+|--------|--------|
+| **Accept** | Risk updated, treatment log entry created |
+| **Reject** | Alert dismissed with reason |
+| **Undo** | Reverts accepted alert changes |
+| **Archive** | Moves to historical records |
 
 ---
 
@@ -430,270 +641,231 @@ Control Reduction = (Average DIME Score / 100) × Max Reduction Factor
 
 ### Understanding Periods
 
-MinRisk uses **quarterly periods** (Q1, Q2, Q3, Q4) to organize risk data:
+MinRisk uses quarterly periods (Q1-Q4) for:
+- Organizing risk assessments
+- Creating historical snapshots
+- Trend analysis
+- Regulatory reporting
 
-- **Current Period**: The quarter you're currently working in
-- **Historical Periods**: Past quarters with committed snapshots
-- **Continuous Model**: Risks maintain same ID across all periods (never cloned/deleted)
+### Current vs Historical Periods
 
-### Period Lifecycle
+| Period Type | Editable | Purpose |
+|-------------|----------|---------|
+| **Current** | ✅ Yes | Active work period |
+| **Historical** | ❌ No | Immutable snapshots |
 
-```
-Q1 2024 (Current) → Commit Period → Q1 2024 (Historical)
-                                   ↓
-                         Q2 2024 becomes Current
-```
+### Period Commit Process
 
-### Viewing Period History
+**When to Commit:**
+- End of each quarter
+- Before presenting to board
+- After completing assessments
 
-1. Navigate to **Analytics → Risk History**
-2. Select a period from dropdown
-3. View risks as they existed in that quarter
-4. See summary statistics:
-   - Total risks
-   - Average inherent/residual scores
-   - Risk reduction percentage
+**How to Commit (Admin only):**
 
-**Note:** Historical data is **read-only** (immutable).
+1. Navigate to **Admin → Period Management**
+2. Review current period summary
+3. Add notes (optional)
+4. Click **"Commit Period"**
+5. Confirm the action
+
+**What Happens:**
+- All risks snapshotted to history
+- Residual scores calculated and stored
+- Period advances to next quarter
+- Risks remain editable (continuous model)
 
 ---
 
-## Admin Functions
+## Administrator Guide
 
 ### User Management
 
-**Accessing User Management:**
-1. Click **Admin Panel** (admin users only)
-2. Select **User Management** tab
-
 **Approving New Users:**
-1. See list of pending users
-2. Review user details
-3. Click **"Approve"**
-4. Assign role:
-   - User (view only)
-   - Risk Manager (can edit)
-   - Admin (full access)
+1. Admin → User Management
+2. Review pending users
+3. Click **Approve** or **Reject**
+4. Assign role (User, Risk Manager, Admin)
 
-**Changing User Roles:**
+**Changing Roles:**
 1. Find user in list
-2. Select new role from dropdown
-3. Click **"Update Role"**
+2. Select new role
+3. Click **Update**
 
-**Rejecting Users:**
-1. Click **"Reject"** next to user
-2. User is removed from pending list
+### Risk Configuration
 
-### Period Commit (Quarter Close)
+**DIME Labels:**
+Customize labels for your organization's terminology.
 
-**⚠️ Important:** This action creates immutable historical snapshots.
+**Matrix Size:**
+Choose 5×5 or 6×6 risk matrix.
 
-**When to Commit:**
-- At the end of each quarter
-- After completing risk assessments
-- Before moving to next quarter
+**Risk Categories:**
+Add or modify risk category definitions.
 
-**How to Commit:**
+### RSS Feed Management
 
-1. Navigate to **Admin Panel → Period Management**
-2. Review current period (e.g., Q4 2024)
-3. Add **Notes** (optional):
-   - "Q4 2024 - Year-end risk review completed"
-   - "10 new risks identified, 3 closed"
-4. Click **"Commit Q4 2024"**
-5. Confirm in dialog:
-   - "This will snapshot all current risks"
-   - "Risks will remain editable (continuous model)"
-   - "Active period will advance to Q1 2025"
-6. Click **"Confirm Commit"**
+**Adding Sources:**
+1. Admin → Risk Intelligence → Sources
+2. Click **Add Source**
+3. Enter RSS URL and category
+4. Configure keywords
 
-**What Happens:**
-- ✅ All current risks are snapshotted to `risk_history`
-- ✅ Residual risk is calculated and saved
-- ✅ Period commit audit log entry created
-- ✅ Active period advances to next quarter
-- ✅ **Risks remain in Risk Register** (not deleted!)
+**Managing Keywords:**
+Define keywords for AI matching by category.
 
-**After Commit:**
-- You can now work in Q1 2025
-- Q4 2024 data is historical (read-only)
-- You can compare Q4 2024 to Q1 2025
-- You can view Q4 2024 in Risk History
+### Data Cleanup
 
-### Organization Settings
+**Reset Operational Data:**
+⚠️ Removes all risks, controls, incidents, KRIs
+- Preserves users and configuration
+- Requires confirmation
 
-1. Navigate to **Admin Panel → Organization Settings**
-2. Configure:
-   - **Matrix Size**: 5×5 or 6×6
-   - **Risk Appetite Statement**: Organization's risk tolerance
-   - **Risk Tolerance Level**: Acceptable risk threshold
-   - **Active Period**: Current quarter (auto-managed)
+---
+
+## Import/Export Data
+
+### Bulk Import
+
+**Supported Formats:**
+- Risks: CSV with specified columns
+- Controls: CSV with DIME scores
+
+**Template Available:**
+Download template from Import dialog.
+
+### Export Options
+
+| Export Type | Format | Contents |
+|-------------|--------|----------|
+| Risk Register | CSV | All risk data |
+| Controls | CSV | All control data |
+| Full Report | PDF | Complete assessment |
 
 ---
 
 ## Best Practices
 
-### Risk Identification
-
-✅ **DO:**
-- Use clear, specific risk titles
-- Include root cause in description
-- Assign appropriate owner
-- Select accurate category
-
-❌ **DON'T:**
-- Create duplicate risks
-- Use vague descriptions like "Bad things might happen"
-- Leave owner unassigned
-- Ignore related controls
-
 ### Risk Assessment
 
 ✅ **DO:**
-- Base likelihood on historical data or expert judgment
+- Base likelihood on data/expert judgment
 - Consider worst-case impact
 - Reassess quarterly
 - Document reasoning
 
 ❌ **DON'T:**
 - Guess randomly
-- Always use "Medium" to avoid attention
-- Overestimate to get management focus
-- Ignore feedback from stakeholders
+- Always use "Medium"
+- Overstate to get attention
 
 ### Control Management
 
 ✅ **DO:**
-- Link controls to risks
-- Update DIME scores regularly
-- Document control evidence
-- Monitor control effectiveness
+- Be honest with DIME scores
+- Update scores when controls change
+- Test controls regularly
+- Document evidence
 
 ❌ **DON'T:**
-- Add controls just to lower scores
 - Claim 100% effectiveness without proof
-- Forget to update when controls change
-- Ignore detective and corrective controls
+- Add controls just to lower scores
+- Ignore monitoring requirements
 
 ### Period Management
 
 ✅ **DO:**
-- Commit periods at regular intervals
-- Add meaningful notes to commits
-- Review all risks before committing
-- Verify residual calculations
+- Commit periods regularly (quarterly)
+- Add meaningful notes
+- Review data quality before commit
 
 ❌ **DON'T:**
-- Commit periods too frequently (stick to quarters)
-- Skip period commits for long periods
-- Forget to communicate commit to team
-- Commit without reviewing data quality
+- Skip period commits
+- Commit without review
+- Forget to communicate to team
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**Issue: Can't see Risk Intelligence tab**
+- Cause: Requires Admin role
+- Solution: Contact your admin
+
+**Issue: Risk not saving**
+- Cause: Required fields missing
+- Solution: Check for red validation messages
+
+**Issue: Residual score not updating**
+- Cause: Control missing D or I score
+- Solution: Ensure Design and Implementation are ≥1
+
+**Issue: KRI not showing status**
+- Cause: Thresholds not configured
+- Solution: Set Yellow and Red thresholds
+
+**Issue: Export not working**
+- Cause: Pop-up blocked
+- Solution: Allow pop-ups for MinRisk
+
+---
+
+## Glossary
+
+| Term | Definition |
+|------|------------|
+| **Control Effectiveness** | Percentage measure of how well a control reduces risk (0-100%) |
+| **DIME** | Design, Implementation, Monitoring, Evaluation - framework for assessing controls |
+| **Inherent Risk** | Risk level assuming no controls exist |
+| **KCI** | Key Control Indicator - measures control performance |
+| **KRI** | Key Risk Indicator - early warning signal for risk |
+| **Likelihood** | Probability of a risk event occurring (1-5) |
+| **Impact** | Severity of consequences if risk occurs (1-5) |
+| **Residual Risk** | Risk level after controls are applied |
+| **Risk Appetite** | Amount of risk an organization is willing to accept |
+| **Risk Tolerance** | Measurable boundaries for acceptable variation |
 
 ---
 
 ## FAQ
 
-### General Questions
+### General
 
 **Q: Can I delete a risk?**
-A: Risks are not deleted, they are closed. Set status to "CLOSED" and they'll be excluded from active reports but remain in history.
+A: Risks are closed, not deleted. Set status to CLOSED.
 
-**Q: Can I edit historical risk data?**
-A: No. Historical snapshots are immutable. You can only edit current period risks.
+**Q: Can I edit historical data?**
+A: No. Historical snapshots are immutable.
 
-**Q: What happens if I change a risk's inherent score?**
-A: The residual score is automatically recalculated based on your controls.
+**Q: What happens when I change inherent scores?**
+A: Residual scores recalculate automatically.
 
-**Q: Can I restore a previous version of a risk?**
-A: Not directly, but you can view historical data and manually copy values if needed.
+### DIME & Controls
 
-### Risk Assessment
-
-**Q: What's the difference between Inherent and Residual risk?**
-A:
-- **Inherent**: Risk assuming NO controls exist
-- **Residual**: Risk AFTER controls are applied
-- Formula: Residual = Inherent - (Control Effectiveness)
+**Q: Why is my control effectiveness 0%?**
+A: Design or Implementation score is 0. Both must be ≥1.
 
 **Q: How many controls should a risk have?**
-A: It depends on the risk severity:
-- EXTREME/HIGH: 3-5 controls recommended
-- MEDIUM: 2-3 controls
-- LOW: 1-2 controls
+A: EXTREME/HIGH: 3-5, MEDIUM: 2-3, LOW: 1-2
 
-**Q: What is DIME scoring?**
-A: DIME assesses control effectiveness across four dimensions:
-- **D**esign: Is the control well-designed?
-- **I**mplementation: Is it properly implemented?
-- **M**onitoring: Is it actively monitored?
-- **E**valuation: Is it regularly evaluated?
+**Q: Can I use the same control for multiple risks?**
+A: Create separate control entries for clear accountability.
 
-Each scored 0-3, average determines control strength.
+### Periods
 
-### Period Management
-
-**Q: What happens to risks when I commit a period?**
-A: A snapshot is created in risk_history, but the risks remain in the Risk Register for continued editing.
+**Q: What happens when I commit a period?**
+A: Snapshot created, risks remain editable, period advances.
 
 **Q: Can I undo a period commit?**
-A: No. Period commits are permanent. This ensures data integrity.
+A: No. Period commits are permanent.
 
-**Q: How do I compare two quarters?**
-A: Use Analytics → Period Comparison, select both periods, and click Compare.
-
-**Q: Can I work in multiple periods at once?**
-A: No. Only one period is "active" at a time. Historical periods are read-only.
-
-### Technical Issues
-
-**Q: The app is running slowly. What should I do?**
-A: Try:
-1. Refresh your browser
-2. Clear browser cache
-3. Check your internet connection
-4. Contact your admin if issue persists
-
-**Q: I can't see the Admin Panel tab.**
-A: Only users with Admin role can see this tab. Contact your organization's admin.
-
-**Q: Risk Intelligence alerts aren't appearing.**
-A: Check:
-1. Are you an admin? (only admins see this feature)
-2. Have events been added?
-3. Contact support if issue persists
-
-**Q: Export isn't working.**
-A: Ensure pop-ups are not blocked by your browser. Check browser settings.
+**Q: Can I work in two periods at once?**
+A: No. Only one active period at a time.
 
 ---
 
-## Need Help?
-
-### Contact Support
-
-**Email:** support@minrisk.com
-**Response Time:** Within 24 hours
-
-### Video Tutorials
-
-Visit our YouTube channel for video walkthroughs:
-- Getting Started with MinRisk (10 min)
-- Risk Assessment Best Practices (15 min)
-- Period Management Explained (8 min)
-- Using Analytics & Reports (12 min)
-
-### Release Notes
-
-Check the **Release Notes** section in the app for:
-- New features
-- Bug fixes
-- Performance improvements
-- Breaking changes
-
----
-
-**Document Version:** 2.0
-**Last Updated:** December 2024
-**Next Review:** March 2025
-
-**Feedback:** Have suggestions for this manual? Email docs@minrisk.com
+**Document Version:** 3.0  
+**Last Updated:** January 2026  
+**Contact:** support@minrisk.com

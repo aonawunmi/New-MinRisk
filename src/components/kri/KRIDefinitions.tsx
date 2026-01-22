@@ -193,12 +193,13 @@ export default function KRIDefinitions() {
   }
 
   // Link KRI to a risk
-  async function handleLinkRisk(riskCode: string) {
+  async function handleLinkRisk(riskId: string) {
     if (!managingLinksFor) return;
 
     setLinkingInProgress(true);
     try {
-      const result = await linkKRIToRisk(managingLinksFor.id, riskCode);
+      // Pass riskId (UUID) directly
+      const result = await linkKRIToRisk(managingLinksFor.id, riskId);
       if (result.error) throw new Error(result.error.message);
 
       // Reload data to refresh links
@@ -218,23 +219,23 @@ export default function KRIDefinitions() {
   }
 
   // Unlink KRI from a risk
-  async function handleUnlinkRisk(riskCode: string) {
+  async function handleUnlinkRisk(riskId: string) {
     if (!managingLinksFor) return;
 
-    if (!confirm(`Unlink "${riskCode}" from this KRI?`)) return;
+    const risk = risks.find(r => r.id === riskId);
+    // Display risk code/title in conformation if possible, or fallback
+    const riskLabel = risk ? `${risk.risk_code} - ${risk.risk_title}` : 'this risk';
+
+    if (!confirm(`Unlink "${riskLabel}" from this KRI?`)) return;
 
     setLinkingInProgress(true);
     try {
-      // Find the link by getting the risk_id from risk_code
-      const risk = risks.find(r => r.risk_code === riskCode);
-      if (!risk) throw new Error('Risk not found');
-
-      // Get the link record
+      // Get the link record using risk_id (UUID)
       const { data: links, error: linkError } = await supabase
         .from('kri_risk_links')
         .select('id')
         .eq('kri_id', managingLinksFor.id)
-        .eq('risk_id', risk.id)
+        .eq('risk_id', riskId)
         .single();
 
       if (linkError || !links) throw new Error('Link not found');
@@ -262,8 +263,10 @@ export default function KRIDefinitions() {
   function getAvailableRisks(): Risk[] {
     if (!managingLinksFor) return risks;
 
-    const linkedCodes = new Set(managingLinksFor.linked_risk_codes || []);
-    return risks.filter(r => !linkedCodes.has(r.risk_code));
+    // linked_risk_codes contains UUIDs now
+    const linkedIds = new Set(managingLinksFor.linked_risk_codes || []);
+    // Filter by checking if risk.id is in the set
+    return risks.filter(r => !linkedIds.has(r.id));
   }
 
   // Filter available risks by search term
@@ -548,19 +551,23 @@ export default function KRIDefinitions() {
 
               {managingLinksFor?.linked_risk_codes && managingLinksFor.linked_risk_codes.length > 0 ? (
                 <div className="space-y-2">
-                  {managingLinksFor.linked_risk_codes.map((riskCode) => {
-                    const risk = risks.find(r => r.risk_code === riskCode);
+                  {managingLinksFor.linked_risk_codes.map((riskId) => {
+                    // riskId is actually the UUID now
+                    const risk = risks.find(r => r.id === riskId);
+                    // Use the found risk's code, or fallback to the ID if not found (though it should be found)
+                    const displayCode = risk?.risk_code || 'Unknown ID';
+
                     return (
                       <div
-                        key={riskCode}
+                        key={riskId}
                         className="flex items-center justify-between p-3 border rounded-lg bg-blue-50 border-blue-200"
                       >
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="font-mono">
-                              {riskCode}
+                              {displayCode}
                             </Badge>
-                            <span className="font-medium">{risk?.risk_title || 'Unknown'}</span>
+                            <span className="font-medium">{risk?.risk_title || 'Unknown Risk'}</span>
                           </div>
                           {risk?.category && (
                             <p className="text-sm text-gray-600 mt-1">
@@ -572,7 +579,7 @@ export default function KRIDefinitions() {
                           <Button
                             size="sm"
                             variant="destructive"
-                            onClick={() => handleUnlinkRisk(riskCode)}
+                            onClick={() => handleUnlinkRisk(riskId)}
                             disabled={linkingInProgress}
                           >
                             <Unlink className="h-4 w-4 mr-1" />
@@ -646,7 +653,7 @@ export default function KRIDefinitions() {
                         </div>
                         <Button
                           size="sm"
-                          onClick={() => handleLinkRisk(risk.risk_code)}
+                          onClick={() => handleLinkRisk(risk.id)}
                           disabled={linkingInProgress}
                         >
                           <Plus className="h-4 w-4 mr-1" />
