@@ -66,7 +66,8 @@ export async function getAllControls(): Promise<ApiResponse<Control[]>> {
   try {
     const orgId = await getCurrentOrgId();
     if (!orgId) {
-      return { data: null, error: new Error('No organization context') };
+      // Super Admin / No org context: Return empty for read operations
+      return { data: [], error: null };
     }
 
     const { data, error } = await supabase
@@ -100,7 +101,8 @@ export async function getControlsForRisk(
   try {
     const orgId = await getCurrentOrgId();
     if (!orgId) {
-      return { data: null, error: new Error('No organization context') };
+      // Super Admin / No org context: Return empty for read operations
+      return { data: [], error: null };
     }
 
     const { data, error } = await supabase
@@ -145,7 +147,8 @@ export async function getControl(
   try {
     const orgId = await getCurrentOrgId();
     if (!orgId) {
-      return { data: null, error: new Error('No organization context') };
+      // Super Admin / No org context: Return null for read operations
+      return { data: null, error: null };
     }
 
     const { data, error } = await supabase
@@ -182,7 +185,9 @@ export async function createControl(
     const profileId = await getCurrentProfileId();
 
     if (!orgId) {
-      return { data: null, error: new Error('No organization context') };
+      // Super Admin / No org context: Cannot create without org
+      console.warn('createControl: Skipped - no organization context (Super Admin)');
+      return { data: null, error: null };
     }
 
     if (!profileId) {
@@ -241,7 +246,9 @@ export async function updateControl(
   try {
     const orgId = await getCurrentOrgId();
     if (!orgId) {
-      return { data: null, error: new Error('No organization context') };
+      // Super Admin / No org context: Cannot update without org
+      console.warn('updateControl: Skipped - no organization context (Super Admin)');
+      return { data: null, error: null };
     }
 
     const { data, error } = await supabase
@@ -277,7 +284,9 @@ export async function deleteControl(
   try {
     const orgId = await getCurrentOrgId();
     if (!orgId) {
-      return { data: null, error: new Error('No organization context') };
+      // Super Admin / No org context: Cannot delete without org
+      console.warn('deleteControl: Skipped - no organization context (Super Admin)');
+      return { data: null, error: null };
     }
 
     const { error } = await supabase
@@ -474,7 +483,7 @@ export async function getControlSummary(
     const avgEffectiveness =
       effectivenessScores.length > 0
         ? effectivenessScores.reduce((a, b) => a + b, 0) /
-          effectivenessScores.length
+        effectivenessScores.length
         : 0;
 
     return {

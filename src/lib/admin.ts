@@ -78,8 +78,21 @@ async function callEdgeFunction<T = any>(
  * }
  */
 export async function listUsersInOrganization(
-  organizationId: string
+  organizationId: string | null
 ): Promise<AdminResult<any[]>> {
+  // If no organization ID (Super Admin), use the direct RPC which is safe
+  if (!organizationId) {
+    const { data, error } = await supabase.rpc('list_users_with_email', {
+      p_organization_id: null
+    });
+
+    if (error) {
+      console.error('RPC list_users_with_email failed:', error);
+      return { data: null, error: new Error(error.message) };
+    }
+    return { data, error: null };
+  }
+
   return callEdgeFunction<any[]>('admin-list-users', {
     organizationId,
     filterPending: false,
@@ -101,8 +114,23 @@ export async function listUsersInOrganization(
  * }
  */
 export async function listPendingUsers(
-  organizationId: string
+  organizationId: string | null
 ): Promise<AdminResult<any[]>> {
+  // If no organization ID (Super Admin), use the direct RPC which is safe
+  if (!organizationId) {
+    const { data, error } = await supabase.rpc('list_users_with_email', {
+      p_organization_id: null
+    });
+
+    if (error) {
+      console.error('RPC listPendingUsers failed:', error);
+      return { data: null, error: new Error(error.message) };
+    }
+    // Client-side filter since our RPC returns all
+    const pending = (data || []).filter((u: any) => u.status === 'pending');
+    return { data: pending, error: null };
+  }
+
   return callEdgeFunction<any[]>('admin-list-users', {
     organizationId,
     filterPending: true,

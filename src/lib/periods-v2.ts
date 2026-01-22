@@ -184,6 +184,22 @@ export async function getActivePeriod(orgId: string): Promise<{
   error: Error | null;
 }> {
   try {
+    // Super Admin / No Org context: Return default period
+    if (!orgId) {
+      const current = getCurrentPeriod();
+      return {
+        data: {
+          organization_id: 'system',
+          current_period_year: current.year,
+          current_period_quarter: current.quarter,
+          previous_period_year: null,
+          previous_period_quarter: null,
+          period_started_at: new Date().toISOString(),
+        },
+        error: null,
+      };
+    }
+
     const { data, error } = await supabase
       .from('active_period')
       .select('*')
@@ -462,6 +478,8 @@ export async function getCommittedPeriods(orgId: string): Promise<{
   error: Error | null;
 }> {
   try {
+    if (!orgId) return { data: [], error: null };
+
     const { data, error } = await supabase
       .from('period_commits')
       .select('*')

@@ -175,7 +175,23 @@ export async function getOrganizationConfig(): Promise<ApiResponse<OrganizationC
   try {
     const orgId = await getCurrentOrgId();
     if (!orgId) {
-      return { data: null, error: new Error('No organization context') };
+      // Super Admin / No org context: Return default system config
+      const defaultConfig: OrganizationConfig = {
+        id: 'system',
+        organization_id: 'system',
+        user_id: 'system',
+        matrix_size: 5,
+        likelihood_labels: DEFAULT_5X5_LIKELIHOOD_LABELS,
+        impact_labels: DEFAULT_5X5_IMPACT_LABELS,
+        divisions: DEFAULT_DIVISIONS,
+        departments: DEFAULT_DEPARTMENTS,
+        categories: DEFAULT_CATEGORIES,
+        owners: [],
+        dime_descriptions: DEFAULT_DIME_DESCRIPTIONS,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      return { data: defaultConfig, error: null };
     }
 
     const { data, error } = await supabase
@@ -208,7 +224,9 @@ export async function updateOrganizationConfig(
   try {
     const orgId = await getCurrentOrgId();
     if (!orgId) {
-      return { data: null, error: new Error('No organization context') };
+      // Super Admin / No org context: Cannot update system config, return no-op
+      console.warn('updateOrganizationConfig: Skipped - no organization context (Super Admin)');
+      return { data: null, error: null };
     }
 
     const { data, error } = await supabase
