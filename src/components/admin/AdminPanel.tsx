@@ -15,6 +15,7 @@ import LibraryGenerator from './LibraryGenerator';
 import LibrarySetupAlert from './LibrarySetupAlert';
 import { OrganizationManagement } from './OrganizationManagement';
 import ActiveSessions from './ActiveSessions';
+import PlatformMetrics from './PlatformMetrics';
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
@@ -56,6 +57,7 @@ export default function AdminPanel() {
     // Super Admin only tabs
     ...(isSuperAdmin ? [
       { id: 'organizations', label: 'Organizations' },
+      { id: 'metrics', label: 'Platform Metrics' },
       { id: 'sessions', label: 'Active Sessions' }
     ] : []),
     { id: 'taxonomy', label: 'Risk Taxonomy' },
@@ -120,6 +122,7 @@ export default function AdminPanel() {
       {/* Tab Content */}
       <div>
         {activeTab === 'organizations' && isSuperAdmin && <OrganizationManagement />}
+        {activeTab === 'metrics' && isSuperAdmin && <PlatformMetrics />}
         {activeTab === 'sessions' && isSuperAdmin && <ActiveSessions />}
         {activeTab === 'taxonomy' && <TaxonomyManagement />}
         {activeTab === 'configuration' && <RiskConfiguration />}
