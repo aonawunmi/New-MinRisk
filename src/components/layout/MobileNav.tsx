@@ -46,6 +46,7 @@ const bottomNavItems: NavItem[] = [
 
 interface MobileNavProps {
     isAdmin?: boolean;
+    isSuperAdmin?: boolean;
     onLogout?: () => void;
     activeTab?: string;
     onTabChange?: (tab: string) => void;
@@ -53,6 +54,7 @@ interface MobileNavProps {
 
 export default function MobileNav({
     isAdmin = false,
+    isSuperAdmin = false,
     onLogout,
     activeTab = 'dashboard',
     onTabChange
@@ -137,7 +139,7 @@ export default function MobileNav({
 
                 <div className="flex-1 overflow-y-auto py-4">
                     <div className="px-3 space-y-1">
-                        {mainNavItems.map((item) => {
+                        {!isSuperAdmin && mainNavItems.map((item) => {
                             const Icon = item.icon;
                             return (
                                 <button
@@ -199,35 +201,46 @@ export default function MobileNav({
 
             {/* Bottom Navigation Bar */}
             <nav className="desktop-hidden mobile-bottom-nav" aria-label="Quick navigation">
-                {bottomNavItems.map((item) => {
-                    const Icon = item.icon;
-                    const active = item.tabValue !== '#more' && isActive(item.tabValue);
+                {isSuperAdmin ? (
+                    // Simplified bottom nav for Super Admin
+                    <button
+                        onClick={() => handleNavClick('admin')}
+                        className={cn('mobile-bottom-nav-item', isActive('admin') && 'active')}
+                    >
+                        <Users className="h-5 w-5" />
+                        <span className="text-xs mt-1">Admin</span>
+                    </button>
+                ) : (
+                    bottomNavItems.map((item) => {
+                        const Icon = item.icon;
+                        const active = item.tabValue !== '#more' && isActive(item.tabValue);
 
-                    if (item.tabValue === '#more') {
+                        if (item.tabValue === '#more') {
+                            return (
+                                <button
+                                    key={item.tabValue}
+                                    onClick={() => setShowMoreMenu(!showMoreMenu)}
+                                    className={cn('mobile-bottom-nav-item', showMoreMenu && 'active')}
+                                    aria-expanded={showMoreMenu}
+                                >
+                                    <Icon className="h-5 w-5" />
+                                    <span className="text-xs mt-1">{item.label}</span>
+                                </button>
+                            );
+                        }
+
                         return (
                             <button
                                 key={item.tabValue}
-                                onClick={() => setShowMoreMenu(!showMoreMenu)}
-                                className={cn('mobile-bottom-nav-item', showMoreMenu && 'active')}
-                                aria-expanded={showMoreMenu}
+                                onClick={() => handleNavClick(item.tabValue)}
+                                className={cn('mobile-bottom-nav-item', active && 'active')}
                             >
                                 <Icon className="h-5 w-5" />
                                 <span className="text-xs mt-1">{item.label}</span>
                             </button>
                         );
-                    }
-
-                    return (
-                        <button
-                            key={item.tabValue}
-                            onClick={() => handleNavClick(item.tabValue)}
-                            className={cn('mobile-bottom-nav-item', active && 'active')}
-                        >
-                            <Icon className="h-5 w-5" />
-                            <span className="text-xs mt-1">{item.label}</span>
-                        </button>
-                    );
-                })}
+                    })
+                )}
             </nav>
 
             {/* More Menu Popup */}
@@ -239,7 +252,7 @@ export default function MobileNav({
                     />
                     <div className="desktop-hidden fixed bottom-[calc(60px+var(--safe-area-inset-bottom))] left-4 right-4 bg-white rounded-lg shadow-xl border z-25 p-2">
                         <div className="grid grid-cols-3 gap-2">
-                            {[...mainNavItems.slice(3), ...(isAdmin ? adminNavItems : [])].map((item) => {
+                            {[...(isSuperAdmin ? [] : mainNavItems.slice(3)), ...(isAdmin ? adminNavItems : [])].map((item) => {
                                 const Icon = item.icon;
                                 return (
                                     <button

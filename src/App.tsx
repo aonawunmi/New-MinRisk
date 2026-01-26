@@ -45,6 +45,13 @@ export default function App() {
     loadAuthState();
   }, []);
 
+  useEffect(() => {
+    // Redirect Super Admin to Admin tab by default
+    if (authState.isSuperAdmin && activeTab === 'dashboard') {
+      setActiveTab('admin');
+    }
+  }, [authState.isSuperAdmin]);
+
   async function loadAuthState() {
     try {
       // 1. Get authenticated user
@@ -128,6 +135,7 @@ export default function App() {
         {/* Mobile Navigation */}
         <MobileNav
           isAdmin={authState.isAdmin}
+          isSuperAdmin={authState.isSuperAdmin}
           onLogout={handleLogout}
           activeTab={activeTab}
           onTabChange={setActiveTab}
@@ -181,22 +189,26 @@ export default function App() {
             {/* Horizontally scrollable tabs container for mobile */}
             <div className="mobile-scroll-x -mx-3 px-3 sm:mx-0 sm:px-0">
               <TabsList className="mb-4 sm:mb-6 inline-flex sm:flex w-max sm:w-auto">
-                {/* Tabs visible to all users (First Line of Defense) */}
-                <TabsTrigger value="dashboard" className="text-xs sm:text-sm whitespace-nowrap">
-                  <span className="hidden sm:inline">📊 </span>Dashboard
-                </TabsTrigger>
-                <TabsTrigger value="risks" className="text-xs sm:text-sm whitespace-nowrap">
-                  <span className="hidden sm:inline">📋 </span>Risks
-                </TabsTrigger>
-                <TabsTrigger value="controls" className="text-xs sm:text-sm whitespace-nowrap">
-                  <span className="hidden sm:inline">🛡️ </span>Controls
-                </TabsTrigger>
-                <TabsTrigger value="incidents" className="text-xs sm:text-sm whitespace-nowrap">
-                  <span className="hidden sm:inline">🚨 </span>Incidents
-                </TabsTrigger>
-                <TabsTrigger value="ai" className="text-xs sm:text-sm whitespace-nowrap">
-                  <span className="hidden sm:inline">✨ </span>AI
-                </TabsTrigger>
+                {/* Tabs visible to all users (First Line of Defense) - HIDDEN for Super Admin */}
+                {!authState.isSuperAdmin && (
+                  <>
+                    <TabsTrigger value="dashboard" className="text-xs sm:text-sm whitespace-nowrap">
+                      <span className="hidden sm:inline">📊 </span>Dashboard
+                    </TabsTrigger>
+                    <TabsTrigger value="risks" className="text-xs sm:text-sm whitespace-nowrap">
+                      <span className="hidden sm:inline">📋 </span>Risks
+                    </TabsTrigger>
+                    <TabsTrigger value="controls" className="text-xs sm:text-sm whitespace-nowrap">
+                      <span className="hidden sm:inline">🛡️ </span>Controls
+                    </TabsTrigger>
+                    <TabsTrigger value="incidents" className="text-xs sm:text-sm whitespace-nowrap">
+                      <span className="hidden sm:inline">🚨 </span>Incidents
+                    </TabsTrigger>
+                    <TabsTrigger value="ai" className="text-xs sm:text-sm whitespace-nowrap">
+                      <span className="hidden sm:inline">✨ </span>AI
+                    </TabsTrigger>
+                  </>
+                )}
 
                 {/* Tabs visible only to ADMIN (Second/Third Line of Defense) */}
                 {authState.isAdmin && (
