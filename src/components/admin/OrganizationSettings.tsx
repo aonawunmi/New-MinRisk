@@ -18,7 +18,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Settings } from 'lucide-react';
+import { AlertCircle, Settings, Building } from 'lucide-react';
+import LogoUploader from './LogoUploader';
 
 interface OrgConfig {
   id: string;
@@ -31,6 +32,7 @@ export default function OrganizationSettings() {
   const [config, setConfig] = useState<OrgConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     loadConfig();
@@ -55,11 +57,21 @@ export default function OrganizationSettings() {
 
       if (configError) {
         console.error('Load config error:', configError);
-        setError(configError.message);
-        return;
+        // Don't error out completely if config missing (might be new org)
+      } else {
+        setConfig(data);
       }
 
-      setConfig(data);
+      // Load Org Details (Logo)
+      const { data: orgData, error: orgError } = await supabase
+        .from('organizations')
+        .select('logo_url')
+        .eq('id', profile.organization_id)
+        .single();
+
+      if (orgData) {
+        setLogoUrl(orgData.logo_url);
+      }
     } catch (err: any) {
       console.error('Unexpected error loading config:', err);
       setError(err.message);
@@ -72,7 +84,11 @@ export default function OrganizationSettings() {
     return <div className="text-center py-8">Loading settings...</div>;
   }
 
-  if (!config) {
+  // Allow render if at least we loaded something or error
+  // But strictly config might be missing?
+  // We'll show partial UI if config missing but loading done
+
+  if (!config && !logoUrl && !loading && error) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -84,13 +100,31 @@ export default function OrganizationSettings() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      {/* Branding Settings */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-purple-600 rounded-lg">
+              <Building className="h-6 w-6 text-white" />
+            </div>
+            <CardTitle>Branding & Customization</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <LogoUploader
+            currentLogoUrl={logoUrl}
+            onLogoUpdated={setLogoUrl}
+          />
+        </CardContent>
+      </Card>
 
       {/* System Information */}
       <Card>
@@ -110,15 +144,15 @@ export default function OrganizationSettings() {
             </div>
             <div>
               <p className="text-gray-600">Organization ID:</p>
-              <p className="font-mono text-xs">{config.organization_id}</p>
+              <p className="font-mono text-xs">{config?.organization_id || 'Loading...'}</p>
             </div>
             <div>
               <p className="text-gray-600">Created:</p>
-              <p>{new Date(config.created_at).toLocaleString()}</p>
+              <p>{config ? new Date(config.created_at).toLocaleString() : '-'}</p>
             </div>
             <div>
               <p className="text-gray-600">Last Updated:</p>
-              <p>{new Date(config.updated_at).toLocaleString()}</p>
+              <p>{config ? new Date(config.updated_at).toLocaleString() : '-'}</p>
             </div>
           </div>
           <div className="mt-6 p-4 bg-gray-50 rounded-lg border">

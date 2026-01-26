@@ -24,6 +24,14 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import {
     Table,
     TableBody,
     TableCell,
@@ -43,12 +51,17 @@ interface Organization {
     created_at: string;
     suspended_at: string | null;
     user_count: number;
+    plan_name: string | null;
+    subscription_status: string | null;
+    trial_ends_at: string | null;
 }
 
 interface CreateOrgForm {
     name: string;
     code: string;
     description: string;
+    planId: string;
+    isTrial: boolean;
 }
 
 interface InviteAdminForm {
@@ -60,6 +73,7 @@ interface InviteAdminForm {
 
 export function OrganizationManagement() {
     const [organizations, setOrganizations] = useState<Organization[]>([]);
+    const [plans, setPlans] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
@@ -69,6 +83,8 @@ export function OrganizationManagement() {
         name: '',
         code: '',
         description: '',
+        planId: '',
+        isTrial: false,
     });
 
     const [inviteForm, setInviteForm] = useState<InviteAdminForm>({
@@ -79,11 +95,21 @@ export function OrganizationManagement() {
     });
 
     useEffect(() => {
-        loadOrganizations();
+        loadData();
     }, []);
 
-    async function loadOrganizations() {
+    async function loadData() {
         setLoading(true);
+        await Promise.all([loadOrganizations(), loadPlans()]);
+        setLoading(false);
+    }
+
+    async function loadPlans() {
+        const { data } = await supabase.rpc('list_subscription_plans');
+        if (data) setPlans(data);
+    }
+
+    async function loadOrganizations() {
         try {
             const { data, error } = await supabase.rpc('list_organizations_admin');
 
@@ -97,8 +123,6 @@ export function OrganizationManagement() {
         } catch (err) {
             console.error('Unexpected error:', err);
             alert('An unexpected error occurred');
-        } finally {
-            setLoading(false);
         }
     }
 
@@ -114,6 +138,8 @@ export function OrganizationManagement() {
                 p_name: createForm.name,
                 p_code: createForm.code.toUpperCase(),
                 p_description: createForm.description || null,
+                p_plan_id: createForm.planId || null,
+                p_start_trial: createForm.isTrial
             });
 
             if (error) {
@@ -124,7 +150,7 @@ export function OrganizationManagement() {
 
             alert(`Organization "${createForm.name}" created successfully!`);
             setCreateDialogOpen(false);
-            setCreateForm({ name: '', code: '', description: '' });
+            setCreateForm({ name: '', code: '', description: '', planId: '', isTrial: false });
             loadOrganizations();
         } catch (err) {
             console.error('Unexpected error:', err);
@@ -295,13 +321,38 @@ export function OrganizationManagement() {
                                     </p>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="org-desc">Description</Label>
                                     <Input
                                         id="org-desc"
                                         placeholder="Brief description of the organization"
                                         value={createForm.description}
                                         onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
                                     />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="org-plan">Subscription Plan</Label>
+                                    <Select
+                                        value={createForm.planId}
+                                        onValueChange={(val) => setCreateForm({ ...createForm, planId: val })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select a plan" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {plans.map((p: any) => (
+                                                <SelectItem key={p.id} value={p.id}>
+                                                    {p.name} (${p.price_monthly}/mo)
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex items-center space-x-2 pt-2">
+                                    <Switch
+                                        id="trial-mode"
+                                        checked={createForm.isTrial}
+                                        onCheckedChange={(checked) => setCreateForm({ ...createForm, isTrial: checked })}
+                                    />
+                                    <Label htmlFor="trial-mode">Start with 14-day Free Trial</Label>
                                 </div>
                             </div>
                             <DialogFooter>
@@ -345,6 +396,7 @@ export function OrganizationManagement() {
                                 <TableRow>
                                     <TableHead>Organization</TableHead>
                                     <TableHead>Code</TableHead>
+                                    <TableHead>Plan</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead>Users</TableHead>
                                     <TableHead>Created</TableHead>
@@ -364,6 +416,16 @@ export function OrganizationManagement() {
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant="outline">{org.code}</Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div>
+                                                <div className="font-medium">{org.plan_name || 'N/A'}</div>
+                                                {org.subscription_status === 'trial' && (
+                                                    <span className="text-xs text-amber-600 font-semibold">
+                                                        Trial ends {new Date(org.trial_ends_at!).toLocaleDateString()}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </TableCell>
                                         <TableCell>
                                             {org.status === 'suspended' ? (

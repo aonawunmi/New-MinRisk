@@ -8,7 +8,9 @@
 
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { getCurrentUser, signOut } from '@/lib/auth';
+import { signOut, useAuth, getCurrentUser } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
+import { useOrgBranding } from '@/hooks/useOrgBranding';
 import { getCurrentUserProfile, isUserAdmin, isSuperAdmin } from '@/lib/profiles';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import LoginForm from '@/components/auth/LoginForm';
@@ -32,6 +34,9 @@ import AdminCheck from '@/components/debug/AdminCheck';
 import type { AuthState } from '@/types/auth';
 
 export default function App() {
+  const { user: authUser, profile: authProfile } = useAuth(); // rename to avoid conflict
+  const { logoUrl } = useOrgBranding();
+
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
     profile: null,
@@ -148,8 +153,14 @@ export default function App() {
         <header className="mobile-hidden bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">MinRisk</h1>
-              <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Enterprise Risk Management</p>
+              {logoUrl ? (
+                <img src={logoUrl} alt="Organization Logo" className="h-8 object-contain" />
+              ) : (
+                <>
+                  <h1 className="text-xl sm:text-2xl font-bold text-gray-900">MinRisk</h1>
+                  <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Enterprise Risk Management</p>
+                </>
+              )}
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
               <div className="text-sm text-right hidden sm:block">

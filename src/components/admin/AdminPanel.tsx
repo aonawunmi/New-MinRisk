@@ -16,6 +16,7 @@ import LibrarySetupAlert from './LibrarySetupAlert';
 import { OrganizationManagement } from './OrganizationManagement';
 import ActiveSessions from './ActiveSessions';
 import PlatformMetrics from './PlatformMetrics';
+import PlanBuilder from './PlanBuilder';
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
@@ -57,6 +58,7 @@ export default function AdminPanel() {
     // Super Admin only tabs
     ...(isSuperAdmin ? [
       { id: 'organizations', label: 'Organizations' },
+      { id: 'plans', label: 'Plans & Pricing' },
       { id: 'metrics', label: 'Platform Metrics' },
       { id: 'sessions', label: 'Active Sessions' }
     ] : []),
@@ -122,6 +124,7 @@ export default function AdminPanel() {
       {/* Tab Content */}
       <div>
         {activeTab === 'organizations' && isSuperAdmin && <OrganizationManagement />}
+        {activeTab === 'plans' && isSuperAdmin && <PlanBuilder />}
         {activeTab === 'metrics' && isSuperAdmin && <PlatformMetrics />}
         {activeTab === 'sessions' && isSuperAdmin && <ActiveSessions />}
         {activeTab === 'taxonomy' && <TaxonomyManagement />}
