@@ -123,192 +123,194 @@ export default function App() {
 
   // Logged in - show main app
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Mobile Navigation */}
-      <MobileNav
-        isAdmin={authState.isAdmin}
-        onLogout={handleLogout}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-      />
+    <BrowserRouter>
+      <div className="min-h-screen bg-gray-50">
+        {/* Mobile Navigation */}
+        <MobileNav
+          isAdmin={authState.isAdmin}
+          onLogout={handleLogout}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        />
 
-      {/* Session Enforcement */}
-      <SessionManager />
+        {/* Session Enforcement */}
+        <SessionManager />
 
-      {/* Desktop Header - hidden on mobile */}
-      <header className="mobile-hidden bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">MinRisk</h1>
-            <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Enterprise Risk Management</p>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <div className="text-sm text-right hidden sm:block">
-              <div className="font-medium">{authState.profile.full_name}</div>
-              <div className="text-gray-600">{authState.profile.role}</div>
+        {/* Desktop Header - hidden on mobile */}
+        <header className="mobile-hidden bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">MinRisk</h1>
+              <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Enterprise Risk Management</p>
             </div>
-            <UserMenu
-              user={authState.user}
-              profile={authState.profile}
-              isAdmin={authState.isAdmin}
-            />
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="text-sm text-right hidden sm:block">
+                <div className="font-medium">{authState.profile.full_name}</div>
+                <div className="text-gray-600">{authState.profile.role}</div>
+              </div>
+              <UserMenu
+                user={authState.user}
+                profile={authState.profile}
+                isAdmin={authState.isAdmin}
+              />
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Content - with mobile padding adjustments */}
-      <main className="container mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-20 sm:pb-6">
-        {/* USER Role Context Banner */}
-        {!authState.isAdmin && (
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-start gap-3">
-              <div className="text-blue-600 text-lg">ℹ️</div>
-              <div>
-                <h3 className="text-sm font-semibold text-blue-900 mb-1">
-                  Operational User Access
-                </h3>
-                <p className="text-xs text-blue-800">
-                  You have access to operational risk management features (Dashboard, Risks, Controls, Incidents).
-                  Advanced analytics, KRI monitoring, and intelligence features are available to Risk Management team members.
-                </p>
+        {/* Main Content - with mobile padding adjustments */}
+        <main className="container mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-20 sm:pb-6">
+          {/* USER Role Context Banner */}
+          {!authState.isAdmin && (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="text-blue-600 text-lg">ℹ️</div>
+                <div>
+                  <h3 className="text-sm font-semibold text-blue-900 mb-1">
+                    Operational User Access
+                  </h3>
+                  <p className="text-xs text-blue-800">
+                    You have access to operational risk management features (Dashboard, Risks, Controls, Incidents).
+                    Advanced analytics, KRI monitoring, and intelligence features are available to Risk Management team members.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          {/* Horizontally scrollable tabs container for mobile */}
-          <div className="mobile-scroll-x -mx-3 px-3 sm:mx-0 sm:px-0">
-            <TabsList className="mb-4 sm:mb-6 inline-flex sm:flex w-max sm:w-auto">
-              {/* Tabs visible to all users (First Line of Defense) */}
-              <TabsTrigger value="dashboard" className="text-xs sm:text-sm whitespace-nowrap">
-                <span className="hidden sm:inline">📊 </span>Dashboard
-              </TabsTrigger>
-              <TabsTrigger value="risks" className="text-xs sm:text-sm whitespace-nowrap">
-                <span className="hidden sm:inline">📋 </span>Risks
-              </TabsTrigger>
-              <TabsTrigger value="controls" className="text-xs sm:text-sm whitespace-nowrap">
-                <span className="hidden sm:inline">🛡️ </span>Controls
-              </TabsTrigger>
-              <TabsTrigger value="incidents" className="text-xs sm:text-sm whitespace-nowrap">
-                <span className="hidden sm:inline">🚨 </span>Incidents
-              </TabsTrigger>
-              <TabsTrigger value="ai" className="text-xs sm:text-sm whitespace-nowrap">
-                <span className="hidden sm:inline">✨ </span>AI
-              </TabsTrigger>
-
-              {/* Tabs visible only to ADMIN (Second/Third Line of Defense) */}
-              {authState.isAdmin && (
-                <>
-                  <TabsTrigger value="analytics" className="text-xs sm:text-sm whitespace-nowrap">
-                    <span className="hidden sm:inline">📈 </span>Analytics
-                  </TabsTrigger>
-                  <TabsTrigger value="kri" className="text-xs sm:text-sm whitespace-nowrap">
-                    <span className="hidden sm:inline">📉 </span>KRI
-                  </TabsTrigger>
-                  <TabsTrigger value="intelligence" className="text-xs sm:text-sm whitespace-nowrap">
-                    <span className="hidden sm:inline">🧠 </span>Intel
-                  </TabsTrigger>
-                  <TabsTrigger value="admin" className="text-xs sm:text-sm whitespace-nowrap">
-                    <span className="hidden sm:inline">⚙️ </span>Admin
-                  </TabsTrigger>
-                </>
-              )}
-            </TabsList>
-          </div>
-
-          <TabsContent value="dashboard">
-            <Dashboard />
-          </TabsContent>
-
-          <TabsContent value="risks">
-            <Tabs defaultValue="register" className="w-full">
-              <TabsList>
-                <TabsTrigger value="register">📋 Risk Register</TabsTrigger>
-                <TabsTrigger value="import-export">💾 Import/Export</TabsTrigger>
-              </TabsList>
-              <TabsContent value="register">
-                <RiskRegister />
-              </TabsContent>
-              <TabsContent value="import-export">
-                <ImportExportManager mode="risks" />
-              </TabsContent>
-            </Tabs>
-          </TabsContent>
-
-          <TabsContent value="controls">
-            <Tabs defaultValue="register" className="w-full">
-              <TabsList>
-                <TabsTrigger value="register">🛡️ Control Register</TabsTrigger>
-                <TabsTrigger value="import-export">💾 Import/Export</TabsTrigger>
-              </TabsList>
-              <TabsContent value="register">
-                <ControlRegister />
-              </TabsContent>
-              <TabsContent value="import-export">
-                <ImportExportManager mode="controls" />
-              </TabsContent>
-            </Tabs>
-          </TabsContent>
-
-          {/* Admin-only tabs */}
-          {authState.isAdmin && (
-            <>
-              <TabsContent value="analytics">
-                <Tabs defaultValue="current" className="w-full">
-                  <TabsList>
-                    <TabsTrigger value="current">📊 Current Analysis</TabsTrigger>
-                    <TabsTrigger value="history">🕐 Risk History</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="current">
-                    <Analytics />
-                  </TabsContent>
-                  <TabsContent value="history">
-                    <RiskHistoryView />
-                  </TabsContent>
-                </Tabs>
-              </TabsContent>
-
-              <TabsContent value="kri">
-                <KRIManagement />
-              </TabsContent>
-
-              <TabsContent value="intelligence">
-                <RiskIntelligenceManagement />
-              </TabsContent>
-            </>
           )}
 
-          <TabsContent value="incidents">
-            <Tabs defaultValue="management" className="w-full">
-              <TabsList>
-                <TabsTrigger value="management">📝 Incident Management</TabsTrigger>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            {/* Horizontally scrollable tabs container for mobile */}
+            <div className="mobile-scroll-x -mx-3 px-3 sm:mx-0 sm:px-0">
+              <TabsList className="mb-4 sm:mb-6 inline-flex sm:flex w-max sm:w-auto">
+                {/* Tabs visible to all users (First Line of Defense) */}
+                <TabsTrigger value="dashboard" className="text-xs sm:text-sm whitespace-nowrap">
+                  <span className="hidden sm:inline">📊 </span>Dashboard
+                </TabsTrigger>
+                <TabsTrigger value="risks" className="text-xs sm:text-sm whitespace-nowrap">
+                  <span className="hidden sm:inline">📋 </span>Risks
+                </TabsTrigger>
+                <TabsTrigger value="controls" className="text-xs sm:text-sm whitespace-nowrap">
+                  <span className="hidden sm:inline">🛡️ </span>Controls
+                </TabsTrigger>
+                <TabsTrigger value="incidents" className="text-xs sm:text-sm whitespace-nowrap">
+                  <span className="hidden sm:inline">🚨 </span>Incidents
+                </TabsTrigger>
+                <TabsTrigger value="ai" className="text-xs sm:text-sm whitespace-nowrap">
+                  <span className="hidden sm:inline">✨ </span>AI
+                </TabsTrigger>
+
+                {/* Tabs visible only to ADMIN (Second/Third Line of Defense) */}
                 {authState.isAdmin && (
-                  <TabsTrigger value="ai-review">🧠 AI Review (ADMIN)</TabsTrigger>
+                  <>
+                    <TabsTrigger value="analytics" className="text-xs sm:text-sm whitespace-nowrap">
+                      <span className="hidden sm:inline">📈 </span>Analytics
+                    </TabsTrigger>
+                    <TabsTrigger value="kri" className="text-xs sm:text-sm whitespace-nowrap">
+                      <span className="hidden sm:inline">📉 </span>KRI
+                    </TabsTrigger>
+                    <TabsTrigger value="intelligence" className="text-xs sm:text-sm whitespace-nowrap">
+                      <span className="hidden sm:inline">🧠 </span>Intel
+                    </TabsTrigger>
+                    <TabsTrigger value="admin" className="text-xs sm:text-sm whitespace-nowrap">
+                      <span className="hidden sm:inline">⚙️ </span>Admin
+                    </TabsTrigger>
+                  </>
                 )}
               </TabsList>
-              <TabsContent value="management">
-                <IncidentManagement />
-              </TabsContent>
-              {authState.isAdmin && (
-                <TabsContent value="ai-review">
-                  <AdminIncidentReview />
-                </TabsContent>
-              )}
-            </Tabs>
-          </TabsContent>
+            </div>
 
-          <TabsContent value="ai">
-            <AIAssistant />
-          </TabsContent>
-
-          {authState.isAdmin && (
-            <TabsContent value="admin">
-              <AdminPanel />
+            <TabsContent value="dashboard">
+              <Dashboard />
             </TabsContent>
-          )}
-        </Tabs>
-      </main>
-    </div>
+
+            <TabsContent value="risks">
+              <Tabs defaultValue="register" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="register">📋 Risk Register</TabsTrigger>
+                  <TabsTrigger value="import-export">💾 Import/Export</TabsTrigger>
+                </TabsList>
+                <TabsContent value="register">
+                  <RiskRegister />
+                </TabsContent>
+                <TabsContent value="import-export">
+                  <ImportExportManager mode="risks" />
+                </TabsContent>
+              </Tabs>
+            </TabsContent>
+
+            <TabsContent value="controls">
+              <Tabs defaultValue="register" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="register">🛡️ Control Register</TabsTrigger>
+                  <TabsTrigger value="import-export">💾 Import/Export</TabsTrigger>
+                </TabsList>
+                <TabsContent value="register">
+                  <ControlRegister />
+                </TabsContent>
+                <TabsContent value="import-export">
+                  <ImportExportManager mode="controls" />
+                </TabsContent>
+              </Tabs>
+            </TabsContent>
+
+            {/* Admin-only tabs */}
+            {authState.isAdmin && (
+              <>
+                <TabsContent value="analytics">
+                  <Tabs defaultValue="current" className="w-full">
+                    <TabsList>
+                      <TabsTrigger value="current">📊 Current Analysis</TabsTrigger>
+                      <TabsTrigger value="history">🕐 Risk History</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="current">
+                      <Analytics />
+                    </TabsContent>
+                    <TabsContent value="history">
+                      <RiskHistoryView />
+                    </TabsContent>
+                  </Tabs>
+                </TabsContent>
+
+                <TabsContent value="kri">
+                  <KRIManagement />
+                </TabsContent>
+
+                <TabsContent value="intelligence">
+                  <RiskIntelligenceManagement />
+                </TabsContent>
+              </>
+            )}
+
+            <TabsContent value="incidents">
+              <Tabs defaultValue="management" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="management">📝 Incident Management</TabsTrigger>
+                  {authState.isAdmin && (
+                    <TabsTrigger value="ai-review">🧠 AI Review (ADMIN)</TabsTrigger>
+                  )}
+                </TabsList>
+                <TabsContent value="management">
+                  <IncidentManagement />
+                </TabsContent>
+                {authState.isAdmin && (
+                  <TabsContent value="ai-review">
+                    <AdminIncidentReview />
+                  </TabsContent>
+                )}
+              </Tabs>
+            </TabsContent>
+
+            <TabsContent value="ai">
+              <AIAssistant />
+            </TabsContent>
+
+            {authState.isAdmin && (
+              <TabsContent value="admin">
+                <AdminPanel />
+              </TabsContent>
+            )}
+          </Tabs>
+        </main>
+      </div>
+    </BrowserRouter>
   );
 }

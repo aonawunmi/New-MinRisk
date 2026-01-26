@@ -8,12 +8,14 @@
 export type UserRole =
   | 'primary_admin'
   | 'secondary_admin'
+  | 'super_admin'
   | 'user'
+  | 'viewer'
   | 'ORG_EDITOR'
   | 'ORG_VIEWER'
   | 'GUEST';
 
-export type UserStatus = 'pending' | 'approved' | 'suspended';
+export type UserStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 
 export interface UserProfile {
   id: string;
@@ -62,7 +64,7 @@ export interface HeatmapConfig {
 
 export interface AuthUser {
   id: string;
-  email: string | undefined;
+  email?: string;
 }
 
 export interface AuthState {
