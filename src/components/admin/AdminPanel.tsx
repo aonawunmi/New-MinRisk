@@ -13,6 +13,7 @@ import OwnerMappingTool from './OwnerMappingTool';
 import DataCleanup from './DataCleanup';
 import LibraryGenerator from './LibraryGenerator';
 import LibrarySetupAlert from './LibrarySetupAlert';
+import { OrganizationManagement } from './OrganizationManagement';
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
@@ -46,8 +47,13 @@ export default function AdminPanel() {
     checkLegacyOwners();
   }, [profile?.organization_id]);
 
-  // Build tabs dynamically - only include Owner Mapping if there are unmapped owners
+  // Check if user is super_admin
+  const isSuperAdmin = profile?.role === 'super_admin';
+
+  // Build tabs dynamically
   const tabs = [
+    // Super Admin only tabs
+    ...(isSuperAdmin ? [{ id: 'organizations', label: 'Organizations' }] : []),
     { id: 'taxonomy', label: 'Risk Taxonomy' },
     { id: 'configuration', label: 'Risk Configuration' },
     { id: 'appetite', label: 'Appetite & Tolerance' },
@@ -57,7 +63,7 @@ export default function AdminPanel() {
     { id: 'periods', label: 'Period Management' },
     { id: 'audit', label: 'Audit Trail' },
     { id: 'help', label: 'Help' },
-    { id: 'settings', label: 'Organization Settings' },
+    ...(isSuperAdmin ? [] : [{ id: 'settings', label: 'Organization Settings' }]),
   ];
 
   return (
@@ -109,6 +115,7 @@ export default function AdminPanel() {
 
       {/* Tab Content */}
       <div>
+        {activeTab === 'organizations' && isSuperAdmin && <OrganizationManagement />}
         {activeTab === 'taxonomy' && <TaxonomyManagement />}
         {activeTab === 'configuration' && <RiskConfiguration />}
         {activeTab === 'appetite' && <AppetiteToleranceConfig />}
