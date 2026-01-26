@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import TaxonomyManagement from './TaxonomyManagement';
@@ -22,16 +22,35 @@ import PlatformAuditTrail from './PlatformAuditTrail';
 export default function AdminPanel() {
   const { user, profile } = useAuth();
 
-  // Check if user is super_admin for default tab
-  const isSuperAdmin = profile?.role === 'super_admin';
-  const [activeTab, setActiveTab] = useState(isSuperAdmin ? 'organizations' : 'taxonomy');
-
   const [hasUnmappedOwners, setHasUnmappedOwners] = useState(false);
   const [checkingOwners, setCheckingOwners] = useState(true);
 
-  // Check if there are any unmapped owners
+  // CRITICAL: Strict role check - ONLY 'super_admin' role gets platform tabs
+  const isSuperAdmin = useMemo(() => {
+    return profile?.role === 'super_admin';
+  }, [profile?.role]);
+
+  // Set default tab based on role - update when role changes
+  const [activeTab, setActiveTab] = useState('taxonomy');
+
+  useEffect(() => {
+    // When profile loads, set appropriate default tab
+    if (profile?.role === 'super_admin') {
+      setActiveTab('organizations');
+    } else if (profile) {
+      setActiveTab('taxonomy');
+    }
+  }, [profile?.role]);
+
+  // Check if there are any unmapped owners (only for non-super-admins)
   useEffect(() => {
     async function checkLegacyOwners() {
+      // Super admins don't need this check
+      if (isSuperAdmin) {
+        setCheckingOwners(false);
+        return;
+      }
+
       if (!profile?.organization_id) return;
 
       try {
@@ -52,21 +71,24 @@ export default function AdminPanel() {
     }
 
     checkLegacyOwners();
-  }, [profile?.organization_id]);
+  }, [profile?.organization_id, isSuperAdmin]);
 
-  // Build tabs dynamically based on role
-  const tabs = isSuperAdmin
-    ? [
-      // Super Admin only sees platform-level tabs
-      { id: 'organizations', label: 'Organizations' },
-      { id: 'plans', label: 'Plans & Pricing' },
-      { id: 'metrics', label: 'Platform Metrics' },
-      { id: 'sessions', label: 'Active Sessions' },
-      { id: 'platform-audit', label: 'Audit Trail' },
-      { id: 'help', label: 'Help' },
-    ]
-    : [
-      // Regular Admins see org-specific tabs
+  // Build tabs dynamically based on role using useMemo for stability
+  const tabs = useMemo(() => {
+    // STRICTLY check for super_admin role
+    if (profile?.role === 'super_admin') {
+      return [
+        { id: 'organizations', label: 'Organizations' },
+        { id: 'plans', label: 'Plans & Pricing' },
+        { id: 'metrics', label: 'Platform Metrics' },
+        { id: 'sessions', label: 'Active Sessions' },
+        { id: 'platform-audit', label: 'Audit Trail' },
+        { id: 'help', label: 'Help' },
+      ];
+    }
+
+    // ALL other roles (primary_admin, admin, user) see org-specific tabs
+    return [
       { id: 'taxonomy', label: 'Risk Taxonomy' },
       { id: 'configuration', label: 'Risk Configuration' },
       { id: 'appetite', label: 'Appetite & Tolerance' },
@@ -78,10 +100,23 @@ export default function AdminPanel() {
       { id: 'help', label: 'Help' },
       { id: 'settings', label: 'Organization Settings' },
     ];
+  }, [profile?.role, hasUnmappedOwners]);
+
+  // Loading state - don't render tabs until profile is loaded
+  if (!profile) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        Loading admin panel...
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: '100%', padding: '0' }}>
-      <LibrarySetupAlert onNavigateToLibrary={() => setActiveTab('library')} />
+      {/* Only show library alert for non-super-admins */}
+      {!isSuperAdmin && (
+        <LibrarySetupAlert onNavigateToLibrary={() => setActiveTab('library')} />
+      )}
 
       {/* Tab Navigation */}
       <div style={{
@@ -126,34 +161,42 @@ export default function AdminPanel() {
         ))}
       </div>
 
-      {/* Tab Content */}
-      <div>
-        {activeTab === 'organizations' && isSuperAdmin && <OrganizationManagement />}
-        {activeTab === 'plans' && isSuperAdmin && <PlanBuilder />}
-        {activeTab === 'metrics' && isSuperAdmin && <PlatformMetrics />}
-        {activeTab === 'sessions' && isSuperAdmin && <ActiveSessions />}
-        {activeTab === 'platform-audit' && isSuperAdmin && <PlatformAuditTrail />}
-        {activeTab === 'taxonomy' && !isSuperAdmin && <TaxonomyManagement />}
-        {activeTab === 'configuration' && !isSuperAdmin && <RiskConfiguration />}
-        {activeTab === 'appetite' && !isSuperAdmin && <AppetiteToleranceConfig />}
-        {activeTab === 'library' && !isSuperAdmin && <LibraryGenerator />}
-        {activeTab === 'users' && !isSuperAdmin && <UserManagement />}
-        {activeTab === 'owner-mapping' && !isSuperAdmin && hasUnmappedOwners && <OwnerMappingTool />}
-        {activeTab === 'periods' && !isSuperAdmin && user && profile && (
-          <PeriodManagement orgId={profile.organization_id} userId={user.id} />
-        )}
-        {activeTab === 'audit' && !isSuperAdmin && <AuditTrail />}
-        {activeTab === 'help' && <HelpTab />}
-        {activeTab === 'settings' && !isSuperAdmin && (
-          <>
-            <OrganizationSettings />
-            <div style={{ marginTop: '24px' }}>
-              <DataCleanup />
-            </div>
-          </>
-        )}
-      </div>
+      {/* Tab Content - Super Admin tabs */}
+      {isSuperAdmin && (
+        <div>
+          {activeTab === 'organizations' && <OrganizationManagement />}
+          {activeTab === 'plans' && <PlanBuilder />}
+          {activeTab === 'metrics' && <PlatformMetrics />}
+          {activeTab === 'sessions' && <ActiveSessions />}
+          {activeTab === 'platform-audit' && <PlatformAuditTrail />}
+          {activeTab === 'help' && <HelpTab />}
+        </div>
+      )}
+
+      {/* Tab Content - Regular Admin tabs */}
+      {!isSuperAdmin && (
+        <div>
+          {activeTab === 'taxonomy' && <TaxonomyManagement />}
+          {activeTab === 'configuration' && <RiskConfiguration />}
+          {activeTab === 'appetite' && <AppetiteToleranceConfig />}
+          {activeTab === 'library' && <LibraryGenerator />}
+          {activeTab === 'users' && <UserManagement />}
+          {activeTab === 'owner-mapping' && hasUnmappedOwners && <OwnerMappingTool />}
+          {activeTab === 'periods' && user && profile && (
+            <PeriodManagement orgId={profile.organization_id} userId={user.id} />
+          )}
+          {activeTab === 'audit' && <AuditTrail />}
+          {activeTab === 'help' && <HelpTab />}
+          {activeTab === 'settings' && (
+            <>
+              <OrganizationSettings />
+              <div style={{ marginTop: '24px' }}>
+                <DataCleanup />
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
-

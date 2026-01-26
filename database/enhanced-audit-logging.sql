@@ -4,6 +4,14 @@
 -- This script updates all Super Admin RPCs to log detailed audit entries
 -- with rich metadata (before/after values, entity names, reasons)
 
+-- Drop existing functions first to allow return type changes
+DROP FUNCTION IF EXISTS public.create_organization(text, text, text, uuid, boolean);
+DROP FUNCTION IF EXISTS public.suspend_organization(uuid);
+DROP FUNCTION IF EXISTS public.reactivate_organization(uuid);
+DROP FUNCTION IF EXISTS public.update_organization_plan(uuid, uuid, boolean);
+DROP FUNCTION IF EXISTS public.upsert_subscription_plan(uuid, text, int, numeric, jsonb, boolean);
+DROP FUNCTION IF EXISTS public.get_platform_audit_trail(int);
+
 -- ============================================================================
 -- 1. Update create_organization to log audit
 -- ============================================================================
