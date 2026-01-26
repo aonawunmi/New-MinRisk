@@ -14,6 +14,7 @@ import DataCleanup from './DataCleanup';
 import LibraryGenerator from './LibraryGenerator';
 import LibrarySetupAlert from './LibrarySetupAlert';
 import { OrganizationManagement } from './OrganizationManagement';
+import ActiveSessions from './ActiveSessions';
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
@@ -53,7 +54,10 @@ export default function AdminPanel() {
   // Build tabs dynamically
   const tabs = [
     // Super Admin only tabs
-    ...(isSuperAdmin ? [{ id: 'organizations', label: 'Organizations' }] : []),
+    ...(isSuperAdmin ? [
+      { id: 'organizations', label: 'Organizations' },
+      { id: 'sessions', label: 'Active Sessions' }
+    ] : []),
     { id: 'taxonomy', label: 'Risk Taxonomy' },
     { id: 'configuration', label: 'Risk Configuration' },
     { id: 'appetite', label: 'Appetite & Tolerance' },
@@ -116,6 +120,7 @@ export default function AdminPanel() {
       {/* Tab Content */}
       <div>
         {activeTab === 'organizations' && isSuperAdmin && <OrganizationManagement />}
+        {activeTab === 'sessions' && isSuperAdmin && <ActiveSessions />}
         {activeTab === 'taxonomy' && <TaxonomyManagement />}
         {activeTab === 'configuration' && <RiskConfiguration />}
         {activeTab === 'appetite' && <AppetiteToleranceConfig />}

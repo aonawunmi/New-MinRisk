@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import LoginForm from '@/components/auth/LoginForm';
 import SignupForm from '@/components/auth/SignupForm';
 import UserMenu from '@/components/auth/UserMenu';
+import { SessionManager } from '@/components/auth/SessionManager';
 import MobileNav from '@/components/layout/MobileNav';
 import Dashboard from '@/components/dashboard/Dashboard';
 import Analytics from '@/components/analytics/Analytics';
@@ -130,6 +131,9 @@ export default function App() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
+
+      {/* Session Enforcement */}
+      <SessionManager />
 
       {/* Desktop Header - hidden on mobile */}
       <header className="mobile-hidden bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
