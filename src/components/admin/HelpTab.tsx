@@ -608,7 +608,15 @@ const sections = [
         <li>Configure organization details</li>
         <li>DIME scale configuration</li>
         <li>Likelihood/Impact scales</li>
+        <li><strong>🎨 Branding</strong> - Upload organization logo</li>
         <li><strong>⚠️ Danger Zone: Data Cleanup</strong> - Delete operational data</li>
+      </ul>
+
+      <h4>10. Plans & Pricing (Super Admin)</h4>
+      <ul>
+        <li>Create/Edit subscription tiers</li>
+        <li>Set user limits (e.g., Starter=5 users)</li>
+        <li>Toggle feature availability (AI, Intel, etc.) per plan</li>
       </ul>
 
       <h3>Data Cleanup (Danger Zone)</h3>
@@ -684,7 +692,10 @@ const sections = [
       Only admins can access. Contact your organization's admin.</p>
 
       <p><strong>Can't see Analytics/KRI/Intel tabs:</strong><br>
-      These are admin-only features for Risk Management team.</p>
+      These are admin-only features, or your subscription plan does not include them.</p>
+
+      <p><strong>Can't see AI or Incidents tabs:</strong><br>
+      Your organization's subscription plan may not include checks these features. Contact your administrator to upgrade.</p>
 
       <h3>Data Issues</h3>
       <p><strong>Risk code already exists:</strong><br>

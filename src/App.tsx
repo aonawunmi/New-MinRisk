@@ -241,15 +241,19 @@ export default function App() {
                 {/* Tabs visible only to ADMIN (Second/Third Line of Defense) */}
                 {authState.isAdmin && (
                   <>
-                    <TabsTrigger value="analytics" className="text-xs sm:text-sm whitespace-nowrap">
-                      <span className="hidden sm:inline">📈 </span>Analytics
-                    </TabsTrigger>
-                    <TabsTrigger value="kri" className="text-xs sm:text-sm whitespace-nowrap">
-                      <span className="hidden sm:inline">📉 </span>KRI
-                    </TabsTrigger>
-                    <TabsTrigger value="intelligence" className="text-xs sm:text-sm whitespace-nowrap">
-                      <span className="hidden sm:inline">🧠 </span>Intel
-                    </TabsTrigger>
+                    {!authState.isSuperAdmin && (
+                      <>
+                        <TabsTrigger value="analytics" className="text-xs sm:text-sm whitespace-nowrap">
+                          <span className="hidden sm:inline">📈 </span>Analytics
+                        </TabsTrigger>
+                        <TabsTrigger value="kri" className="text-xs sm:text-sm whitespace-nowrap">
+                          <span className="hidden sm:inline">📉 </span>KRI
+                        </TabsTrigger>
+                        <TabsTrigger value="intelligence" className="text-xs sm:text-sm whitespace-nowrap">
+                          <span className="hidden sm:inline">🧠 </span>Intel
+                        </TabsTrigger>
+                      </>
+                    )}
                     <TabsTrigger value="admin" className="text-xs sm:text-sm whitespace-nowrap">
                       <span className="hidden sm:inline">⚙️ </span>Admin
                     </TabsTrigger>

@@ -200,6 +200,7 @@ Step 6: Link to Risks (optional)
          - Select risks that this control mitigates
 ```
 
+
 ### 4.4 Residual Risk Calculation
 
 When controls are linked, residual risk is calculated:
@@ -697,6 +698,29 @@ Results table shows per-table deletion counts
 ```
 
 > ⚠️ **Warning**: This action cannot be undone. Always ensure you have backups before proceeding.
+
+### 10.6 Organization Branding
+
+Customize the application look and feel:
+
+1. Navigate to **Admin → Organization Settings**
+2. Scroll to "Branding & Customization"
+3. Upload your **Organization Logo** (Recommended: 200x80px PNG/JPG)
+4. The logo instantly replaces the "MinRisk" name in the header for all your users.
+
+### 10.7 Subscription Management (Super Admin)
+
+Manage SaaS plans and limits:
+
+**Plans & Pricing:**
+- Create tiered plans (e.g., Starter, Professional)
+- Define limits (Max Users per plan)
+- Toggle feature access (e.g., Enable/Disable AI module)
+
+**Organization Assignment:**
+- Assign plans to organizations upon creation
+- Enable **14-day Free Trials** (auto-expires)
+- Monitor active subscriptions and user counts
 
 ---
 

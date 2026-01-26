@@ -40,7 +40,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Building2, Plus, Users, UserPlus, RefreshCw, Ban, CheckCircle } from 'lucide-react';
+import { Building2, Plus, Users, UserPlus, RefreshCw, Ban, CheckCircle, ClipboardList } from 'lucide-react';
 
 interface Organization {
     id: string;
@@ -51,6 +51,7 @@ interface Organization {
     created_at: string;
     suspended_at: string | null;
     user_count: number;
+    plan_id: string | null;
     plan_name: string | null;
     subscription_status: string | null;
     trial_ends_at: string | null;
@@ -77,6 +78,8 @@ export function OrganizationManagement() {
     const [loading, setLoading] = useState(true);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+    const [managePlanDialogOpen, setManagePlanDialogOpen] = useState(false);
+    const [selectedOrgForPlan, setSelectedOrgForPlan] = useState<Organization | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
     const [createForm, setCreateForm] = useState<CreateOrgForm>({
@@ -92,6 +95,11 @@ export function OrganizationManagement() {
         organizationName: '',
         email: '',
         fullName: '',
+    });
+
+    const [planForm, setPlanForm] = useState({
+        planId: '',
+        isTrial: false
     });
 
     useEffect(() => {
@@ -217,6 +225,43 @@ export function OrganizationManagement() {
             fullName: '',
         });
         setInviteDialogOpen(true);
+    }
+
+    function openManagePlan(org: Organization) {
+        setSelectedOrgForPlan(org);
+        setPlanForm({
+            planId: org.plan_id || '',
+            isTrial: org.subscription_status === 'trial'
+        });
+        setManagePlanDialogOpen(true);
+    }
+
+    async function handleUpdatePlan() {
+        if (!selectedOrgForPlan || !planForm.planId) return;
+
+        setSubmitting(true);
+        try {
+            const { error } = await supabase.rpc('update_organization_plan', {
+                p_org_id: selectedOrgForPlan.id,
+                p_plan_id: planForm.planId,
+                p_start_trial: planForm.isTrial
+            });
+
+            if (error) {
+                console.error('Failed to update plan:', error);
+                alert('Error: ' + error.message);
+                return;
+            }
+
+            alert(`Plan updated for "${selectedOrgForPlan.name}"`);
+            setManagePlanDialogOpen(false);
+            loadOrganizations();
+        } catch (err) {
+            console.error('Unexpected error:', err);
+            alert('An unexpected error occurred');
+        } finally {
+            setSubmitting(false);
+        }
     }
 
     async function handleSuspendOrg(org: Organization) {
@@ -461,6 +506,15 @@ export function OrganizationManagement() {
                                                     Invite Admin
                                                 </Button>
 
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => openManagePlan(org)}
+                                                >
+                                                    <ClipboardList className="h-4 w-4 mr-1" />
+                                                    Plan
+                                                </Button>
+
                                                 {org.status === 'suspended' ? (
                                                     <Button
                                                         variant="outline"
@@ -536,6 +590,54 @@ export function OrganizationManagement() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+
+            {/* Manage Plan Dialog */}
+            <Dialog open={managePlanDialogOpen} onOpenChange={setManagePlanDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Manage Subscription Plan</DialogTitle>
+                        <DialogDescription>
+                            Update the subscription for <strong>{selectedOrgForPlan?.name}</strong>.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="edit-plan">Subscription Plan</Label>
+                            <Select
+                                value={planForm.planId}
+                                onValueChange={(val) => setPlanForm({ ...planForm, planId: val })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a plan" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {plans.map((p: any) => (
+                                        <SelectItem key={p.id} value={p.id}>
+                                            {p.name} (${p.price_monthly}/mo)
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex items-center space-x-2 pt-2">
+                            <Switch
+                                id="edit-trial-mode"
+                                checked={planForm.isTrial}
+                                onCheckedChange={(checked) => setPlanForm({ ...planForm, isTrial: checked })}
+                            />
+                            <Label htmlFor="edit-trial-mode">Enable 14-day Free Trial</Label>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setManagePlanDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleUpdatePlan} disabled={submitting}>
+                            {submitting ? 'Updating...' : 'Update Plan'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </div >
     );
 }

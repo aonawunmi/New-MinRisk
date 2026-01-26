@@ -175,24 +175,26 @@ export default function MobileNav({
                             <p className="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                                 Admin
                             </p>
-                            {adminNavItems.map((item) => {
-                                const Icon = item.icon;
-                                return (
-                                    <button
-                                        key={item.tabValue}
-                                        onClick={() => handleNavClick(item.tabValue)}
-                                        className={cn(
-                                            'w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors touch-target text-left',
-                                            isActive(item.tabValue)
-                                                ? 'bg-blue-50 text-blue-700'
-                                                : 'text-slate-600 hover:bg-slate-50'
-                                        )}
-                                    >
-                                        <Icon className="h-5 w-5" />
-                                        <span className="font-medium">{item.label}</span>
-                                    </button>
-                                );
-                            })}
+                            {adminNavItems
+                                .filter(item => !isSuperAdmin || item.tabValue === 'admin')
+                                .map((item) => {
+                                    const Icon = item.icon;
+                                    return (
+                                        <button
+                                            key={item.tabValue}
+                                            onClick={() => handleNavClick(item.tabValue)}
+                                            className={cn(
+                                                'w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors touch-target text-left',
+                                                isActive(item.tabValue)
+                                                    ? 'bg-blue-50 text-blue-700'
+                                                    : 'text-slate-600 hover:bg-slate-50'
+                                            )}
+                                        >
+                                            <Icon className="h-5 w-5" />
+                                            <span className="font-medium">{item.label}</span>
+                                        </button>
+                                    );
+                                })}
                         </div>
                     )}
                 </div>
