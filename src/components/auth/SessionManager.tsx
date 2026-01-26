@@ -9,11 +9,10 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { useNavigate } from 'react-router-dom';
 
 export function SessionManager() {
     const { user } = useAuth();
-    const navigate = useNavigate();
+    // Removed useNavigate since this component runs in context without Router
     const heartbeatInterval = useRef<any>(null);
 
     useEffect(() => {
@@ -96,7 +95,8 @@ export function SessionManager() {
 
         // Redirect with message
         alert('You have been logged out because this account was signed in on another device.');
-        navigate('/login');
+        // Use window.location because we are not inside a Router context in the authenticated view
+        window.location.href = '/';
     }
 
     return null; // Logic only component
