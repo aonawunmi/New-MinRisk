@@ -2,12 +2,29 @@
 -- Phase 4: Organization Branding (Storage)
 -- ============================================================================
 
--- 1. Create a storage bucket for organization logos
+-- 1. Helper function to get current user's org ID (if missing)
+CREATE OR REPLACE FUNCTION public.get_my_org_id()
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_org_id UUID;
+BEGIN
+    SELECT organization_id INTO v_org_id
+    FROM user_profiles
+    WHERE id = auth.uid();
+    RETURN v_org_id;
+END;
+$$;
+
+-- 2. Create a storage bucket for organization logos
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('org-logos', 'org-logos', true)
 ON CONFLICT (id) DO NOTHING;
 
--- 2. Storage Policies
+-- 3. Storage Policies
 
 -- Allow public read access to logos
 CREATE POLICY "Public Access to Logos" ON storage.objects

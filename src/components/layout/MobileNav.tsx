@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/auth';
+import { useOrgFeatures } from '@/hooks/useOrgFeatures';
 import {
     Menu,
     X,
     LayoutDashboard,
-    AlertTriangle,
+    ClipboardList,
     FileText,
     Settings,
     Shield,
@@ -24,7 +26,7 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
     { label: 'Dashboard', tabValue: 'dashboard', icon: LayoutDashboard },
-    { label: 'Risk Register', tabValue: 'risks', icon: AlertTriangle },
+    { label: 'Risk Register', tabValue: 'risks', icon: ClipboardList },
     { label: 'Controls', tabValue: 'controls', icon: Shield },
     { label: 'Incidents', tabValue: 'incidents', icon: FileText },
     { label: 'AI Assistant', tabValue: 'ai', icon: Activity },
@@ -39,7 +41,7 @@ const adminNavItems: NavItem[] = [
 
 const bottomNavItems: NavItem[] = [
     { label: 'Dashboard', tabValue: 'dashboard', icon: LayoutDashboard },
-    { label: 'Risks', tabValue: 'risks', icon: AlertTriangle },
+    { label: 'Risks', tabValue: 'risks', icon: ClipboardList },
     { label: 'Incidents', tabValue: 'incidents', icon: FileText },
     { label: 'More', tabValue: '#more', icon: Menu },
 ];
@@ -61,6 +63,8 @@ export default function MobileNav({
 }: MobileNavProps) {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [showMoreMenu, setShowMoreMenu] = useState(false);
+    const { user, profile } = useAuth();
+    const { features } = useOrgFeatures();
 
     // Prevent body scroll when drawer is open
     useEffect(() => {
@@ -139,24 +143,31 @@ export default function MobileNav({
 
                 <div className="flex-1 overflow-y-auto py-4">
                     <div className="px-3 space-y-1">
-                        {!isSuperAdmin && mainNavItems.map((item) => {
-                            const Icon = item.icon;
-                            return (
-                                <button
-                                    key={item.tabValue}
-                                    onClick={() => handleNavClick(item.tabValue)}
-                                    className={cn(
-                                        'w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors touch-target text-left',
-                                        isActive(item.tabValue)
-                                            ? 'bg-blue-50 text-blue-700'
-                                            : 'text-slate-600 hover:bg-slate-50'
-                                    )}
-                                >
-                                    <Icon className="h-5 w-5" />
-                                    <span className="font-medium">{item.label}</span>
-                                </button>
-                            );
-                        })}
+                        {!isSuperAdmin && mainNavItems
+                            .filter(item => {
+                                if (item.tabValue === 'controls') return features.controls_library;
+                                if (item.tabValue === 'incidents') return features.basic_incidents;
+                                if (item.tabValue === 'ai') return features.basic_ai;
+                                return true;
+                            })
+                            .map((item) => {
+                                const Icon = item.icon;
+                                return (
+                                    <button
+                                        key={item.tabValue}
+                                        onClick={() => handleNavClick(item.tabValue)}
+                                        className={cn(
+                                            'w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors touch-target text-left',
+                                            isActive(item.tabValue)
+                                                ? 'bg-blue-50 text-blue-700'
+                                                : 'text-slate-600 hover:bg-slate-50'
+                                        )}
+                                    >
+                                        <Icon className="h-5 w-5" />
+                                        <span className="font-medium">{item.label}</span>
+                                    </button>
+                                );
+                            })}
                     </div>
 
                     {isAdmin && (

@@ -11,6 +11,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { signOut, useAuth, getCurrentUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { useOrgBranding } from '@/hooks/useOrgBranding';
+import { useOrgFeatures } from '@/hooks/useOrgFeatures';
 import { getCurrentUserProfile, isUserAdmin, isSuperAdmin } from '@/lib/profiles';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import LoginForm from '@/components/auth/LoginForm';
@@ -36,6 +37,7 @@ import type { AuthState } from '@/types/auth';
 export default function App() {
   const { user: authUser, profile: authProfile } = useAuth(); // rename to avoid conflict
   const { logoUrl } = useOrgBranding();
+  const { features } = useOrgFeatures();
 
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
@@ -209,15 +211,30 @@ export default function App() {
                     <TabsTrigger value="risks" className="text-xs sm:text-sm whitespace-nowrap">
                       <span className="hidden sm:inline">📋 </span>Risks
                     </TabsTrigger>
-                    <TabsTrigger value="controls" className="text-xs sm:text-sm whitespace-nowrap">
-                      <span className="hidden sm:inline">🛡️ </span>Controls
-                    </TabsTrigger>
-                    <TabsTrigger value="incidents" className="text-xs sm:text-sm whitespace-nowrap">
-                      <span className="hidden sm:inline">🚨 </span>Incidents
-                    </TabsTrigger>
-                    <TabsTrigger value="ai" className="text-xs sm:text-sm whitespace-nowrap">
-                      <span className="hidden sm:inline">✨ </span>AI
-                    </TabsTrigger>
+
+                    {features.controls_library && (
+                      <TabsTrigger value="controls" className="text-xs sm:text-sm whitespace-nowrap">
+                        <span className="hidden sm:inline">🛡️ </span>Controls
+                      </TabsTrigger>
+                    )}
+
+                    {features.basic_incidents && (
+                      <TabsTrigger value="incidents" className="text-xs sm:text-sm whitespace-nowrap">
+                        <span className="hidden sm:inline">🚨 </span>Incidents
+                      </TabsTrigger>
+                    )}
+
+                    {features.basic_ai && (
+                      <TabsTrigger value="ai" className="text-xs sm:text-sm whitespace-nowrap">
+                        <span className="hidden sm:inline">✨ </span>AI
+                      </TabsTrigger>
+                    )}
+
+                    {features.risk_intel && (
+                      <TabsTrigger value="intel" className="text-xs sm:text-sm whitespace-nowrap">
+                        <span className="hidden sm:inline">🧠 </span>Intel
+                      </TabsTrigger>
+                    )}
                   </>
                 )}
 
