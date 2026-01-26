@@ -22,7 +22,15 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { ScrollText, RefreshCw, Download, Search, Building2 } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from '@/components/ui/dialog';
+import { ScrollText, RefreshCw, Download, Search, Building2, Eye, ArrowRight } from 'lucide-react';
 
 interface PlatformAuditEntry {
     id: string;
@@ -33,6 +41,8 @@ interface PlatformAuditEntry {
     performed_at: string;
     user_email: string;
     organization_name: string | null;
+    old_values: any;
+    new_values: any;
     metadata: any;
 }
 
@@ -43,6 +53,10 @@ export default function PlatformAuditTrail() {
     const [actionFilter, setActionFilter] = useState('');
     const [entityFilter, setEntityFilter] = useState('');
 
+    // Details dialog
+    const [selectedEntry, setSelectedEntry] = useState<PlatformAuditEntry | null>(null);
+    const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+
     useEffect(() => {
         loadAuditTrail();
     }, []);
@@ -50,7 +64,6 @@ export default function PlatformAuditTrail() {
     async function loadAuditTrail() {
         setLoading(true);
         try {
-            // Call RPC that fetches platform-wide audit events
             const { data, error } = await supabase.rpc('get_platform_audit_trail', {
                 p_limit: 200
             });
@@ -73,7 +86,8 @@ export default function PlatformAuditTrail() {
         const matchesSearch = !searchTerm ||
             entry.user_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             entry.entity_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            entry.organization_name?.toLowerCase().includes(searchTerm.toLowerCase());
+            entry.organization_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            entry.metadata?.organization_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
         const matchesAction = !actionFilter || entry.action_type === actionFilter;
         const matchesEntity = !entityFilter || entry.entity_type === entityFilter;
@@ -87,9 +101,41 @@ export default function PlatformAuditTrail() {
             case 'suspend': return 'text-red-600 bg-red-50';
             case 'reactivate': return 'text-blue-600 bg-blue-50';
             case 'update': return 'text-amber-600 bg-amber-50';
-            case 'invite': return 'text-purple-600 bg-purple-50';
+            case 'plan_change': return 'text-purple-600 bg-purple-50';
+            case 'invite': return 'text-indigo-600 bg-indigo-50';
             default: return 'text-gray-600 bg-gray-50';
         }
+    }
+
+    function getActionLabel(action: string): string {
+        switch (action.toLowerCase()) {
+            case 'plan_change': return 'Plan Change';
+            default: return action.charAt(0).toUpperCase() + action.slice(1);
+        }
+    }
+
+    function getDetailsSummary(entry: PlatformAuditEntry): string {
+        const meta = entry.metadata || {};
+
+        if (meta.action_description) {
+            if (meta.from_plan && meta.to_plan) {
+                return `${meta.from_plan} → ${meta.to_plan}`;
+            }
+            if (meta.affected_users !== undefined) {
+                return `${meta.affected_users} users affected`;
+            }
+            if (meta.plan_name) {
+                return meta.plan_name;
+            }
+            return meta.action_description;
+        }
+
+        return '-';
+    }
+
+    function handleViewDetails(entry: PlatformAuditEntry) {
+        setSelectedEntry(entry);
+        setShowDetailsDialog(true);
     }
 
     function exportCSV() {
@@ -99,7 +145,7 @@ export default function PlatformAuditTrail() {
             e.action_type,
             e.entity_type,
             e.entity_code || '-',
-            e.organization_name || '-',
+            e.organization_name || e.metadata?.organization_name || '-',
             e.user_email,
             JSON.stringify(e.metadata || {}).replace(/,/g, ';')
         ].map(cell => `"${cell}"`).join(','));
@@ -182,6 +228,7 @@ export default function PlatformAuditTrail() {
                                     <SelectItem value="update">Update</SelectItem>
                                     <SelectItem value="suspend">Suspend</SelectItem>
                                     <SelectItem value="reactivate">Reactivate</SelectItem>
+                                    <SelectItem value="plan_change">Plan Change</SelectItem>
                                     <SelectItem value="invite">Invite</SelectItem>
                                 </SelectContent>
                             </Select>
@@ -197,7 +244,6 @@ export default function PlatformAuditTrail() {
                                     <SelectItem value="all">All entities</SelectItem>
                                     <SelectItem value="organization">Organization</SelectItem>
                                     <SelectItem value="subscription_plan">Subscription Plan</SelectItem>
-                                    <SelectItem value="user">User Invite</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -222,7 +268,8 @@ export default function PlatformAuditTrail() {
                                     <th className="text-left p-2 font-medium">Entity</th>
                                     <th className="text-left p-2 font-medium">Organization</th>
                                     <th className="text-left p-2 font-medium">Performed By</th>
-                                    <th className="text-left p-2 font-medium">Details</th>
+                                    <th className="text-left p-2 font-medium">Summary</th>
+                                    <th className="text-center p-2 font-medium">Details</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -233,7 +280,7 @@ export default function PlatformAuditTrail() {
                                         </td>
                                         <td className="p-2">
                                             <span className={`text-xs px-2 py-1 rounded ${getActionColor(entry.action_type)}`}>
-                                                {entry.action_type}
+                                                {getActionLabel(entry.action_type)}
                                             </span>
                                         </td>
                                         <td className="p-2">
@@ -246,13 +293,22 @@ export default function PlatformAuditTrail() {
                                             )}
                                         </td>
                                         <td className="p-2 text-gray-600">
-                                            {entry.organization_name || '-'}
+                                            {entry.organization_name || entry.metadata?.organization_name || '-'}
                                         </td>
                                         <td className="p-2 text-gray-600 text-xs">
                                             {entry.user_email}
                                         </td>
-                                        <td className="p-2 text-xs text-muted-foreground max-w-[200px] truncate">
-                                            {entry.metadata?.reason || entry.metadata?.plan_name || '-'}
+                                        <td className="p-2 text-xs text-muted-foreground max-w-[200px]">
+                                            {getDetailsSummary(entry)}
+                                        </td>
+                                        <td className="p-2 text-center">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => handleViewDetails(entry)}
+                                            >
+                                                <Eye className="h-4 w-4" />
+                                            </Button>
                                         </td>
                                     </tr>
                                 ))}
@@ -267,6 +323,158 @@ export default function PlatformAuditTrail() {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Details Dialog */}
+            <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Audit Entry Details</DialogTitle>
+                        <DialogDescription>
+                            {selectedEntry?.metadata?.action_description || `${selectedEntry?.action_type} - ${selectedEntry?.entity_type}`}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {selectedEntry && (
+                        <div className="space-y-4">
+                            {/* Basic Info */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <Label className="text-xs text-gray-500">Timestamp</Label>
+                                    <p className="text-sm font-medium">
+                                        {new Date(selectedEntry.performed_at).toLocaleString()}
+                                    </p>
+                                </div>
+                                <div>
+                                    <Label className="text-xs text-gray-500">Performed By</Label>
+                                    <p className="text-sm font-medium">{selectedEntry.user_email}</p>
+                                </div>
+                                <div>
+                                    <Label className="text-xs text-gray-500">Action</Label>
+                                    <p>
+                                        <span className={`text-xs px-2 py-1 rounded ${getActionColor(selectedEntry.action_type)}`}>
+                                            {getActionLabel(selectedEntry.action_type)}
+                                        </span>
+                                    </p>
+                                </div>
+                                <div>
+                                    <Label className="text-xs text-gray-500">Entity</Label>
+                                    <p className="text-sm">{selectedEntry.entity_type}</p>
+                                    {selectedEntry.entity_code && (
+                                        <p className="text-xs font-mono text-muted-foreground">{selectedEntry.entity_code}</p>
+                                    )}
+                                </div>
+                                {(selectedEntry.organization_name || selectedEntry.metadata?.organization_name) && (
+                                    <div className="col-span-2">
+                                        <Label className="text-xs text-gray-500">Organization</Label>
+                                        <p className="text-sm font-medium">
+                                            {selectedEntry.organization_name || selectedEntry.metadata?.organization_name}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Change Details */}
+                            {(selectedEntry.old_values || selectedEntry.new_values) && (
+                                <div className="space-y-3">
+                                    <Label className="font-semibold">Changes</Label>
+
+                                    {selectedEntry.action_type === 'create' && selectedEntry.new_values && (
+                                        <div className="p-3 bg-green-50 border border-green-200 rounded">
+                                            <p className="text-xs font-semibold text-green-700 mb-2">Created With</p>
+                                            <pre className="text-xs whitespace-pre-wrap text-green-800">
+                                                {JSON.stringify(selectedEntry.new_values, null, 2)}
+                                            </pre>
+                                        </div>
+                                    )}
+
+                                    {selectedEntry.action_type === 'plan_change' && (
+                                        <div className="flex items-center gap-4">
+                                            {selectedEntry.old_values && (
+                                                <div className="flex-1 p-3 bg-orange-50 border border-orange-200 rounded">
+                                                    <p className="text-xs font-semibold text-orange-700 mb-2">Before</p>
+                                                    <pre className="text-xs whitespace-pre-wrap text-orange-800">
+                                                        {JSON.stringify(selectedEntry.old_values, null, 2)}
+                                                    </pre>
+                                                </div>
+                                            )}
+                                            <ArrowRight className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                                            {selectedEntry.new_values && (
+                                                <div className="flex-1 p-3 bg-blue-50 border border-blue-200 rounded">
+                                                    <p className="text-xs font-semibold text-blue-700 mb-2">After</p>
+                                                    <pre className="text-xs whitespace-pre-wrap text-blue-800">
+                                                        {JSON.stringify(selectedEntry.new_values, null, 2)}
+                                                    </pre>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {selectedEntry.action_type === 'update' && (
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {selectedEntry.old_values && (
+                                                <div className="p-3 bg-orange-50 border border-orange-200 rounded">
+                                                    <p className="text-xs font-semibold text-orange-700 mb-2">Before</p>
+                                                    <pre className="text-xs whitespace-pre-wrap text-orange-800">
+                                                        {JSON.stringify(selectedEntry.old_values, null, 2)}
+                                                    </pre>
+                                                </div>
+                                            )}
+                                            {selectedEntry.new_values && (
+                                                <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+                                                    <p className="text-xs font-semibold text-blue-700 mb-2">After</p>
+                                                    <pre className="text-xs whitespace-pre-wrap text-blue-800">
+                                                        {JSON.stringify(selectedEntry.new_values, null, 2)}
+                                                    </pre>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {(selectedEntry.action_type === 'suspend' || selectedEntry.action_type === 'reactivate') && (
+                                        <div className="p-3 bg-gray-50 border border-gray-200 rounded">
+                                            <p className="text-xs font-semibold text-gray-700 mb-2">Status Change</p>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-xs px-2 py-1 rounded ${selectedEntry.action_type === 'suspend' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                                    }`}>
+                                                    {selectedEntry.old_values?.status || 'active'}
+                                                </span>
+                                                <ArrowRight className="h-4 w-4 text-gray-400" />
+                                                <span className={`text-xs px-2 py-1 rounded ${selectedEntry.action_type === 'suspend' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                                                    }`}>
+                                                    {selectedEntry.new_values?.status || 'suspended'}
+                                                </span>
+                                            </div>
+                                            {selectedEntry.metadata?.affected_users !== undefined && (
+                                                <p className="text-xs text-gray-600 mt-2">
+                                                    {selectedEntry.metadata.affected_users} user(s) affected
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Additional Metadata */}
+                            {selectedEntry.metadata && Object.keys(selectedEntry.metadata).length > 0 && (
+                                <div>
+                                    <Label className="font-semibold">Additional Context</Label>
+                                    <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded">
+                                        <pre className="text-xs whitespace-pre-wrap">
+                                            {JSON.stringify(selectedEntry.metadata, null, 2)}
+                                        </pre>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowDetailsDialog(false)}>
+                            Close
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
