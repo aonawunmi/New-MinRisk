@@ -32,6 +32,7 @@ import ImportExportManager from '@/components/importExport/ImportExportManager';
 import AIAssistant from '@/components/ai/AIAssistant';
 import AdminPanel from '@/components/admin/AdminPanel';
 import AdminCheck from '@/components/debug/AdminCheck';
+import RegulatorDashboard from '@/components/regulator/RegulatorDashboard';
 import type { AuthState } from '@/types/auth';
 
 export default function App() {
@@ -57,7 +58,11 @@ export default function App() {
     if (authState.isSuperAdmin && activeTab === 'dashboard') {
       setActiveTab('admin');
     }
-  }, [authState.isSuperAdmin]);
+    // Redirect Regulator to oversight dashboard by default
+    if (authState.profile?.role === 'regulator' && activeTab === 'dashboard') {
+      setActiveTab('regulator-oversight');
+    }
+  }, [authState.isSuperAdmin, authState.profile?.role]);
 
   async function loadAuthState() {
     try {
@@ -202,8 +207,15 @@ export default function App() {
             {/* Horizontally scrollable tabs container for mobile */}
             <div className="mobile-scroll-x -mx-3 px-3 sm:mx-0 sm:px-0">
               <TabsList className="mb-4 sm:mb-6 inline-flex sm:flex w-max sm:w-auto">
-                {/* Tabs visible to all users (First Line of Defense) - HIDDEN for Super Admin */}
-                {!authState.isSuperAdmin && (
+                {/* Regulator-specific tabs */}
+                {authState.profile?.role === 'regulator' && (
+                  <TabsTrigger value="regulator-oversight" className="text-xs sm:text-sm whitespace-nowrap">
+                    <span className="hidden sm:inline">🏛️ </span>Oversight Dashboard
+                  </TabsTrigger>
+                )}
+
+                {/* Tabs visible to all users (First Line of Defense) - HIDDEN for Super Admin and Regulators */}
+                {!authState.isSuperAdmin && authState.profile?.role !== 'regulator' && (
                   <>
                     <TabsTrigger value="dashboard" className="text-xs sm:text-sm whitespace-nowrap">
                       <span className="hidden sm:inline">📊 </span>Dashboard
@@ -261,6 +273,10 @@ export default function App() {
                 )}
               </TabsList>
             </div>
+
+            <TabsContent value="regulator-oversight">
+              <RegulatorDashboard />
+            </TabsContent>
 
             <TabsContent value="dashboard">
               <Dashboard />
