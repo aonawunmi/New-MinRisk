@@ -1,18 +1,25 @@
 /**
  * Session Manager Component
- * 
+ *
+ * TEMPORARILY DISABLED FOR TESTING
+ *
  * Enforces single-session policy and tracks user activity.
  * 1. Registers session on login/mount
  * 2. Sends heartbeat every minute
  * 3. Forces logout if server indicates another session took over
+ *
+ * NOTE: Disabled to prevent "logged out on another device" errors during testing
  */
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 
 export function SessionManager() {
+    // TEMPORARILY DISABLED - Return null immediately
+    return null;
+
+    /* ORIGINAL CODE - COMMENTED OUT FOR TESTING
     const { user } = useAuth();
-    // Removed useNavigate since this component runs in context without Router
     const heartbeatInterval = useRef<any>(null);
 
     useEffect(() => {
@@ -24,36 +31,20 @@ export function SessionManager() {
         }
 
         const initSession = async () => {
-            // Get current session ID from Supabase Auth
             const { data: { session } } = await supabase.auth.getSession();
 
             if (!session) return;
 
-            const accessToken = session.access_token;
-            // Use the last part of access token as a proxy for session ID 
-            // (or just use the access token itself if it's stable per login)
-            // A better way is generating a random ID per client load if we want per-tab, 
-            // but for per-login we want Supabase's session.
-            // Supabase doesn't expose a clean unique "session ID" for the login instance in v2 easily publically 
-            // without looking deep. But we can generate one client-side on login.
-            // HOWEVER, to enforce "single device", we simply generate a random ID *now* and claim it.
-
-            // Actually, simplest is: Use the access token signature or just generate a random ID on mount.
-            // If user logs in on another device, that device generates a NEW random ID and claims the lock.
-
-            // Let's use a client-side generated ID stored in sessionStorage to persist across reloads
             let thisDeviceId = sessionStorage.getItem('minrisk_device_id');
             if (!thisDeviceId) {
                 thisDeviceId = crypto.randomUUID();
                 sessionStorage.setItem('minrisk_device_id', thisDeviceId);
 
-                // Claim the session immediately
                 await supabase.rpc('register_new_login', {
                     p_session_id: thisDeviceId
                 });
             }
 
-            // Start Heartbeat
             heartbeatInterval.current = setInterval(async () => {
                 try {
                     const { data: isValid, error } = await supabase.rpc('update_session_heartbeat', {
@@ -66,13 +57,12 @@ export function SessionManager() {
                     }
 
                     if (isValid === false) {
-                        // Another device claimed the session
                         handleForceLogout();
                     }
                 } catch (err) {
                     console.error('Heartbeat failed:', err);
                 }
-            }, 60 * 1000); // Check every minute
+            }, 60 * 1000);
         };
 
         initSession();
@@ -85,19 +75,16 @@ export function SessionManager() {
     }, [user]);
 
     async function handleForceLogout() {
-        // Clear interval
         if (heartbeatInterval.current) {
             clearInterval(heartbeatInterval.current);
         }
 
-        // Sign out locally
         await supabase.auth.signOut();
 
-        // Redirect with message
         alert('You have been logged out because this account was signed in on another device.');
-        // Use window.location because we are not inside a Router context in the authenticated view
         window.location.href = '/';
     }
 
-    return null; // Logic only component
+    return null;
+    */
 }
