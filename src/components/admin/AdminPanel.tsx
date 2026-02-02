@@ -18,6 +18,7 @@ import ActiveSessions from './ActiveSessions';
 import PlatformMetrics from './PlatformMetrics';
 import PlanBuilder from './PlanBuilder';
 import PlatformAuditTrail from './PlatformAuditTrail';
+import RegulatorManagement from './RegulatorManagement';
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
@@ -79,6 +80,7 @@ export default function AdminPanel() {
     if (profile?.role === 'super_admin') {
       return [
         { id: 'organizations', label: 'Organizations' },
+        { id: 'regulators', label: 'Regulators' },
         { id: 'plans', label: 'Plans & Pricing' },
         { id: 'metrics', label: 'Platform Metrics' },
         { id: 'sessions', label: 'Active Sessions' },
@@ -165,6 +167,7 @@ export default function AdminPanel() {
       {isSuperAdmin && (
         <div>
           {activeTab === 'organizations' && <OrganizationManagement />}
+          {activeTab === 'regulators' && <RegulatorManagement />}
           {activeTab === 'plans' && <PlanBuilder />}
           {activeTab === 'metrics' && <PlatformMetrics />}
           {activeTab === 'sessions' && <ActiveSessions />}
