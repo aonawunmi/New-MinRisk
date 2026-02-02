@@ -126,14 +126,15 @@ serve(async (req: Request) => {
         // 6. Invite user via email
         // The trigger `on_auth_user_created` will auto-create user_profiles row
         // using the metadata below. We pass role as 'regulator'.
-        // PREREQUISITE: 'regulator' must exist in the user_role enum.
+        // PREREQUISITE: 'regulator' must exist in the user_role enum and CHECK constraint.
+        const appUrl = Deno.env.get('APP_URL') || supabaseUrl;
         const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
             data: {
                 full_name,
                 role: 'regulator',
                 invited_by: user.id,
             },
-            redirectTo: `${supabaseUrl.replace('.supabase.co', '')}/auth/callback`,
+            redirectTo: `${appUrl}/auth/callback`,
         });
 
         if (inviteError || !inviteData.user) {

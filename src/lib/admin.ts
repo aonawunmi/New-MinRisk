@@ -236,26 +236,26 @@ export async function updateUserStatus(
 }
 
 /**
- * Invite a new user (creates user profile with pending status)
+ * Invite a new user via email
  *
- * NOTE: This creates the user_profiles record. The actual invitation email
- * should be sent separately via Supabase Auth invite functionality.
+ * Sends an invitation email via Supabase Auth. The user receives an email,
+ * clicks the link, sets their password, and is immediately active.
  *
  * Security: Calls Edge Function which verifies admin privileges server-side
  *
  * @param userData - User data for invitation
- * @returns Created user profile
+ * @returns Invitation result
  *
  * @example
  * const { data, error } = await inviteUser({
- *   id: 'uuid-from-auth',
+ *   email: 'newuser@company.com',
  *   fullName: 'New User',
  *   organizationId: '11111111-1111-1111-1111-111111111111',
  *   role: 'user'
  * });
  */
 export async function inviteUser(userData: {
-  id: string; // User ID from auth.users
+  email: string;
   fullName: string;
   organizationId: string;
   role: UserRole;

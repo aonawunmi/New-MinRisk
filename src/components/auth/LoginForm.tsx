@@ -102,17 +102,20 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
               />
             </div>
 
+            <div className="flex justify-end">
+              <Link to="/forgot-password" className="text-sm text-blue-600 hover:text-blue-700">
+                Forgot your password?
+              </Link>
+            </div>
+
             <Button type="submit" className="w-full h-11 sm:h-10 text-base sm:text-sm touch-target" disabled={isLoading}>
               {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
 
           <div className="mt-6 text-center">
-            <p className="text-gray-600 text-sm sm:text-base">
-              Don't have an account?{' '}
-              <Link to="/signup" className="text-blue-600 hover:text-blue-700 font-medium touch-target inline-flex items-center">
-                Sign up
-              </Link>
+            <p className="text-gray-500 text-xs sm:text-sm">
+              Registration is by invitation only. Contact your administrator for access.
             </p>
           </div>
 

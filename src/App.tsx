@@ -16,6 +16,10 @@ import { getCurrentUserProfile, isUserAdmin, isSuperAdmin } from '@/lib/profiles
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import LoginForm from '@/components/auth/LoginForm';
 import SignupForm from '@/components/auth/SignupForm';
+import AuthCallback from '@/components/auth/AuthCallback';
+import SetPasswordForm from '@/components/auth/SetPasswordForm';
+import ForgotPasswordForm from '@/components/auth/ForgotPasswordForm';
+import ResetPasswordForm from '@/components/auth/ResetPasswordForm';
 import UserMenu from '@/components/auth/UserMenu';
 import { SessionManager } from '@/components/auth/SessionManager';
 import MobileNav from '@/components/layout/MobileNav';
@@ -120,6 +124,10 @@ export default function App() {
     return (
       <BrowserRouter>
         <Routes>
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/set-password" element={<SetPasswordForm />} />
+          <Route path="/reset-password" element={<ResetPasswordForm />} />
+          <Route path="/forgot-password" element={<ForgotPasswordForm />} />
           <Route path="/login" element={<LoginForm onSuccess={loadAuthState} />} />
           <Route path="/signup" element={<SignupForm onSuccess={loadAuthState} />} />
           <Route path="/admin-check" element={<AdminCheck />} />

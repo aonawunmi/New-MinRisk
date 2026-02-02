@@ -2,20 +2,12 @@
  * Invitation Management Component
  *
  * Allows admins to:
- * - Create invitation codes for new users
- * - View pending/used/revoked invitations
- * - Copy invite codes
- * - Revoke unused invitations
+ * - Send email invitations to new users
+ * - View invited users and their status
  */
 
 import { useState, useEffect } from 'react';
-import {
-  createInvitation,
-  listInvitations,
-  revokeInvitation,
-  type UserInvitation,
-  type InvitationStatus,
-} from '@/lib/invitations';
+import { inviteUser, listUsersInOrganization } from '@/lib/admin';
 import { getCurrentUserProfile } from '@/lib/profiles';
 import type { UserRole } from '@/lib/profiles';
 import { Button } from '@/components/ui/button';
@@ -56,40 +48,35 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Mail,
   Plus,
-  Copy,
   CheckCircle,
-  XCircle,
-  Clock,
   AlertCircle,
   RefreshCw,
-  Ban,
+  Send,
+  Clock,
+  UserCheck,
 } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function InvitationManagement() {
-  const [invitations, setInvitations] = useState<UserInvitation[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [organizationId, setOrganizationId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Create invitation dialog
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  // Invite dialog state
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [newInvite, setNewInvite] = useState({
     email: '',
+    fullName: '',
     role: 'user' as UserRole,
-    expiresInDays: 7,
-    notes: '',
   });
-  const [creating, setCreating] = useState(false);
-  const [createdInvite, setCreatedInvite] = useState<UserInvitation | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
-    loadInvitations();
+    loadUsers();
   }, []);
 
-  async function loadInvitations() {
+  async function loadUsers() {
     setLoading(true);
     setError(null);
 
@@ -102,142 +89,84 @@ export default function InvitationManagement() {
 
       setOrganizationId(profile.organization_id);
 
-      const { data, error: invError } = await listInvitations(
+      const { data, error: listError } = await listUsersInOrganization(
         profile.organization_id
       );
 
-      if (invError) throw invError;
+      if (listError) throw listError;
 
-      setInvitations(data || []);
+      setUsers(data || []);
     } catch (err: any) {
-      console.error('Load invitations error:', err);
+      console.error('Load users error:', err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleCreateInvitation() {
-    if (!newInvite.email.trim()) {
-      setError('Email is required');
+  async function handleSendInvite() {
+    if (!newInvite.email.trim() || !newInvite.fullName.trim()) {
+      setError('Email and full name are required');
       return;
     }
 
-    setCreating(true);
+    setSending(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const { data, error: createError } = await createInvitation({
-        email: newInvite.email,
+      const { data, error: inviteError } = await inviteUser({
+        email: newInvite.email.trim(),
+        fullName: newInvite.fullName.trim(),
         organizationId,
         role: newInvite.role,
-        expiresInDays: newInvite.expiresInDays,
-        notes: newInvite.notes || undefined,
       });
 
-      if (createError) throw createError;
+      if (inviteError) throw inviteError;
 
-      setCreatedInvite(data);
-      setSuccess('Invitation created successfully!');
+      setSuccess(`Invitation email sent to ${newInvite.email}. They will receive a link to set their password and activate their account.`);
 
-      // Reset form
-      setNewInvite({
-        email: '',
-        role: 'user',
-        expiresInDays: 7,
-        notes: '',
-      });
+      // Reset form and close dialog
+      setNewInvite({ email: '', fullName: '', role: 'user' });
+      setShowInviteDialog(false);
 
-      // Reload list
-      await loadInvitations();
+      // Reload users list
+      await loadUsers();
     } catch (err: any) {
-      console.error('Create invitation error:', err);
+      console.error('Send invite error:', err);
       setError(err.message);
     } finally {
-      setCreating(false);
+      setSending(false);
     }
   }
 
-  async function handleRevokeInvitation(invitationId: string, email: string) {
-    if (!confirm(`Revoke invitation for ${email}?`)) {
-      return;
-    }
-
-    setError(null);
-    setSuccess(null);
-
-    const reason = prompt('Reason for revocation (optional):');
-
-    const { success, error: revokeError } = await revokeInvitation(
-      invitationId,
-      reason || undefined
-    );
-
-    if (revokeError) {
-      setError(revokeError.message);
-    } else if (success) {
-      setSuccess('Invitation revoked successfully');
-      await loadInvitations();
-    } else {
-      setError('Failed to revoke invitation');
-    }
-  }
-
-  function handleCopyCode(code: string) {
-    navigator.clipboard.writeText(code);
-    setSuccess(`Invite code ${code} copied to clipboard!`);
-    setTimeout(() => setSuccess(null), 3000);
-  }
-
-  function handleCopySignupLink(code: string) {
-    const signupLink = `${window.location.origin}/signup?invite=${code}`;
-    navigator.clipboard.writeText(signupLink);
-
-    // Immediate button feedback
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2000);
-
-    // Success message
-    setSuccess('Signup link copied to clipboard! Send this to the user.');
-    setTimeout(() => setSuccess(null), 3000);
-  }
-
-  function getStatusBadge(status: InvitationStatus) {
+  function getStatusBadge(status: string) {
     switch (status) {
+      case 'approved':
+        return (
+          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+            <UserCheck className="h-3 w-3 mr-1" />
+            Active
+          </Badge>
+        );
       case 'pending':
         return (
           <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
             <Clock className="h-3 w-3 mr-1" />
-            Pending
+            Invited (Pending)
           </Badge>
         );
-      case 'used':
-        return (
-          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-            <CheckCircle className="h-3 w-3 mr-1" />
-            Used
-          </Badge>
-        );
-      case 'revoked':
-        return (
-          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-            <Ban className="h-3 w-3 mr-1" />
-            Revoked
-          </Badge>
-        );
-      case 'expired':
+      default:
         return (
           <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
-            <XCircle className="h-3 w-3 mr-1" />
-            Expired
+            {status}
           </Badge>
         );
     }
   }
 
-  function getRoleBadge(role: UserRole) {
-    const colors = {
+  function getRoleBadge(role: string) {
+    const colors: Record<string, string> = {
       user: 'bg-blue-50 text-blue-700 border-blue-200',
       secondary_admin: 'bg-purple-50 text-purple-700 border-purple-200',
       primary_admin: 'bg-red-50 text-red-700 border-red-200',
@@ -245,16 +174,11 @@ export default function InvitationManagement() {
     };
 
     return (
-      <Badge variant="outline" className={colors[role]}>
+      <Badge variant="outline" className={colors[role] || 'bg-gray-50 text-gray-700'}>
         {role.replace('_', ' ')}
       </Badge>
     );
   }
-
-  const pendingInvitations = invitations.filter((inv) => inv.status === 'pending');
-  const usedInvitations = invitations.filter((inv) => inv.status === 'used');
-  const revokedInvitations = invitations.filter((inv) => inv.status === 'revoked');
-  const expiredInvitations = invitations.filter((inv) => inv.status === 'expired');
 
   if (loading) {
     return (
@@ -276,12 +200,12 @@ export default function InvitationManagement() {
                 User Invitations
               </CardTitle>
               <CardDescription>
-                Invite new users with pre-approved access codes
+                Invite new users via email. They will receive a link to set their password and join the platform.
               </CardDescription>
             </div>
-            <Button onClick={() => setShowCreateDialog(true)}>
+            <Button onClick={() => setShowInviteDialog(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Create Invitation
+              Invite User
             </Button>
           </div>
         </CardHeader>
@@ -302,349 +226,139 @@ export default function InvitationManagement() {
         </Alert>
       )}
 
-      {/* Invitations Tabs */}
-      <Tabs defaultValue="pending" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="pending">
-            Pending ({pendingInvitations.length})
-          </TabsTrigger>
-          <TabsTrigger value="used">
-            Used ({usedInvitations.length})
-          </TabsTrigger>
-          <TabsTrigger value="revoked">
-            Revoked ({revokedInvitations.length})
-          </TabsTrigger>
-          <TabsTrigger value="expired">
-            Expired ({expiredInvitations.length})
-          </TabsTrigger>
-        </TabsList>
+      {/* Users List */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Organization Users</CardTitle>
+          <CardDescription>All users in your organization</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {users.length === 0 ? (
+            <div className="py-8 text-center text-gray-500">
+              No users found. Invite your first team member above.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Joined</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.full_name}</TableCell>
+                    <TableCell className="text-sm">{user.email || 'N/A'}</TableCell>
+                    <TableCell>{getRoleBadge(user.role)}</TableCell>
+                    <TableCell>{getStatusBadge(user.status)}</TableCell>
+                    <TableCell className="text-sm text-gray-600">
+                      {new Date(user.created_at).toLocaleDateString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
-        <TabsContent value="pending" className="mt-6">
-          <InvitationsTable
-            invitations={pendingInvitations}
-            onCopy={handleCopyCode}
-            onRevoke={handleRevokeInvitation}
-            getStatusBadge={getStatusBadge}
-            getRoleBadge={getRoleBadge}
-            showActions={true}
-          />
-        </TabsContent>
-
-        <TabsContent value="used" className="mt-6">
-          <InvitationsTable
-            invitations={usedInvitations}
-            onCopy={handleCopyCode}
-            onRevoke={handleRevokeInvitation}
-            getStatusBadge={getStatusBadge}
-            getRoleBadge={getRoleBadge}
-            showActions={false}
-          />
-        </TabsContent>
-
-        <TabsContent value="revoked" className="mt-6">
-          <InvitationsTable
-            invitations={revokedInvitations}
-            onCopy={handleCopyCode}
-            onRevoke={handleRevokeInvitation}
-            getStatusBadge={getStatusBadge}
-            getRoleBadge={getRoleBadge}
-            showActions={false}
-          />
-        </TabsContent>
-
-        <TabsContent value="expired" className="mt-6">
-          <InvitationsTable
-            invitations={expiredInvitations}
-            onCopy={handleCopyCode}
-            onRevoke={handleRevokeInvitation}
-            getStatusBadge={getStatusBadge}
-            getRoleBadge={getRoleBadge}
-            showActions={false}
-          />
-        </TabsContent>
-      </Tabs>
-
-      {/* Create Invitation Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      {/* Send Invitation Dialog */}
+      <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create User Invitation</DialogTitle>
+            <DialogTitle>Invite New User</DialogTitle>
             <DialogDescription>
-              Generate an invite code for a new user. They will be automatically
-              approved when they sign up with this code.
+              Send an email invitation. The user will receive a link to set their password
+              and activate their account immediately.
             </DialogDescription>
           </DialogHeader>
 
-          {createdInvite ? (
-            // Show created invite code
-            <div className="space-y-4">
-              <Alert className="bg-green-50 border-green-200">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                <AlertDescription className="text-green-900">
-                  Invitation created successfully!
-                </AlertDescription>
-              </Alert>
-
-              <div className="p-4 bg-gray-50 rounded-lg space-y-3">
-                <div>
-                  <Label className="text-xs text-gray-500">Signup Link</Label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <code className="text-sm font-mono text-blue-600 flex-1 truncate">
-                      {window.location.origin}/signup?invite={createdInvite.invite_code}
-                    </code>
-                    <Button
-                      size="sm"
-                      variant={linkCopied ? "outline" : "default"}
-                      onClick={() => handleCopySignupLink(createdInvite.invite_code)}
-                      className={`shrink-0 ${linkCopied ? 'bg-green-50 text-green-700 border-green-300' : ''}`}
-                    >
-                      {linkCopied ? (
-                        <>
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Copied!
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-4 w-4 mr-2" />
-                          Copy Link
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Copy this link and send it to the user. The invite code will be pre-filled.
-                  </p>
-                </div>
-
-                <div>
-                  <Label className="text-xs text-gray-500">Email</Label>
-                  <p className="text-sm">{createdInvite.email}</p>
-                </div>
-
-                <div>
-                  <Label className="text-xs text-gray-500">Role</Label>
-                  <div className="mt-1">{getRoleBadge(createdInvite.role)}</div>
-                </div>
-
-                <div>
-                  <Label className="text-xs text-gray-500">Expires</Label>
-                  <p className="text-sm">
-                    {new Date(createdInvite.expires_at).toLocaleString()}
-                  </p>
-                </div>
-              </div>
-
-              <Alert className="bg-blue-50 border-blue-200">
-                <Mail className="h-4 w-4 text-blue-600" />
-                <AlertDescription className="text-blue-900">
-                  <strong>Next step:</strong> Copy the signup link above and send it to{' '}
-                  <strong>{createdInvite.email}</strong> via email. When they click it,
-                  they'll be taken directly to the signup page with the invite code already filled in.
-                </AlertDescription>
-              </Alert>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Full Name *</Label>
+              <Input
+                id="fullName"
+                placeholder="John Smith"
+                value={newInvite.fullName}
+                onChange={(e) =>
+                  setNewInvite({ ...newInvite, fullName: e.target.value })
+                }
+                disabled={sending}
+              />
             </div>
-          ) : (
-            // Creation form
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="user@company.com"
-                  value={newInvite.email}
-                  onChange={(e) =>
-                    setNewInvite({ ...newInvite, email: e.target.value })
-                  }
-                  disabled={creating}
-                />
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="role">User Role *</Label>
-                <Select
-                  value={newInvite.role}
-                  onValueChange={(value: UserRole) =>
-                    setNewInvite({ ...newInvite, role: value })
-                  }
-                  disabled={creating}
-                >
-                  <SelectTrigger id="role">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="user">User (View & Edit)</SelectItem>
-                    <SelectItem value="secondary_admin">
-                      Secondary Admin (User Management)
-                    </SelectItem>
-                    <SelectItem value="primary_admin">
-                      Primary Admin (Full Access)
-                    </SelectItem>
-                    <SelectItem value="super_admin">
-                      Super Admin (System Admin)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="expiry">Expires In (Days) *</Label>
-                <Select
-                  value={String(newInvite.expiresInDays)}
-                  onValueChange={(value) =>
-                    setNewInvite({ ...newInvite, expiresInDays: parseInt(value) })
-                  }
-                  disabled={creating}
-                >
-                  <SelectTrigger id="expiry">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1 day</SelectItem>
-                    <SelectItem value="3">3 days</SelectItem>
-                    <SelectItem value="7">7 days (recommended)</SelectItem>
-                    <SelectItem value="14">14 days</SelectItem>
-                    <SelectItem value="30">30 days</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notes (Optional)</Label>
-                <Input
-                  id="notes"
-                  placeholder="e.g., New team member, Finance department"
-                  value={newInvite.notes}
-                  onChange={(e) =>
-                    setNewInvite({ ...newInvite, notes: e.target.value })
-                  }
-                  disabled={creating}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email Address *</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="user@company.com"
+                value={newInvite.email}
+                onChange={(e) =>
+                  setNewInvite({ ...newInvite, email: e.target.value })
+                }
+                disabled={sending}
+              />
             </div>
-          )}
+
+            <div className="space-y-2">
+              <Label htmlFor="role">User Role *</Label>
+              <Select
+                value={newInvite.role}
+                onValueChange={(value: UserRole) =>
+                  setNewInvite({ ...newInvite, role: value })
+                }
+                disabled={sending}
+              >
+                <SelectTrigger id="role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">User (View & Edit)</SelectItem>
+                  <SelectItem value="secondary_admin">
+                    Secondary Admin (User Management)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Alert className="bg-blue-50 border-blue-200">
+              <Send className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-900 text-sm">
+                An email will be sent to the user with a link to set their password.
+                They will be immediately active once they set their password.
+              </AlertDescription>
+            </Alert>
+          </div>
 
           <DialogFooter>
-            {createdInvite ? (
-              <Button
-                onClick={() => {
-                  setCreatedInvite(null);
-                  setLinkCopied(false);
-                  setShowCreateDialog(false);
-                }}
-              >
-                Done
-              </Button>
-            ) : (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowCreateDialog(false)}
-                  disabled={creating}
-                >
-                  Cancel
-                </Button>
-                <Button onClick={handleCreateInvitation} disabled={creating}>
-                  {creating ? 'Creating...' : 'Create Invitation'}
-                </Button>
-              </>
-            )}
+            <Button
+              variant="outline"
+              onClick={() => setShowInviteDialog(false)}
+              disabled={sending}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSendInvite} disabled={sending}>
+              {sending ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  Send Invitation
+                </>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-// =====================================================
-// Invitations Table Component
-// =====================================================
-
-interface InvitationsTableProps {
-  invitations: UserInvitation[];
-  onCopy: (code: string) => void;
-  onRevoke: (id: string, email: string) => void;
-  getStatusBadge: (status: InvitationStatus) => JSX.Element;
-  getRoleBadge: (role: UserRole) => JSX.Element;
-  showActions: boolean;
-}
-
-function InvitationsTable({
-  invitations,
-  onCopy,
-  onRevoke,
-  getStatusBadge,
-  getRoleBadge,
-  showActions,
-}: InvitationsTableProps) {
-  if (invitations.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-8">
-          <p className="text-center text-gray-500">No invitations found</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Invite Code</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Expires</TableHead>
-              <TableHead>Created</TableHead>
-              {showActions && <TableHead className="text-right">Actions</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {invitations.map((invitation) => (
-              <TableRow key={invitation.id}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <code className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">
-                      {invitation.invite_code}
-                    </code>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onCopy(invitation.invite_code)}
-                    >
-                      <Copy className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm">{invitation.email}</TableCell>
-                <TableCell>{getRoleBadge(invitation.role)}</TableCell>
-                <TableCell>{getStatusBadge(invitation.status)}</TableCell>
-                <TableCell className="text-sm text-gray-600">
-                  {new Date(invitation.expires_at).toLocaleDateString()}
-                </TableCell>
-                <TableCell className="text-sm text-gray-600">
-                  {new Date(invitation.created_at).toLocaleDateString()}
-                </TableCell>
-                {showActions && (
-                  <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onRevoke(invitation.id, invitation.email)}
-                    >
-                      <Ban className="h-4 w-4 mr-1" />
-                      Revoke
-                    </Button>
-                  </TableCell>
-                )}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
   );
 }

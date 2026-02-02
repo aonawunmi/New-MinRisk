@@ -110,6 +110,9 @@ serve(async (req: Request) => {
         }
 
         // 6. Invite user via email - they will receive an invite link
+        // The trigger `on_auth_user_created` will auto-create a user_profiles row
+        // using the metadata below. We then UPDATE it to set approved status.
+        const appUrl = Deno.env.get('APP_URL') || supabaseUrl;
         const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
             data: {
                 full_name: fullName,
@@ -117,7 +120,7 @@ serve(async (req: Request) => {
                 invited_by: user.id,
                 role: 'primary_admin',
             },
-            redirectTo: `${supabaseUrl.replace('.supabase.co', '')}/auth/callback`,
+            redirectTo: `${appUrl}/auth/callback`,
         });
 
         if (inviteError || !inviteData.user) {
@@ -128,42 +131,41 @@ serve(async (req: Request) => {
             );
         }
 
-        // 7. Create user_profile with primary_admin role (status: pending until they accept invite)
-        const { data: newProfile, error: profileCreateError } = await supabaseAdmin
+        const newUserId = inviteData.user.id;
+
+        // 7. UPDATE the trigger-created profile to approve immediately
+        // The trigger already created profile with role='primary_admin', status='pending'
+        // Super admin is explicitly inviting, so we auto-approve.
+        const { error: profileUpdateError } = await supabaseAdmin
             .from('user_profiles')
-            .insert({
-                id: inviteData.user.id,
+            .update({
                 organization_id: organizationId,
                 full_name: fullName,
                 role: 'primary_admin',
-                status: 'pending', // Will be approved when they accept invite
-                // approved_by and approved_at will be set when they complete signup
+                status: 'approved',
+                approved_by: user.id,
+                approved_at: new Date().toISOString(),
             })
-            .select()
-            .single();
+            .eq('id', newUserId);
 
-        if (profileCreateError) {
-            console.error('Failed to create user profile:', profileCreateError);
-            // Rollback: Delete the auth user we just created
-            await supabaseAdmin.auth.admin.deleteUser(inviteData.user.id);
-            return new Response(
-                JSON.stringify({ error: profileCreateError.message }),
-                { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
+        if (profileUpdateError) {
+            console.error('Failed to update user profile:', profileUpdateError);
+            // Profile was created by trigger but update failed - user still exists
+            console.warn('Profile update failed but user was created. Manual approval may be needed.');
         }
 
-        console.log(`✅ Primary Admin invite sent: ${fullName} (${email}) for org ${org.name}`);
+        console.log(`Primary Admin invite sent: ${fullName} (${email}) for org ${org.name}`);
 
         return new Response(
             JSON.stringify({
                 data: {
-                    user_id: inviteData.user.id,
+                    user_id: newUserId,
                     email: inviteData.user.email,
                     full_name: fullName,
                     role: 'primary_admin',
                     organization_id: organizationId,
                     organization_name: org.name,
-                    status: 'pending',
+                    status: 'approved',
                     invite_sent: true,
                 },
                 error: null,
