@@ -137,7 +137,7 @@ serve(async (req: Request) => {
                 id: newUserId,
                 full_name,
                 role: 'regulator',
-                status: 'active',
+                status: 'approved',
                 organization_id: null,
             });
 
