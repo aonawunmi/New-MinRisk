@@ -2,6 +2,11 @@
 // Purpose: Super Admin can invite regulator users and assign them to regulators
 // Security: Only super_admin role can call this
 // Pattern: Matches super-admin-invite-primary-admin for consistency
+//
+// IMPORTANT: There is a database trigger `on_auth_user_created` on auth.users
+// that automatically creates a user_profiles row when inviteUserByEmail is called.
+// The trigger reads role/full_name/organization_id from raw_user_meta_data.
+// Therefore we must NOT insert a new profile - we UPDATE the trigger-created one.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -118,7 +123,10 @@ serve(async (req: Request) => {
             );
         }
 
-        // 6. Create the regulator user via invitation email
+        // 6. Invite user via email
+        // The trigger `on_auth_user_created` will auto-create user_profiles row
+        // using the metadata below. We pass role as 'regulator'.
+        // PREREQUISITE: 'regulator' must exist in the user_role enum.
         const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
             data: {
                 full_name,
@@ -140,29 +148,23 @@ serve(async (req: Request) => {
 
         const newUserId = inviteData.user.id;
 
-        // 7. Create user profile with role='regulator'
-        const { data: newProfile, error: profileCreateError } = await supabaseAdmin
+        // 7. UPDATE the trigger-created profile to approve the user
+        // The trigger already created profile with role='regulator', status='pending'
+        // We approve immediately since super_admin is inviting directly
+        const { error: profileUpdateError } = await supabaseAdmin
             .from('user_profiles')
-            .insert({
-                id: newUserId,
-                full_name,
-                role: 'regulator',
+            .update({
                 status: 'approved',
-                organization_id: null,
+                approved_by: user.id,
+                approved_at: new Date().toISOString(),
             })
-            .select()
-            .single();
+            .eq('id', newUserId);
 
-        if (profileCreateError) {
-            console.error('Error creating user profile:', profileCreateError);
-            // Clean up auth user if profile fails
-            await supabaseAdmin.auth.admin.deleteUser(newUserId);
-            return new Response(
-                JSON.stringify({
-                    error: 'Failed to create user profile: ' + profileCreateError.message,
-                }),
-                { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
+        if (profileUpdateError) {
+            console.error('Error updating user profile:', profileUpdateError);
+            // Profile was created by trigger but update failed - user still exists
+            // Don't delete - they can be manually approved later
+            console.warn('Profile update failed but user was created. Manual approval may be needed.');
         }
 
         // 8. Grant access to specified regulators
@@ -178,12 +180,9 @@ serve(async (req: Request) => {
 
         if (accessError) {
             console.error('Error granting regulator access:', accessError);
-            // Clean up on failure
-            await supabaseAdmin.from('user_profiles').delete().eq('id', newUserId);
-            await supabaseAdmin.auth.admin.deleteUser(newUserId);
             return new Response(
                 JSON.stringify({
-                    error: 'Failed to grant regulator access: ' + accessError.message,
+                    error: 'User invited but failed to grant regulator access: ' + accessError.message,
                 }),
                 { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
@@ -210,12 +209,11 @@ serve(async (req: Request) => {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             }
         );
-    } catch (error) {
+    } catch (error: unknown) {
         console.error('Unexpected error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         return new Response(
-            JSON.stringify({
-                error: error instanceof Error ? error.message : 'Internal server error',
-            }),
+            JSON.stringify({ error: errorMessage }),
             {
                 status: 500,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
