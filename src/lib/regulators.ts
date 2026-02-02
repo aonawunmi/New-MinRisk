@@ -75,10 +75,10 @@ export async function listRegulatorUsers(): Promise<{
   error: Error | null;
 }> {
   try {
-    // Get all users with role='regulator'
+    // Get all users with role='regulator' (without email - it's in auth.users)
     const { data: profiles, error: profilesError } = await supabase
       .from('user_profiles')
-      .select('id, email, full_name, status, created_at')
+      .select('id, full_name, status, created_at')
       .eq('role', 'regulator')
       .order('created_at', { ascending: false });
 
@@ -89,6 +89,17 @@ export async function listRegulatorUsers(): Promise<{
     if (!profiles || profiles.length === 0) {
       return { data: [], error: null };
     }
+
+    // Get emails from auth.users for each profile
+    const { data: { users }, error: usersError } = await supabase.auth.admin.listUsers();
+
+    if (usersError) {
+      console.error('Error fetching users from auth:', usersError);
+      // Continue without emails rather than failing completely
+    }
+
+    // Create email lookup map
+    const emailMap = new Map(users?.map(u => [u.id, u.email]) || []);
 
     // Get regulator access for each user
     const userIds = profiles.map(p => p.id);
@@ -112,7 +123,11 @@ export async function listRegulatorUsers(): Promise<{
         .filter(Boolean) as Regulator[];
 
       return {
-        ...profile,
+        id: profile.id,
+        email: emailMap.get(profile.id) || 'N/A',
+        full_name: profile.full_name,
+        status: profile.status,
+        created_at: profile.created_at,
         regulators,
       };
     });
