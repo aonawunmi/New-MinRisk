@@ -133,25 +133,20 @@ serve(async (req: Request) => {
 
         const newUserId = inviteData.user.id;
 
-        // 7. UPDATE the trigger-created profile to approve immediately
+        // 7. Approve the trigger-created profile via stored procedure
         // The trigger already created profile with role='primary_admin', status='pending'
-        // Super admin is explicitly inviting, so we auto-approve.
-        const { error: profileUpdateError } = await supabaseAdmin
-            .from('user_profiles')
-            .update({
-                organization_id: organizationId,
-                full_name: fullName,
-                role: 'primary_admin',
-                status: 'approved',
-                approved_by: user.id,
-                approved_at: new Date().toISOString(),
-            })
-            .eq('id', newUserId);
+        // We use change_user_status() RPC which handles write-protection triggers
+        // and creates an audit trail. Must use supabaseClient (user auth) so auth.uid() works.
+        const { data: approveResult, error: approveError } = await supabaseClient.rpc('change_user_status', {
+            p_user_id: newUserId,
+            p_new_status: 'approved',
+            p_reason: `Primary Admin invited by super admin for organization ${org.name}`,
+            p_request_id: crypto.randomUUID(),
+        });
 
-        if (profileUpdateError) {
-            console.error('Failed to update user profile:', profileUpdateError);
-            // Profile was created by trigger but update failed - user still exists
-            console.warn('Profile update failed but user was created. Manual approval may be needed.');
+        if (approveError) {
+            console.error('Failed to approve user profile:', approveError);
+            console.warn('User was created but approval failed. Manual approval may be needed.');
         }
 
         console.log(`Primary Admin invite sent: ${fullName} (${email}) for org ${org.name}`);
