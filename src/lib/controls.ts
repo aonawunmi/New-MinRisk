@@ -312,11 +312,18 @@ export async function deleteControl(
 
 /**
  * Calculate control effectiveness using DIME framework
- * Formula per SSD: (D + I + M + E) / 12
- * Returns value between 0 and 1 (0% to 100%)
+ * Formula: ((D * I) + (M * E)) / 18 * 100
+ * Returns value between 0 and 100 (percentage)
  *
- * Special case: If design = 0 OR implementation = 0, effectiveness = 0
- * (Control cannot be effective if not designed or implemented)
+ * CRITICAL ANTI-GREENWASHING RULE:
+ * If Design = 0 OR Implementation = 0, effectiveness = 0%
+ * (Control cannot be effective if poorly designed or not implemented)
+ *
+ * @param design - Design score (0-3)
+ * @param implementation - Implementation score (0-3)
+ * @param monitoring - Monitoring score (0-3)
+ * @param evaluation - Evaluation score (0-3)
+ * @returns Effectiveness percentage (0-100)
  */
 export function calculateControlEffectiveness(
   design: DIMEScore | null,
@@ -324,7 +331,7 @@ export function calculateControlEffectiveness(
   monitoring: DIMEScore | null,
   evaluation: DIMEScore | null
 ): number {
-  // DIME Framework Critical Rule:
+  // DIME Framework Critical Rule ("Greenwashing Killer"):
   // If Design=0 or Implementation=0, control has NO effectiveness
   // (Can't work if poorly designed or not implemented)
   if (design === 0 || implementation === 0) {
@@ -336,14 +343,15 @@ export function calculateControlEffectiveness(
     return 0;
   }
 
-  // Monitoring and Evaluation can be null or 0 - control still has SOME effectiveness
-  // Treat null M/E as 0 (not measured, but control still works based on D and I)
+  // Monitoring and Evaluation default to 0 if null
+  // (control still has SOME effectiveness based on D and I alone)
   const m = monitoring ?? 0;
   const e = evaluation ?? 0;
 
-  // Calculate effectiveness as fraction (0 to 1)
-  // Formula: (D + I + M + E) / 12
-  return (design + implementation + m + e) / 12.0;
+  // Calculate effectiveness percentage
+  // Formula: ((D * I) + (M * E)) / 18 * 100
+  // Maximum possible: ((3 * 3) + (3 * 3)) / 18 * 100 = 100%
+  return Math.round((((design * implementation) + (m * e)) / 18) * 100);
 }
 
 /**
@@ -383,14 +391,17 @@ export async function calculateResidualRisk(
           continue;
         }
 
-        // Calculate control effectiveness
+        // Calculate control effectiveness (returns percentage 0-100)
         // (M and E can be null - will be treated as 0 in calculation)
-        const effectiveness = calculateControlEffectiveness(
+        const effectivenessPercent = calculateControlEffectiveness(
           control.design_score,
           control.implementation_score,
           control.monitoring_score,
           control.evaluation_score
         );
+
+        // Convert to fraction for residual calculation (0-1)
+        const effectiveness = effectivenessPercent / 100;
 
         // Track maximum effectiveness per target
         if (control.target === 'Likelihood') {
@@ -462,28 +473,27 @@ export async function getControlSummary(
     );
     const impactControls = (controls || []).filter((c) => c.target === 'Impact');
 
-    // Calculate average effectiveness
+    // Calculate average effectiveness (as percentage 0-100)
     const effectivenessScores = (controls || [])
       .filter(
         (c) =>
           c.design_score !== null &&
-          c.implementation_score !== null &&
-          c.monitoring_score !== null &&
-          c.evaluation_score !== null
+          c.implementation_score !== null
+          // M and E can be null - calculateControlEffectiveness handles this
       )
       .map((c) =>
         calculateControlEffectiveness(
           c.design_score!,
           c.implementation_score!,
-          c.monitoring_score!,
-          c.evaluation_score!
+          c.monitoring_score,
+          c.evaluation_score
         )
       );
 
     const avgEffectiveness =
       effectivenessScores.length > 0
-        ? effectivenessScores.reduce((a, b) => a + b, 0) /
-        effectivenessScores.length
+        ? Math.round(effectivenessScores.reduce((a, b) => a + b, 0) /
+        effectivenessScores.length)
         : 0;
 
     return {
