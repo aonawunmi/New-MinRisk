@@ -94,31 +94,41 @@ serve(async (req: Request) => {
             );
         }
 
-        // 4. Validate regulator IDs exist
+        // 4. Check if email already exists
+        const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+        const emailExists = existingUsers?.users?.some((u: { email?: string }) => u.email === email);
+        if (emailExists) {
+            return new Response(
+                JSON.stringify({ error: `User with email already exists: ${email}` }),
+                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+        }
+
+        // 5. Validate regulator IDs exist
         const { data: regulators, error: regulatorError } = await supabaseAdmin
             .from('regulators')
             .select('id, name')
             .in('id', regulator_ids);
 
         if (regulatorError || !regulators || regulators.length !== regulator_ids.length) {
+            console.error('Regulator validation failed:', regulatorError);
             return new Response(
                 JSON.stringify({ error: 'One or more regulator IDs are invalid' }),
                 { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
         }
 
-        // 5. Create the regulator user via invitation email
-        const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-            email,
-            {
-                data: {
-                    full_name,
-                    role: 'regulator',
-                },
-            }
-        );
+        // 6. Create the regulator user via invitation email
+        const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+            data: {
+                full_name,
+                role: 'regulator',
+                invited_by: user.id,
+            },
+            redirectTo: `${supabaseUrl.replace('.supabase.co', '')}/auth/callback`,
+        });
 
-        if (inviteError || !inviteData?.user) {
+        if (inviteError || !inviteData.user) {
             console.error('Error inviting user:', inviteError);
             return new Response(
                 JSON.stringify({
@@ -130,8 +140,8 @@ serve(async (req: Request) => {
 
         const newUserId = inviteData.user.id;
 
-        // 6. Create user profile with role='regulator'
-        const { error: profileCreateError } = await supabaseAdmin
+        // 7. Create user profile with role='regulator'
+        const { data: newProfile, error: profileCreateError } = await supabaseAdmin
             .from('user_profiles')
             .insert({
                 id: newUserId,
@@ -139,7 +149,9 @@ serve(async (req: Request) => {
                 role: 'regulator',
                 status: 'approved',
                 organization_id: null,
-            });
+            })
+            .select()
+            .single();
 
         if (profileCreateError) {
             console.error('Error creating user profile:', profileCreateError);
@@ -153,7 +165,7 @@ serve(async (req: Request) => {
             );
         }
 
-        // 7. Grant access to specified regulators
+        // 8. Grant access to specified regulators
         const accessRecords = regulator_ids.map((regulator_id) => ({
             user_id: newUserId,
             regulator_id,
@@ -177,19 +189,21 @@ serve(async (req: Request) => {
             );
         }
 
-        // 8. Success
+        // 9. Success
         console.log(`Regulator user invited: ${email}, assigned to: ${regulators.map(r => r.name).join(', ')}`);
 
         return new Response(
             JSON.stringify({
-                success: true,
-                message: 'Regulator user invited successfully',
-                user: {
-                    id: newUserId,
+                data: {
+                    user_id: newUserId,
                     email,
                     full_name,
+                    role: 'regulator',
                     regulators: regulators.map(r => r.name),
+                    status: 'approved',
+                    invite_sent: true,
                 },
+                error: null,
             }),
             {
                 status: 200,

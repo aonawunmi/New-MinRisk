@@ -136,6 +136,7 @@ export async function listRegulatorUsers(): Promise<{
 
 /**
  * Invite a regulator user (super admin only)
+ * Uses fetch() directly for better error handling (matches OrganizationManagement pattern)
  */
 export async function inviteRegulatorUser(
   email: string,
@@ -143,22 +144,35 @@ export async function inviteRegulatorUser(
   regulator_ids: string[]
 ): Promise<{ data: any; error: Error | null }> {
   try {
-    const { data, error } = await supabase.functions.invoke(
-      'super-admin-invite-regulator',
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      return { data: null, error: new Error('Not authenticated') };
+    }
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const response = await fetch(
+      `${supabaseUrl}/functions/v1/super-admin-invite-regulator`,
       {
-        body: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
           email,
           full_name,
           regulator_ids,
-        },
+        }),
       }
     );
 
-    if (error) {
-      return { data: null, error };
+    const result = await response.json();
+
+    if (!response.ok) {
+      return { data: null, error: new Error(result.error || `HTTP ${response.status}`) };
     }
 
-    return { data, error: null };
+    return { data: result.data || result, error: null };
   } catch (err) {
     return {
       data: null,
