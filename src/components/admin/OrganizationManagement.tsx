@@ -55,12 +55,29 @@ interface Organization {
     plan_name: string | null;
     subscription_status: string | null;
     trial_ends_at: string | null;
+    institution_type: string | null;
 }
+
+const INSTITUTION_TYPES = [
+    'Bank',
+    'Securities Exchange',
+    'Capital Market Operator',
+    'Insurance Company',
+    'Pension Fund Administrator',
+    'Microfinance Bank',
+    'Fintech',
+    'Asset Management',
+    'Brokerage Firm',
+    'Clearing House',
+    'Development Finance Institution',
+    'Other',
+];
 
 interface CreateOrgForm {
     name: string;
     code: string;
     description: string;
+    institutionType: string;
     planId: string;
     isTrial: boolean;
 }
@@ -86,6 +103,7 @@ export function OrganizationManagement() {
         name: '',
         code: '',
         description: '',
+        institutionType: '',
         planId: '',
         isTrial: false,
     });
@@ -147,7 +165,8 @@ export function OrganizationManagement() {
                 p_code: createForm.code.toUpperCase(),
                 p_description: createForm.description || null,
                 p_plan_id: createForm.planId || null,
-                p_start_trial: createForm.isTrial
+                p_start_trial: createForm.isTrial,
+                p_institution_type: createForm.institutionType || null,
             });
 
             if (error) {
@@ -158,7 +177,7 @@ export function OrganizationManagement() {
 
             alert(`Organization "${createForm.name}" created successfully!`);
             setCreateDialogOpen(false);
-            setCreateForm({ name: '', code: '', description: '', planId: '', isTrial: false });
+            setCreateForm({ name: '', code: '', description: '', institutionType: '', planId: '', isTrial: false });
             loadOrganizations();
         } catch (err) {
             console.error('Unexpected error:', err);
@@ -374,6 +393,27 @@ export function OrganizationManagement() {
                                     />
                                 </div>
                                 <div className="space-y-2">
+                                    <Label htmlFor="org-type">Institution Type *</Label>
+                                    <Select
+                                        value={createForm.institutionType}
+                                        onValueChange={(val) => setCreateForm({ ...createForm, institutionType: val })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select institution type" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {INSTITUTION_TYPES.map((type) => (
+                                                <SelectItem key={type} value={type}>
+                                                    {type}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-muted-foreground">
+                                        Determines which regulators oversee this organization
+                                    </p>
+                                </div>
+                                <div className="space-y-2">
                                     <Label htmlFor="org-plan">Subscription Plan</Label>
                                     <Select
                                         value={createForm.planId}
@@ -441,6 +481,7 @@ export function OrganizationManagement() {
                                 <TableRow>
                                     <TableHead>Organization</TableHead>
                                     <TableHead>Code</TableHead>
+                                    <TableHead>Type</TableHead>
                                     <TableHead>Plan</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead>Users</TableHead>
@@ -461,6 +502,13 @@ export function OrganizationManagement() {
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant="outline">{org.code}</Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            {org.institution_type ? (
+                                                <Badge variant="secondary">{org.institution_type}</Badge>
+                                            ) : (
+                                                <span className="text-sm text-muted-foreground">-</span>
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             <div>
