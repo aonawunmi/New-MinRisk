@@ -33,6 +33,7 @@ import AIAssistant from '@/components/ai/AIAssistant';
 import AdminPanel from '@/components/admin/AdminPanel';
 import AdminCheck from '@/components/debug/AdminCheck';
 import RegulatorDashboard from '@/components/regulator/RegulatorDashboard';
+import RegulatoryReports from '@/components/reports/RegulatoryReports';
 import type { AuthState } from '@/types/auth';
 
 export default function App() {
@@ -264,6 +265,9 @@ export default function App() {
                         <TabsTrigger value="intelligence" className="text-xs sm:text-sm whitespace-nowrap">
                           <span className="hidden sm:inline">🧠 </span>Intel
                         </TabsTrigger>
+                        <TabsTrigger value="reports" className="text-xs sm:text-sm whitespace-nowrap">
+                          <span className="hidden sm:inline">📄 </span>Reports
+                        </TabsTrigger>
                       </>
                     )}
                     <TabsTrigger value="admin" className="text-xs sm:text-sm whitespace-nowrap">
@@ -362,6 +366,12 @@ export default function App() {
             <TabsContent value="ai">
               <AIAssistant />
             </TabsContent>
+
+            {authState.isAdmin && !authState.isSuperAdmin && (
+              <TabsContent value="reports">
+                <RegulatoryReports />
+              </TabsContent>
+            )}
 
             {authState.isAdmin && (
               <TabsContent value="admin">

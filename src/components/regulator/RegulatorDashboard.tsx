@@ -35,6 +35,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import RegulatorReportsView from './RegulatorReportsView';
 import {
   AlertTriangle,
   Building2,
@@ -141,31 +143,41 @@ export default function RegulatorDashboard() {
             Cross-organization risk monitoring and analysis
           </p>
         </div>
-        <div className="w-64">
-          <Select value={selectedRegulatorId} onValueChange={setSelectedRegulatorId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select regulator" />
-            </SelectTrigger>
-            <SelectContent>
-              {regulators.map(reg => (
-                <SelectItem key={reg.id} value={reg.id}>
-                  {reg.name} ({reg.code})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
       </div>
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList>
+          <TabsTrigger value="overview">📊 Risk Overview</TabsTrigger>
+          <TabsTrigger value="reports">📄 Submitted Reports</TabsTrigger>
+        </TabsList>
 
-      {selectedRegulator && (
-        <>
+        <TabsContent value="overview" className="space-y-6 mt-6">
+          <div className="flex items-center justify-end">
+            <div className="w-64">
+              <Select value={selectedRegulatorId} onValueChange={setSelectedRegulatorId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select regulator" />
+                </SelectTrigger>
+                <SelectContent>
+                  {regulators.map(reg => (
+                    <SelectItem key={reg.id} value={reg.id}>
+                      {reg.name} ({reg.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {selectedRegulator && (
+            <>
           {/* Metrics Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>
@@ -449,8 +461,14 @@ export default function RegulatorDashboard() {
               )}
             </CardContent>
           </Card>
-        </>
-      )}
+          </>
+        )}
+        </TabsContent>
+
+        <TabsContent value="reports">
+          <RegulatorReportsView />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
