@@ -75,34 +75,27 @@ export async function listRegulatorUsers(): Promise<{
   error: Error | null;
 }> {
   try {
-    // Get all users with role='regulator' (without email - it's in auth.users)
-    const { data: profiles, error: profilesError } = await supabase
-      .from('user_profiles')
-      .select('id, full_name, status, created_at')
-      .eq('role', 'regulator')
-      .order('created_at', { ascending: false });
+    // Use RPC function that joins user_profiles with auth.users to get email
+    const { data: profiles, error: profilesError } = await supabase.rpc(
+      'list_users_with_email',
+      { p_organization_id: null }
+    );
 
     if (profilesError) {
       return { data: null, error: profilesError };
     }
 
-    if (!profiles || profiles.length === 0) {
+    // Filter to regulator role only
+    const regulatorProfiles = (profiles || []).filter(
+      (p: any) => p.role === 'regulator'
+    );
+
+    if (regulatorProfiles.length === 0) {
       return { data: [], error: null };
     }
 
-    // Get emails from auth.users for each profile
-    const { data: { users }, error: usersError } = await supabase.auth.admin.listUsers();
-
-    if (usersError) {
-      console.error('Error fetching users from auth:', usersError);
-      // Continue without emails rather than failing completely
-    }
-
-    // Create email lookup map
-    const emailMap = new Map(users?.map(u => [u.id, u.email]) || []);
-
     // Get regulator access for each user
-    const userIds = profiles.map(p => p.id);
+    const userIds = regulatorProfiles.map((p: any) => p.id);
     const { data: accessData, error: accessError } = await supabase
       .from('regulator_access')
       .select(`
@@ -116,7 +109,7 @@ export async function listRegulatorUsers(): Promise<{
     }
 
     // Build regulator users with their regulators
-    const regulatorUsers: RegulatorUser[] = profiles.map(profile => {
+    const regulatorUsers: RegulatorUser[] = regulatorProfiles.map((profile: any) => {
       const userAccess = accessData?.filter(a => a.user_id === profile.id) || [];
       const regulators = userAccess
         .map(a => a.regulator)
@@ -124,7 +117,7 @@ export async function listRegulatorUsers(): Promise<{
 
       return {
         id: profile.id,
-        email: emailMap.get(profile.id) || 'N/A',
+        email: profile.email || 'N/A',
         full_name: profile.full_name,
         status: profile.status,
         created_at: profile.created_at,
