@@ -60,6 +60,9 @@ export const USE_CASE_MODELS = {
   /** Risk Appetite generation (Board language) */
   APPETITE_GENERATION: AI_MODELS.SONNET_35,
 
+  /** PCI Template suggestions (control selection) */
+  PCI_SUGGESTIONS: AI_MODELS.SONNET_35,
+
   /** Default fallback */
   DEFAULT: AI_MODELS.SONNET_35,
 } as const;

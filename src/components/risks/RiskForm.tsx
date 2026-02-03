@@ -18,6 +18,8 @@ import { getDivisions, getDepartmentsByDivision, type Division, type Department 
 import { listUsersInOrganization } from '@/lib/admin';
 import { isUserAdmin } from '@/lib/profiles';
 import { supabase } from '@/lib/supabase';
+import { isPCIWorkflowEnabled, checkActivationGate, getRiskResponse } from '@/lib/pci';
+import type { RiskResponse, G1GateResult } from '@/types/pci';
 import type { Control, UpdateControlData } from '@/types/control';
 import type { Risk, CreateRiskData } from '@/types/risk';
 import { Button } from '@/components/ui/button';
@@ -43,6 +45,7 @@ import { AlertCircle, Sparkles, Loader2, CheckCircle, X, Edit, AlertTriangle, Pl
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import TreatmentLogViewer from '@/components/riskIntelligence/TreatmentLogViewer';
+import { RiskResponseSelector, PCIControlsSection } from '@/components/pci';
 
 interface RiskFormProps {
   open: boolean;
@@ -179,6 +182,13 @@ export default function RiskForm({
   const [dbDepartments, setDbDepartments] = useState<Department[]>([]);
   const [loadingDivisions, setLoadingDivisions] = useState(false);
 
+  // PCI Workflow state (feature flag + new control architecture)
+  const [pciWorkflowEnabled, setPciWorkflowEnabled] = useState(false);
+  const [loadingPciFlag, setLoadingPciFlag] = useState(false);
+  const [riskResponse, setRiskResponse] = useState<RiskResponse | null>(null);
+  const [g1GateResult, setG1GateResult] = useState<G1GateResult | null>(null);
+  const [checkingG1Gate, setCheckingG1Gate] = useState(false);
+
   // Load existing controls for a risk
   async function loadExistingControls(riskId: string) {
     setLoadingControls(true);
@@ -314,8 +324,51 @@ export default function RiskForm({
       loadConfig();
       loadUsers();
       loadAdminStatus();
+      loadPciFeatureFlag();
     }
   }, [open]);
+
+  // Check if PCI workflow is enabled for this organization
+  async function loadPciFeatureFlag() {
+    setLoadingPciFlag(true);
+    try {
+      const enabled = await isPCIWorkflowEnabled();
+      setPciWorkflowEnabled(enabled);
+    } catch (err) {
+      console.error('Error checking PCI workflow flag:', err);
+      setPciWorkflowEnabled(false);
+    } finally {
+      setLoadingPciFlag(false);
+    }
+  }
+
+  // Handle risk response change (PCI workflow)
+  function handleRiskResponseChange(response: RiskResponse | null) {
+    setRiskResponse(response);
+    // Reset G1 gate result when response changes
+    setG1GateResult(null);
+  }
+
+  // Check G1 gate before allowing status change to Active
+  async function checkG1GateForActivation(riskId: string): Promise<boolean> {
+    setCheckingG1Gate(true);
+    try {
+      const { data, error } = await checkActivationGate(riskId);
+      if (error) {
+        console.error('G1 Gate check failed:', error);
+        setError('Failed to validate risk activation requirements');
+        return false;
+      }
+      setG1GateResult(data);
+      return data?.can_activate ?? false;
+    } catch (err) {
+      console.error('G1 Gate check error:', err);
+      setError('Failed to validate risk activation requirements');
+      return false;
+    } finally {
+      setCheckingG1Gate(false);
+    }
+  }
 
   async function loadConfig() {
     setLoadingConfig(true);
@@ -1296,18 +1349,54 @@ export default function RiskForm({
                 <Label htmlFor="status">Status</Label>
                 <Select
                   value={formData.status}
-                  onValueChange={(value) => handleChange('status', value)}
-                  disabled={loading}
+                  onValueChange={async (value) => {
+                    // G1 Gate check for PCI workflow when changing to Active
+                    if (pciWorkflowEnabled && value === 'Active' && editingRisk) {
+                      const canActivate = await checkG1GateForActivation(editingRisk.id);
+                      if (!canActivate) {
+                        // Don't allow the change - show error via g1GateResult
+                        return;
+                      }
+                    }
+                    handleChange('status', value);
+                  }}
+                  disabled={loading || checkingG1Gate}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="OPEN">Open</SelectItem>
-                    <SelectItem value="CLOSED">Closed</SelectItem>
-                    <SelectItem value="ARCHIVED">Archived</SelectItem>
+                    {pciWorkflowEnabled ? (
+                      <>
+                        <SelectItem value="Draft">Draft</SelectItem>
+                        <SelectItem value="Active">Active</SelectItem>
+                        <SelectItem value="CLOSED">Closed</SelectItem>
+                        <SelectItem value="Retired">Retired</SelectItem>
+                        <SelectItem value="ARCHIVED">Archived</SelectItem>
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="OPEN">Open</SelectItem>
+                        <SelectItem value="CLOSED">Closed</SelectItem>
+                        <SelectItem value="ARCHIVED">Archived</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
+                {checkingG1Gate && (
+                  <p className="text-xs text-blue-600 flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Checking activation requirements...
+                  </p>
+                )}
+                {g1GateResult && !g1GateResult.can_activate && (
+                  <Alert variant="destructive" className="mt-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription className="text-xs">
+                      <strong>Cannot activate risk:</strong> {g1GateResult.validation_message}
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
             </div>
 
@@ -1918,7 +2007,31 @@ export default function RiskForm({
               </div>
             </div>
 
-            {/* === CONTROLS SECTION === */}
+            {/* === PCI WORKFLOW: RISK RESPONSE SECTION === */}
+            {pciWorkflowEnabled && editingRisk && (
+              <div className="pt-6 border-t mt-6">
+                <RiskResponseSelector
+                  riskId={editingRisk.id}
+                  readOnly={readOnly}
+                  onResponseChange={handleRiskResponseChange}
+                />
+              </div>
+            )}
+
+            {/* === PCI WORKFLOW: PRIMARY CONTROL INSTANCES SECTION === */}
+            {pciWorkflowEnabled && editingRisk && (
+              <div className="pt-6 border-t mt-6">
+                <PCIControlsSection
+                  riskId={editingRisk.id}
+                  riskResponse={riskResponse?.response_type}
+                  readOnly={readOnly}
+                />
+              </div>
+            )}
+
+            {/* === LEGACY CONTROLS SECTION (hidden when PCI workflow enabled) === */}
+            {!pciWorkflowEnabled && (
+              <>
             <div className="space-y-4 pt-6 border-t mt-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -2873,6 +2986,8 @@ export default function RiskForm({
                   )}
                 </CardContent>
               </Card>
+            )}
+              </>
             )}
 
             {/* Intelligence Advisory Section - Only show when editing */}

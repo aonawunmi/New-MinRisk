@@ -1,0 +1,656 @@
+/**
+ * PCI Workflow API Functions
+ * Phase 1: Risk Response + Primary Control Instances + Secondary Controls
+ */
+
+import { supabase } from './supabase';
+import type {
+  RiskResponse,
+  CreateRiskResponseData,
+  UpdateRiskResponseData,
+  PCITemplate,
+  SecondaryControlTemplate,
+  PCIInstance,
+  CreatePCIInstanceData,
+  UpdatePCIInstanceData,
+  SecondaryControlInstance,
+  UpdateSecondaryControlData,
+  DerivedDIMEScore,
+  ConfidenceScore,
+  EvidenceRequest,
+  CreateEvidenceRequestData,
+  EvidenceSubmission,
+  CreateEvidenceSubmissionData,
+  G1GateResult,
+} from '@/types/pci';
+
+// ============================================================================
+// FEATURE FLAG
+// ============================================================================
+
+/**
+ * Check if PCI workflow is enabled for the current organization
+ */
+export async function isPCIWorkflowEnabled(): Promise<boolean> {
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('organization_id')
+    .single();
+
+  if (!profile?.organization_id) return false;
+
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('pci_workflow_enabled')
+    .eq('id', profile.organization_id)
+    .single();
+
+  return org?.pci_workflow_enabled ?? false;
+}
+
+// ============================================================================
+// RISK RESPONSE
+// ============================================================================
+
+/**
+ * Get risk response for a risk (1:1 relationship)
+ */
+export async function getRiskResponse(riskId: string) {
+  const { data, error } = await supabase
+    .from('risk_responses')
+    .select('*')
+    .eq('risk_id', riskId)
+    .single();
+
+  return { data: data as RiskResponse | null, error };
+}
+
+/**
+ * Create or update risk response (upsert)
+ */
+export async function upsertRiskResponse(input: CreateRiskResponseData) {
+  const { data: user } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('risk_responses')
+    .upsert(
+      {
+        risk_id: input.risk_id,
+        response_type: input.response_type,
+        response_rationale: input.response_rationale || null,
+        ai_proposed_response: input.ai_proposed_response || null,
+        ai_response_rationale: input.ai_response_rationale || null,
+        updated_by: user?.user?.id,
+      },
+      {
+        onConflict: 'risk_id',
+      }
+    )
+    .select()
+    .single();
+
+  return { data: data as RiskResponse | null, error };
+}
+
+/**
+ * Update risk response
+ */
+export async function updateRiskResponse(
+  riskId: string,
+  updates: UpdateRiskResponseData
+) {
+  const { data: user } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('risk_responses')
+    .update({
+      ...updates,
+      updated_by: user?.user?.id,
+    })
+    .eq('risk_id', riskId)
+    .select()
+    .single();
+
+  return { data: data as RiskResponse | null, error };
+}
+
+// ============================================================================
+// PCI TEMPLATES (Seed Library - Read Only)
+// ============================================================================
+
+/**
+ * Get all active PCI templates
+ */
+export async function getPCITemplates() {
+  const { data, error } = await supabase
+    .from('pci_templates')
+    .select('*')
+    .eq('is_active', true)
+    .order('id');
+
+  return { data: data as PCITemplate[] | null, error };
+}
+
+/**
+ * Get a single PCI template by ID
+ */
+export async function getPCITemplate(templateId: string) {
+  const { data, error } = await supabase
+    .from('pci_templates')
+    .select('*')
+    .eq('id', templateId)
+    .single();
+
+  return { data: data as PCITemplate | null, error };
+}
+
+/**
+ * Get secondary control templates for a PCI template
+ */
+export async function getSecondaryControlTemplates(pciTemplateId: string) {
+  const { data, error } = await supabase
+    .from('secondary_control_templates')
+    .select('*')
+    .eq('pci_template_id', pciTemplateId)
+    .eq('is_active', true)
+    .order('code');
+
+  return { data: data as SecondaryControlTemplate[] | null, error };
+}
+
+// ============================================================================
+// PCI INSTANCES
+// ============================================================================
+
+/**
+ * Get all PCI instances for a risk
+ */
+export async function getPCIInstancesForRisk(riskId: string) {
+  const { data, error } = await supabase
+    .from('pci_instances')
+    .select(`
+      *,
+      pci_template:pci_templates(*),
+      derived_dime_score:derived_dime_scores(*),
+      confidence_score:confidence_scores(*)
+    `)
+    .eq('risk_id', riskId)
+    .neq('status', 'retired')
+    .order('created_at');
+
+  return { data: data as PCIInstance[] | null, error };
+}
+
+/**
+ * Get a single PCI instance with all related data
+ */
+export async function getPCIInstance(pciInstanceId: string) {
+  const { data, error } = await supabase
+    .from('pci_instances')
+    .select(`
+      *,
+      pci_template:pci_templates(*),
+      secondary_control_instances(
+        *,
+        secondary_control_template:secondary_control_templates(*)
+      ),
+      derived_dime_score:derived_dime_scores(*),
+      confidence_score:confidence_scores(*)
+    `)
+    .eq('id', pciInstanceId)
+    .single();
+
+  return { data: data as PCIInstance | null, error };
+}
+
+/**
+ * Create a new PCI instance
+ * Note: This will trigger auto-creation of 10 secondary control instances
+ */
+export async function createPCIInstance(input: CreatePCIInstanceData) {
+  const { data: user } = await supabase.auth.getUser();
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('organization_id')
+    .single();
+
+  if (!profile?.organization_id) {
+    return { data: null, error: { message: 'Organization not found' } };
+  }
+
+  // Get template to freeze version
+  const { data: template } = await getPCITemplate(input.pci_template_id);
+  if (!template) {
+    return { data: null, error: { message: 'PCI template not found' } };
+  }
+
+  const { data, error } = await supabase
+    .from('pci_instances')
+    .insert({
+      organization_id: profile.organization_id,
+      risk_id: input.risk_id,
+      pci_template_id: input.pci_template_id,
+      pci_template_version: template.version,
+      objective: input.objective || template.objective_default,
+      statement: input.statement || null,
+      scope_boundary: input.scope_boundary,
+      method: input.method,
+      target_threshold_standard: input.target_threshold_standard || null,
+      trigger_frequency: input.trigger_frequency,
+      owner_role: input.owner_role,
+      owner_user_id: input.owner_user_id || null,
+      dependencies: input.dependencies || null,
+      status: 'draft',
+      created_by: user?.user?.id,
+    })
+    .select(`
+      *,
+      pci_template:pci_templates(*),
+      secondary_control_instances(
+        *,
+        secondary_control_template:secondary_control_templates(*)
+      )
+    `)
+    .single();
+
+  return { data: data as PCIInstance | null, error };
+}
+
+/**
+ * Update a PCI instance
+ */
+export async function updatePCIInstance(
+  pciInstanceId: string,
+  updates: UpdatePCIInstanceData
+) {
+  const { data: user } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('pci_instances')
+    .update({
+      ...updates,
+      updated_by: user?.user?.id,
+    })
+    .eq('id', pciInstanceId)
+    .select(`
+      *,
+      pci_template:pci_templates(*),
+      derived_dime_score:derived_dime_scores(*),
+      confidence_score:confidence_scores(*)
+    `)
+    .single();
+
+  return { data: data as PCIInstance | null, error };
+}
+
+/**
+ * Retire a PCI instance (soft delete)
+ */
+export async function retirePCIInstance(pciInstanceId: string) {
+  return updatePCIInstance(pciInstanceId, { status: 'retired' });
+}
+
+// ============================================================================
+// SECONDARY CONTROL INSTANCES (Attestations)
+// ============================================================================
+
+/**
+ * Get secondary control instances for a PCI instance
+ */
+export async function getSecondaryControlInstances(pciInstanceId: string) {
+  const { data, error } = await supabase
+    .from('secondary_control_instances')
+    .select(`
+      *,
+      secondary_control_template:secondary_control_templates(*)
+    `)
+    .eq('pci_instance_id', pciInstanceId)
+    .order('secondary_control_template(code)');
+
+  return { data: data as SecondaryControlInstance[] | null, error };
+}
+
+/**
+ * Update a secondary control instance (attestation)
+ */
+export async function updateSecondaryControlInstance(
+  instanceId: string,
+  updates: UpdateSecondaryControlData
+) {
+  const { data: user } = await supabase.auth.getUser();
+
+  // If status is being set, update attestation metadata
+  const attestationFields =
+    updates.status !== undefined
+      ? {
+          attested_by: user?.user?.id,
+          attested_at: new Date().toISOString(),
+        }
+      : {};
+
+  const { data, error } = await supabase
+    .from('secondary_control_instances')
+    .update({
+      ...updates,
+      ...attestationFields,
+    })
+    .eq('id', instanceId)
+    .select(`
+      *,
+      secondary_control_template:secondary_control_templates(*)
+    `)
+    .single();
+
+  return { data: data as SecondaryControlInstance | null, error };
+}
+
+/**
+ * Batch update multiple secondary control instances
+ */
+export async function batchUpdateSecondaryControls(
+  updates: Array<{ id: string } & UpdateSecondaryControlData>
+) {
+  const { data: user } = await supabase.auth.getUser();
+  const results = [];
+
+  for (const update of updates) {
+    const { id, ...fields } = update;
+    const attestationFields =
+      fields.status !== undefined
+        ? {
+            attested_by: user?.user?.id,
+            attested_at: new Date().toISOString(),
+          }
+        : {};
+
+    const { data, error } = await supabase
+      .from('secondary_control_instances')
+      .update({
+        ...fields,
+        ...attestationFields,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    results.push({ data, error });
+  }
+
+  return results;
+}
+
+// ============================================================================
+// DIME & CONFIDENCE COMPUTATION
+// ============================================================================
+
+/**
+ * Manually trigger DIME recomputation for a PCI instance
+ * (Usually triggered automatically by database trigger)
+ */
+export async function recomputeDIME(pciInstanceId: string) {
+  const { data, error } = await supabase.rpc('compute_dime_for_pci', {
+    p_pci_instance_id: pciInstanceId,
+  });
+
+  return { data: data?.[0] as DerivedDIMEScore | null, error };
+}
+
+/**
+ * Manually trigger Confidence recomputation for a PCI instance
+ * (Usually triggered automatically by database trigger)
+ */
+export async function recomputeConfidence(pciInstanceId: string) {
+  const { data, error } = await supabase.rpc('compute_confidence_for_pci', {
+    p_pci_instance_id: pciInstanceId,
+  });
+
+  return { data: data?.[0] as ConfidenceScore | null, error };
+}
+
+/**
+ * Get DIME score for a PCI instance
+ */
+export async function getDIMEScore(pciInstanceId: string) {
+  const { data, error } = await supabase
+    .from('derived_dime_scores')
+    .select('*')
+    .eq('pci_instance_id', pciInstanceId)
+    .single();
+
+  return { data: data as DerivedDIMEScore | null, error };
+}
+
+/**
+ * Get Confidence score for a PCI instance
+ */
+export async function getConfidenceScore(pciInstanceId: string) {
+  const { data, error } = await supabase
+    .from('confidence_scores')
+    .select('*')
+    .eq('pci_instance_id', pciInstanceId)
+    .single();
+
+  return { data: data as ConfidenceScore | null, error };
+}
+
+// ============================================================================
+// G1 GATE
+// ============================================================================
+
+/**
+ * Check if a risk can be activated (G1 Gate)
+ */
+export async function checkActivationGate(riskId: string) {
+  const { data, error } = await supabase.rpc('check_risk_activation_gate', {
+    p_risk_id: riskId,
+  });
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  // RPC returns array, take first result
+  const result = data?.[0] as G1GateResult | undefined;
+  return { data: result || null, error: null };
+}
+
+// ============================================================================
+// EVIDENCE REQUESTS
+// ============================================================================
+
+/**
+ * Get evidence requests for an organization
+ */
+export async function getEvidenceRequests(filters?: {
+  risk_id?: string;
+  pci_instance_id?: string;
+  status?: string;
+}) {
+  let query = supabase.from('evidence_requests').select('*');
+
+  if (filters?.risk_id) {
+    query = query.eq('risk_id', filters.risk_id);
+  }
+  if (filters?.pci_instance_id) {
+    query = query.eq('pci_instance_id', filters.pci_instance_id);
+  }
+  if (filters?.status) {
+    query = query.eq('status', filters.status);
+  }
+
+  const { data, error } = await query.order('due_date');
+
+  return { data: data as EvidenceRequest[] | null, error };
+}
+
+/**
+ * Create an evidence request
+ */
+export async function createEvidenceRequest(input: CreateEvidenceRequestData) {
+  const { data: user } = await supabase.auth.getUser();
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('organization_id')
+    .single();
+
+  if (!profile?.organization_id) {
+    return { data: null, error: { message: 'Organization not found' } };
+  }
+
+  const { data, error } = await supabase
+    .from('evidence_requests')
+    .insert({
+      organization_id: profile.organization_id,
+      risk_id: input.risk_id || null,
+      pci_instance_id: input.pci_instance_id || null,
+      secondary_control_instance_id: input.secondary_control_instance_id || null,
+      requested_by: user?.user?.id,
+      due_date: input.due_date,
+      notes: input.notes || null,
+      is_critical_scope: input.is_critical_scope || false,
+      status: 'open',
+    })
+    .select()
+    .single();
+
+  return { data: data as EvidenceRequest | null, error };
+}
+
+/**
+ * Update evidence request status
+ */
+export async function updateEvidenceRequestStatus(
+  requestId: string,
+  status: string
+) {
+  const { data, error } = await supabase
+    .from('evidence_requests')
+    .update({ status })
+    .eq('id', requestId)
+    .select()
+    .single();
+
+  return { data: data as EvidenceRequest | null, error };
+}
+
+// ============================================================================
+// EVIDENCE SUBMISSIONS
+// ============================================================================
+
+/**
+ * Get submissions for an evidence request
+ */
+export async function getEvidenceSubmissions(requestId: string) {
+  const { data, error } = await supabase
+    .from('evidence_submissions')
+    .select('*')
+    .eq('evidence_request_id', requestId)
+    .order('submitted_at', { ascending: false });
+
+  return { data: data as EvidenceSubmission[] | null, error };
+}
+
+/**
+ * Create an evidence submission
+ */
+export async function createEvidenceSubmission(
+  input: CreateEvidenceSubmissionData
+) {
+  const { data: user } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('evidence_submissions')
+    .insert({
+      evidence_request_id: input.evidence_request_id,
+      submission_note: input.submission_note,
+      submitted_by: user?.user?.id,
+    })
+    .select()
+    .single();
+
+  // Also update the request status to 'submitted'
+  if (data) {
+    await updateEvidenceRequestStatus(input.evidence_request_id, 'submitted');
+  }
+
+  return { data: data as EvidenceSubmission | null, error };
+}
+
+/**
+ * Review an evidence submission (accept or reject)
+ */
+export async function reviewEvidenceSubmission(
+  submissionId: string,
+  decision: 'accepted' | 'rejected',
+  reviewNotes?: string
+) {
+  const { data: user } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from('evidence_submissions')
+    .update({
+      reviewed_by: user?.user?.id,
+      reviewed_at: new Date().toISOString(),
+      decision,
+      review_notes: reviewNotes || null,
+    })
+    .eq('id', submissionId)
+    .select()
+    .single();
+
+  // Also update the evidence request status
+  if (data) {
+    await updateEvidenceRequestStatus(
+      data.evidence_request_id,
+      decision === 'accepted' ? 'accepted' : 'rejected'
+    );
+  }
+
+  return { data: data as EvidenceSubmission | null, error };
+}
+
+// ============================================================================
+// AI SUGGESTIONS
+// ============================================================================
+
+export interface PCISuggestion {
+  template_id: string;
+  template_name: string;
+  priority: number;
+  rationale: string;
+}
+
+/**
+ * Get AI-powered PCI template suggestions for a risk and response type
+ */
+export async function getPCISuggestions(
+  riskId: string,
+  responseType: string
+): Promise<{ data: PCISuggestion[] | null; error: any }> {
+  try {
+    const { data, error } = await supabase.functions.invoke(
+      'suggest-pci-templates',
+      {
+        body: {
+          risk_id: riskId,
+          response_type: responseType,
+        },
+      }
+    );
+
+    if (error) {
+      console.error('Error calling suggest-pci-templates:', error);
+      return { data: null, error };
+    }
+
+    if (data?.error) {
+      console.error('Edge function returned error:', data.error);
+      return { data: null, error: { message: data.error } };
+    }
+
+    return { data: data?.suggestions || [], error: null };
+  } catch (err) {
+    console.error('Failed to get PCI suggestions:', err);
+    return { data: null, error: err };
+  }
+}
