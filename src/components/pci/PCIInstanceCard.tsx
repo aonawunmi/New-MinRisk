@@ -240,7 +240,16 @@ export default function PCIInstanceCard({
       </Card>
 
       {/* Secondary Controls Sheet */}
-      <Sheet open={showSecondaryControls} onOpenChange={setShowSecondaryControls}>
+      <Sheet
+        open={showSecondaryControls}
+        onOpenChange={(open) => {
+          setShowSecondaryControls(open);
+          // Refresh parent data when sheet closes
+          if (!open) {
+            onUpdate?.();
+          }
+        }}
+      >
         <SheetContent className="sm:max-w-2xl overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">

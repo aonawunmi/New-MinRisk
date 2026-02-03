@@ -192,7 +192,9 @@ export default function SecondaryControlsPanel({
         setDimeScore(dime);
         setConfidenceScore(conf);
 
-        onUpdate?.();
+        // Note: Don't call onUpdate here - it causes the parent to reload
+        // and closes the sheet. The scores are already refreshed locally.
+        // onUpdate will be called when the sheet closes.
       }
     } catch (err) {
       setError('Failed to save attestation');
