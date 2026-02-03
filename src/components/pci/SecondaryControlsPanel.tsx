@@ -160,10 +160,7 @@ export default function SecondaryControlsPanel({
       setError('N/A rationale is required when status is N/A');
       return;
     }
-    if (local.status && local.status !== 'na' && local.evidence_exists === null) {
-      setError('Evidence exists checkbox is required');
-      return;
-    }
+    // Note: evidence_exists is optional - defaults to false if not set
 
     setSaving((prev) => new Set(prev).add(controlId));
     setError(null);
@@ -174,7 +171,7 @@ export default function SecondaryControlsPanel({
         {
           status: local.status || undefined,
           evidence_exists:
-            local.status === 'na' ? false : local.evidence_exists ?? undefined,
+            local.status === 'na' ? false : (local.evidence_exists ?? false),
           notes: local.notes || undefined,
           na_rationale: local.status === 'na' ? local.na_rationale : undefined,
         }
