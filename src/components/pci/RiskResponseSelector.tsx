@@ -230,6 +230,7 @@ export default function RiskResponseSelector({
                     AI Suggested Response
                   </span>
                   <Button
+                    type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowAIProposal(false)}
@@ -252,6 +253,7 @@ export default function RiskResponseSelector({
                   {aiProposal.rationale}
                 </p>
                 <Button
+                  type="button"
                   size="sm"
                   className="mt-3"
                   onClick={handleAcceptAIProposal}
@@ -300,6 +302,7 @@ export default function RiskResponseSelector({
 
             {/* Rationale Toggle */}
             <Button
+              type="button"
               variant="ghost"
               size="sm"
               onClick={() => setShowRationale(!showRationale)}
@@ -336,7 +339,7 @@ export default function RiskResponseSelector({
             {/* Save Button */}
             {hasChanges && selectedType && (
               <div className="flex justify-end pt-2">
-                <Button onClick={handleSave} disabled={saving}>
+                <Button type="button" onClick={handleSave} disabled={saving}>
                   {saving ? 'Saving...' : response ? 'Update Response' : 'Set Response'}
                 </Button>
               </div>

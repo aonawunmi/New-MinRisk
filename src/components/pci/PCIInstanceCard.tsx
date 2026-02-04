@@ -142,7 +142,7 @@ export default function PCIInstanceCard({
             {!readOnly && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8">
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -217,6 +217,7 @@ export default function PCIInstanceCard({
 
           {/* Action Button */}
           <Button
+            type="button"
             variant="outline"
             className="w-full"
             onClick={() => setShowSecondaryControls(true)}

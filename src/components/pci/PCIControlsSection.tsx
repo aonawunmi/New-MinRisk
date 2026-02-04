@@ -173,6 +173,7 @@ export default function PCIControlsSection({
             </CardTitle>
             <div className="flex items-center gap-2">
               <Button
+                type="button"
                 variant="ghost"
                 size="icon"
                 onClick={loadPCIInstances}
@@ -182,6 +183,7 @@ export default function PCIControlsSection({
               </Button>
               {!readOnly && (
                 <Button
+                  type="button"
                   size="sm"
                   onClick={() => setShowTemplateSelector(true)}
                 >
@@ -236,7 +238,7 @@ export default function PCIControlsSection({
               <Shield className="h-12 w-12 mx-auto mb-3 opacity-30" />
               <p className="mb-4">No controls defined yet</p>
               {!readOnly && (
-                <Button onClick={() => setShowTemplateSelector(true)}>
+                <Button type="button" onClick={() => setShowTemplateSelector(true)}>
                   <Plus className="h-4 w-4 mr-1" />
                   Add First Control
                 </Button>
