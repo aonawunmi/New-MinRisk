@@ -60,10 +60,9 @@ interface PCITemplate {
 
 interface Risk {
   id: string;
-  risk_name: string;
+  risk_title: string;
   risk_description: string;
   category: string;
-  subcategory: string | null;
 }
 
 serve(async (req) => {
@@ -96,7 +95,7 @@ serve(async (req) => {
     // Fetch risk data
     const { data: risk, error: riskError } = await supabase
       .from("risks")
-      .select("id, risk_name, risk_description, category, subcategory")
+      .select("id, risk_title, risk_description, category")
       .eq("id", risk_id)
       .single();
 
@@ -204,9 +203,9 @@ async function getAISuggestions(
   const prompt = `You are a risk management expert helping select appropriate control templates.
 
 RISK DETAILS:
-- Name: ${risk.risk_name}
+- Name: ${risk.risk_title}
 - Description: ${risk.risk_description}
-- Category: ${risk.category}${risk.subcategory ? ` > ${risk.subcategory}` : ""}
+- Category: ${risk.category}
 
 CHOSEN RESPONSE TYPE: ${responseType}
 ${getResponseDescription(responseType)}
