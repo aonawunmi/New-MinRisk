@@ -272,7 +272,7 @@ export async function createRisk(
           user_id: user.id,
           owner_profile_id: user.id,
           owner_id: riskData.owner_id || user.id, // Default to creator if not specified
-          status: riskData.status || 'OPEN',
+          status: riskData.status || 'Open',
           is_priority: riskData.is_priority || false,
         },
       ])

@@ -71,7 +71,7 @@ export default function RiskForm({
     owner: '',
     likelihood_inherent: 1,
     impact_inherent: 1,
-    status: 'OPEN',
+    status: 'Open',
     period: null,
     is_priority: false,
   });
@@ -617,7 +617,7 @@ export default function RiskForm({
         owner_id: null,
         likelihood_inherent: 1,
         impact_inherent: 1,
-        status: 'OPEN',
+        status: 'Open',
         period: null,
         is_priority: false,
         root_cause_id: null,
@@ -1370,15 +1370,15 @@ export default function RiskForm({
                       <>
                         <SelectItem value="Draft">Draft</SelectItem>
                         <SelectItem value="Active">Active</SelectItem>
-                        <SelectItem value="CLOSED">Closed</SelectItem>
+                        <SelectItem value="Closed">Closed</SelectItem>
                         <SelectItem value="Retired">Retired</SelectItem>
-                        <SelectItem value="ARCHIVED">Archived</SelectItem>
+                        <SelectItem value="Archived">Archived</SelectItem>
                       </>
                     ) : (
                       <>
-                        <SelectItem value="OPEN">Open</SelectItem>
-                        <SelectItem value="CLOSED">Closed</SelectItem>
-                        <SelectItem value="ARCHIVED">Archived</SelectItem>
+                        <SelectItem value="Open">Open</SelectItem>
+                        <SelectItem value="Closed">Closed</SelectItem>
+                        <SelectItem value="Archived">Archived</SelectItem>
                       </>
                     )}
                   </SelectContent>

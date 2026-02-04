@@ -227,10 +227,12 @@ function validateRiskRow(
     });
   }
 
-  // Validate status if provided
+  // Validate status if provided (accept both uppercase and title case)
   if (row.status) {
-    const validStatuses = ['OPEN', 'MONITORING', 'CLOSED', 'ARCHIVED'];
-    if (!validStatuses.includes(row.status)) {
+    const validStatuses = ['Open', 'Monitoring', 'Closed', 'Archived', 'Draft', 'Active', 'Retired'];
+    const validStatusesUpper = validStatuses.map(s => s.toUpperCase());
+    const normalizedStatus = row.status.charAt(0).toUpperCase() + row.status.slice(1).toLowerCase();
+    if (!validStatuses.includes(normalizedStatus) && !validStatusesUpper.includes(row.status.toUpperCase())) {
       errors.push({
         row: rowNumber,
         field: 'status',
@@ -267,6 +269,11 @@ function transformCSVRowToRisk(row: Record<string, any>): any {
     isPriority = ['true', '1', 'yes'].includes(boolValue);
   }
 
+  // Normalize status to title case (e.g., 'OPEN' -> 'Open')
+  const normalizedStatus = row.status
+    ? row.status.charAt(0).toUpperCase() + row.status.slice(1).toLowerCase()
+    : 'Open';
+
   return {
     risk_code: row.risk_code,
     risk_title: row.risk_title,
@@ -277,7 +284,7 @@ function transformCSVRowToRisk(row: Record<string, any>): any {
     owner: row.owner || null,
     likelihood_inherent: parseInt(row.likelihood_inherent),
     impact_inherent: parseInt(row.impact_inherent),
-    status: row.status || 'OPEN',
+    status: normalizedStatus,
     period: row.period || null,
     is_priority: isPriority,
   };
@@ -562,7 +569,7 @@ export function generateRiskImportTemplate(): string {
     'CTO',
     '4',
     '5',
-    'OPEN',
+    'Open',
     'Q1 2025',
     'true',
   ];
