@@ -290,6 +290,41 @@ export async function retirePCIInstance(pciInstanceId: string) {
   return updatePCIInstance(pciInstanceId, { status: 'retired' });
 }
 
+/**
+ * Activate a PCI instance (commit attestation)
+ * Should only be called when all secondary controls have been attested
+ */
+export async function activatePCIInstance(pciInstanceId: string) {
+  return updatePCIInstance(pciInstanceId, { status: 'active' });
+}
+
+/**
+ * Check if all secondary controls for a PCI instance have been attested
+ */
+export async function checkAttestationComplete(pciInstanceId: string): Promise<{
+  complete: boolean;
+  total: number;
+  attested: number;
+}> {
+  const { data, error } = await supabase
+    .from('secondary_control_instances')
+    .select('id, status')
+    .eq('pci_instance_id', pciInstanceId);
+
+  if (error || !data) {
+    return { complete: false, total: 0, attested: 0 };
+  }
+
+  const total = data.length;
+  const attested = data.filter((sc) => sc.status !== null).length;
+
+  return {
+    complete: total > 0 && attested === total,
+    total,
+    attested,
+  };
+}
+
 // ============================================================================
 // SECONDARY CONTROL INSTANCES (Attestations)
 // ============================================================================

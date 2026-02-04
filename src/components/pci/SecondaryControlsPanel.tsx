@@ -11,6 +11,8 @@ import {
   updateSecondaryControlInstance,
   getDIMEScore,
   getConfidenceScore,
+  activatePCIInstance,
+  checkAttestationComplete,
 } from '@/lib/pci';
 import type {
   SecondaryControlInstance,
@@ -51,6 +53,7 @@ import {
   Check,
   AlertTriangle,
   FileCheck,
+  CheckCircle2,
 } from 'lucide-react';
 import DIMEDisplay from './DIMEDisplay';
 import ConfidenceDisplay from './ConfidenceDisplay';
@@ -61,6 +64,7 @@ interface SecondaryControlsPanelProps {
   riskId?: string;
   readOnly?: boolean;
   onUpdate?: () => void;
+  pciStatus?: 'draft' | 'active' | 'retired';
 }
 
 interface LocalControlState {
@@ -79,6 +83,7 @@ export default function SecondaryControlsPanel({
   riskId,
   readOnly = false,
   onUpdate,
+  pciStatus = 'draft',
 }: SecondaryControlsPanelProps) {
   const [controls, setControls] = useState<SecondaryControlInstance[]>([]);
   const [localState, setLocalState] = useState<Record<string, LocalControlState>>({});
@@ -88,6 +93,12 @@ export default function SecondaryControlsPanel({
   const [expandedDimensions, setExpandedDimensions] = useState<Set<SCDimension>>(
     new Set(['D', 'I', 'M', 'E'])
   );
+
+  // Attestation completion state
+  const [attestationComplete, setAttestationComplete] = useState(false);
+  const [attestationProgress, setAttestationProgress] = useState({ attested: 0, total: 0 });
+  const [committing, setCommitting] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState(pciStatus);
 
   // Scores state (updated after saves)
   const [dimeScore, setDimeScore] = useState<DerivedDIMEScore | null>(null);
@@ -128,11 +139,41 @@ export default function SecondaryControlsPanel({
       const { data: conf } = await getConfidenceScore(pciInstanceId);
       setDimeScore(dime);
       setConfidenceScore(conf);
+
+      // Check attestation completion
+      await updateAttestationProgress();
     } catch (err) {
       setError('Failed to load secondary controls');
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function updateAttestationProgress() {
+    const result = await checkAttestationComplete(pciInstanceId);
+    setAttestationComplete(result.complete);
+    setAttestationProgress({ attested: result.attested, total: result.total });
+  }
+
+  async function handleCommitAttestation() {
+    if (!attestationComplete || currentStatus !== 'draft') return;
+
+    setCommitting(true);
+    setError(null);
+    try {
+      const { error: commitError } = await activatePCIInstance(pciInstanceId);
+      if (commitError) {
+        setError(commitError.message);
+      } else {
+        setCurrentStatus('active');
+        onUpdate?.(); // Refresh parent to show new status
+      }
+    } catch (err) {
+      setError('Failed to activate control');
+      console.error(err);
+    } finally {
+      setCommitting(false);
     }
   }
 
@@ -191,6 +232,9 @@ export default function SecondaryControlsPanel({
         const { data: conf } = await getConfidenceScore(pciInstanceId);
         setDimeScore(dime);
         setConfidenceScore(conf);
+
+        // Update attestation progress (enables Commit button when complete)
+        await updateAttestationProgress();
 
         // Note: Don't call onUpdate here - it causes the parent to reload
         // and closes the sheet. The scores are already refreshed locally.
@@ -534,6 +578,53 @@ export default function SecondaryControlsPanel({
           />
         </CardContent>
       </Card>
+
+      {/* Commit Attestation Button */}
+      {!readOnly && currentStatus === 'draft' && (
+        <Card className={attestationComplete ? 'border-green-200 bg-green-50' : ''}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-medium">
+                  {attestationComplete ? 'Ready to Commit' : 'Complete Attestation'}
+                </h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {attestationProgress.attested} of {attestationProgress.total} controls attested
+                  {!attestationComplete && ' - complete all to enable commit'}
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={handleCommitAttestation}
+                disabled={!attestationComplete || committing}
+                className={attestationComplete ? 'bg-green-600 hover:bg-green-700' : ''}
+              >
+                {committing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Committing...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Commit Attestation
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Already Active Status */}
+      {currentStatus === 'active' && (
+        <Alert className="border-green-200 bg-green-50">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <AlertDescription className="text-green-800">
+            This control is active. Attestation has been committed.
+          </AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }

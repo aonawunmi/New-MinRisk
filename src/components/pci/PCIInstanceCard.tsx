@@ -266,6 +266,7 @@ export default function PCIInstanceCard({
               riskId={pciInstance.risk_id}
               readOnly={readOnly}
               onUpdate={onUpdate}
+              pciStatus={pciInstance.status}
             />
           </div>
         </SheetContent>
