@@ -182,6 +182,113 @@ export async function getPCIInstancesForRisk(riskId: string) {
 }
 
 /**
+ * Residual risk result type
+ */
+export interface PCIResidualRisk {
+  residual_likelihood: number;
+  residual_impact: number;
+  residual_score: number;
+  max_likelihood_effectiveness: number;
+  max_impact_effectiveness: number;
+}
+
+/**
+ * Calculate residual risk using PCI instances and DIME scores
+ *
+ * Uses the same formula as legacy controls:
+ * residual = GREATEST(1, inherent - ROUND((inherent - 1) * max_effectiveness))
+ *
+ * But effectiveness is derived from DIME scores (0-3 scale → 0-1 effectiveness)
+ * Only ACTIVE PCI instances are considered.
+ */
+export async function calculateResidualRiskPCI(
+  riskId: string,
+  inherentLikelihood: number,
+  inherentImpact: number
+): Promise<{ data: PCIResidualRisk | null; error: Error | null }> {
+  try {
+    // Get all active PCI instances for this risk (with DIME scores)
+    const { data: pciInstances, error } = await supabase
+      .from('pci_instances')
+      .select(`
+        id,
+        objective,
+        status,
+        derived_dime_score:derived_dime_scores(
+          design_score,
+          implementation_score,
+          monitoring_score,
+          evaluation_score,
+          average_score
+        )
+      `)
+      .eq('risk_id', riskId)
+      .eq('status', 'active');
+
+    if (error) {
+      return { data: null, error };
+    }
+
+    // Calculate max effectiveness for each dimension
+    let maxLikelihoodEffectiveness = 0;
+    let maxImpactEffectiveness = 0;
+
+    if (pciInstances) {
+      for (const pci of pciInstances) {
+        // Get the DIME average score (0-3 scale)
+        const dimeScore = pci.derived_dime_score as any;
+        if (!dimeScore) continue;
+
+        // Convert DIME average (0-3) to effectiveness (0-1)
+        // A perfect DIME score of 3 = 100% effectiveness
+        const avgScore = dimeScore.average_score ?? 0;
+        const effectiveness = Math.min(1, avgScore / 3);
+
+        // Apply based on control objective
+        const objective = pci.objective as 'likelihood' | 'impact' | 'both';
+
+        if (objective === 'likelihood' || objective === 'both') {
+          maxLikelihoodEffectiveness = Math.max(maxLikelihoodEffectiveness, effectiveness);
+        }
+        if (objective === 'impact' || objective === 'both') {
+          maxImpactEffectiveness = Math.max(maxImpactEffectiveness, effectiveness);
+        }
+      }
+    }
+
+    // Apply SSD formula: residual = GREATEST(1, inherent - ROUND((inherent - 1) * max_effectiveness))
+    const residualLikelihood = Math.max(
+      1,
+      inherentLikelihood - Math.round((inherentLikelihood - 1) * maxLikelihoodEffectiveness)
+    );
+
+    const residualImpact = Math.max(
+      1,
+      inherentImpact - Math.round((inherentImpact - 1) * maxImpactEffectiveness)
+    );
+
+    const residualScore = residualLikelihood * residualImpact;
+
+    return {
+      data: {
+        residual_likelihood: residualLikelihood,
+        residual_impact: residualImpact,
+        residual_score: residualScore,
+        max_likelihood_effectiveness: maxLikelihoodEffectiveness,
+        max_impact_effectiveness: maxImpactEffectiveness,
+      },
+      error: null,
+    };
+  } catch (err) {
+    console.error('Error calculating PCI residual risk:', err);
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error('Unknown error'),
+    };
+  }
+}
+
+/**
  * Get a single PCI instance with all related data
  */
 export async function getPCIInstance(pciInstanceId: string) {

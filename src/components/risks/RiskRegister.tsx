@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react';
 import { getRisks, deleteRisk, updateRisk } from '@/lib/risks';
 import { calculateResidualRisk } from '@/lib/controls';
+import { isPCIWorkflowEnabled, calculateResidualRiskPCI } from '@/lib/pci';
 import { getActivePeriod as getActivePeriodV2, formatPeriod, type Period } from '@/lib/periods-v2';
 import { getKRIsForRisk, type KRIDefinition } from '@/lib/kri';
 import { getIncidentsForRisk } from '@/lib/incidents';
@@ -67,6 +68,9 @@ export default function RiskRegister() {
   const [selectedRiskIds, setSelectedRiskIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  // PCI workflow state
+  const [pciWorkflowEnabled, setPciWorkflowEnabled] = useState(false);
+
   const loadRisks = async () => {
     setLoading(true);
     setError(null);
@@ -101,14 +105,19 @@ export default function RiskRegister() {
     const kriCountMap = new Map<string, number>();
     const incidentCountMap = new Map<string, number>();
 
+    // Check if PCI workflow is enabled (determines which residual calc to use)
+    const pciEnabled = await isPCIWorkflowEnabled();
+    setPciWorkflowEnabled(pciEnabled);
+
     // Fetch all residual risks, KRI counts, and incident counts in parallel
     const promises = risks.map(async (risk) => {
+      // Choose residual calculation based on workflow mode
+      const residualPromise = pciEnabled
+        ? calculateResidualRiskPCI(risk.id, risk.likelihood_inherent, risk.impact_inherent)
+        : calculateResidualRisk(risk.id, risk.likelihood_inherent, risk.impact_inherent);
+
       const [residualResult, krisResult, incidentsResult] = await Promise.all([
-        calculateResidualRisk(
-          risk.id,
-          risk.likelihood_inherent,
-          risk.impact_inherent
-        ),
+        residualPromise,
         getKRIsForRisk(risk.risk_code),
         getIncidentsForRisk(risk.id),
       ]);
