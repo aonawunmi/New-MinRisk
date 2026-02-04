@@ -325,6 +325,7 @@ export default function PCIControlsSection({
         onSelect={handleSelectTemplate}
         riskResponse={riskResponse}
         aiSuggestions={aiSuggestions.map((s) => s.template_id)}
+        existingTemplateIds={pciInstances.map((p) => p.pci_template_id)}
       />
 
       {/* Creation Form Modal */}

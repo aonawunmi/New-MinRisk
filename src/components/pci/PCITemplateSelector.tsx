@@ -41,6 +41,7 @@ interface PCITemplateSelectorProps {
   onSelect: (template: PCITemplate) => void;
   riskResponse?: RiskResponseType;
   aiSuggestions?: string[]; // Array of suggested PCI template IDs
+  existingTemplateIds?: string[]; // Array of template IDs already added to this risk
 }
 
 // Group templates by category
@@ -64,12 +65,13 @@ export default function PCITemplateSelector({
   onSelect,
   riskResponse,
   aiSuggestions = [],
+  existingTemplateIds = [],
 }: PCITemplateSelectorProps) {
   const [templates, setTemplates] = useState<PCITemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState('recommended');
+  const [activeTab, setActiveTab] = useState('suggested');
 
   useEffect(() => {
     if (open) {
@@ -104,21 +106,24 @@ export default function PCITemplateSelector({
       t.category.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Get recommended templates based on risk response
+  // Get recommended template IDs based on risk response
   const recommendedIds = riskResponse
     ? RESPONSE_PCI_PRIORITY[riskResponse]
     : [];
-  const recommendedTemplates = filteredTemplates.filter((t) =>
-    recommendedIds.includes(t.id)
+
+  // Combine recommended + AI suggestions, excluding already-added templates
+  const suggestedTemplateIds = new Set([...recommendedIds, ...aiSuggestions]);
+  const suggestedTemplates = filteredTemplates.filter(
+    (t) => suggestedTemplateIds.has(t.id) && !existingTemplateIds.includes(t.id)
   );
 
-  // Get AI suggested templates
-  const aiSuggestedTemplates = filteredTemplates.filter((t) =>
-    aiSuggestions.includes(t.id)
+  // Also filter out existing templates from the "All" view (for consistency)
+  const availableTemplates = filteredTemplates.filter(
+    (t) => !existingTemplateIds.includes(t.id)
   );
 
-  // Group templates by category
-  const templatesByCategory = filteredTemplates.reduce((acc, template) => {
+  // Group available templates by category (excluding already-added)
+  const templatesByCategory = availableTemplates.reduce((acc, template) => {
     if (!acc[template.category]) acc[template.category] = [];
     acc[template.category].push(template);
     return acc;
@@ -225,73 +230,55 @@ export default function PCITemplateSelector({
             onValueChange={setActiveTab}
             className="flex-1 flex flex-col overflow-hidden"
           >
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="recommended">
-                Recommended
-                {recommendedTemplates.length > 0 && (
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="suggested">
+                <Sparkles className="h-4 w-4 mr-1" />
+                Suggested
+                {suggestedTemplates.length > 0 && (
                   <Badge variant="secondary" className="ml-2">
-                    {recommendedTemplates.length}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="ai">
-                AI Suggestions
-                {aiSuggestedTemplates.length > 0 && (
-                  <Badge variant="secondary" className="ml-2">
-                    {aiSuggestedTemplates.length}
+                    {suggestedTemplates.length}
                   </Badge>
                 )}
               </TabsTrigger>
               <TabsTrigger value="all">
                 All Templates
                 <Badge variant="secondary" className="ml-2">
-                  {filteredTemplates.length}
+                  {availableTemplates.length}
                 </Badge>
               </TabsTrigger>
             </TabsList>
 
             <div className="flex-1 overflow-y-auto mt-4">
-              <TabsContent value="recommended" className="mt-0">
-                {recommendedTemplates.length === 0 ? (
+              <TabsContent value="suggested" className="mt-0">
+                {suggestedTemplates.length === 0 ? (
                   <div className="text-center text-muted-foreground p-8">
-                    {riskResponse ? (
+                    {!riskResponse ? (
                       <>
-                        No recommended templates for response type "
-                        {riskResponse}".
-                        <br />
-                        Try viewing all templates.
-                      </>
-                    ) : (
-                      <>
-                        Set a risk response first to see recommendations.
+                        Set a risk response first to see suggestions.
                         <br />
                         Or browse all templates below.
                       </>
+                    ) : existingTemplateIds.length > 0 && suggestedTemplateIds.size > 0 ? (
+                      <>
+                        All suggested templates have already been added.
+                        <br />
+                        Browse all templates for more options.
+                      </>
+                    ) : (
+                      <>
+                        No suggestions available for this risk yet.
+                        <br />
+                        Browse all templates to find suitable controls.
+                      </>
                     )}
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
-                    {recommendedTemplates.map((t) =>
-                      renderTemplateCard(t, true, aiSuggestions.includes(t.id))
-                    )}
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="ai" className="mt-0">
-                {aiSuggestedTemplates.length === 0 ? (
-                  <div className="text-center text-muted-foreground p-8">
-                    No AI suggestions available yet.
-                    <br />
-                    AI suggestions will appear after analyzing the risk.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    {aiSuggestedTemplates.map((t) =>
+                    {suggestedTemplates.map((t) =>
                       renderTemplateCard(
                         t,
                         recommendedIds.includes(t.id),
-                        true
+                        aiSuggestions.includes(t.id)
                       )
                     )}
                   </div>
@@ -299,24 +286,30 @@ export default function PCITemplateSelector({
               </TabsContent>
 
               <TabsContent value="all" className="mt-0 space-y-6">
-                {CATEGORY_ORDER.filter(
-                  (cat) => templatesByCategory[cat]?.length > 0
-                ).map((category) => (
-                  <div key={category}>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-3">
-                      {category}
-                    </h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      {templatesByCategory[category].map((t) =>
-                        renderTemplateCard(
-                          t,
-                          recommendedIds.includes(t.id),
-                          aiSuggestions.includes(t.id)
-                        )
-                      )}
-                    </div>
+                {availableTemplates.length === 0 ? (
+                  <div className="text-center text-muted-foreground p-8">
+                    All templates have been added to this risk.
                   </div>
-                ))}
+                ) : (
+                  CATEGORY_ORDER.filter(
+                    (cat) => templatesByCategory[cat]?.length > 0
+                  ).map((category) => (
+                    <div key={category}>
+                      <h3 className="text-sm font-medium text-muted-foreground mb-3">
+                        {category}
+                      </h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        {templatesByCategory[category].map((t) =>
+                          renderTemplateCard(
+                            t,
+                            recommendedIds.includes(t.id),
+                            aiSuggestions.includes(t.id)
+                          )
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
               </TabsContent>
             </div>
           </Tabs>
