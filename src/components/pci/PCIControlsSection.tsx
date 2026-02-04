@@ -10,6 +10,7 @@ import {
   getPCIInstancesForRisk,
   checkActivationGate,
   getPCISuggestions,
+  getDeclinedTemplatesForRisk,
   type PCISuggestion,
 } from '@/lib/pci';
 import type {
@@ -65,8 +66,12 @@ export default function PCIControlsSection({
   const [aiSuggestions, setAiSuggestions] = useState<PCISuggestion[]>([]);
   const [loadingAI, setLoadingAI] = useState(false);
 
+  // Declined templates
+  const [declinedTemplateIds, setDeclinedTemplateIds] = useState<string[]>([]);
+
   useEffect(() => {
     loadPCIInstances();
+    loadDeclinedTemplates();
   }, [riskId]);
 
   // Load AI suggestions when risk response changes
@@ -126,6 +131,23 @@ export default function PCIControlsSection({
     }
   }
 
+  async function loadDeclinedTemplates() {
+    try {
+      const { data } = await getDeclinedTemplatesForRisk(riskId);
+      setDeclinedTemplateIds(data || []);
+    } catch (err) {
+      console.error('Failed to load declined templates:', err);
+    }
+  }
+
+  function handleDeclineTemplate(templateId: string) {
+    setDeclinedTemplateIds((prev) => [...prev, templateId]);
+  }
+
+  function handleUndoDeclineTemplate(templateId: string) {
+    setDeclinedTemplateIds((prev) => prev.filter((id) => id !== templateId));
+  }
+
   function handleSelectTemplate(template: PCITemplate) {
     setSelectedTemplate(template);
     setShowTemplateSelector(false);
@@ -161,6 +183,10 @@ export default function PCIControlsSection({
     );
   }
 
+  // Filter out not_applicable instances for display
+  const activePCIInstances = pciInstances.filter((p) => p.status !== 'not_applicable');
+  const activeCount = activePCIInstances.length;
+
   return (
     <>
       <Card>
@@ -170,7 +196,7 @@ export default function PCIControlsSection({
               <Shield className="h-5 w-5" />
               Controls (PCI)
               <Badge variant="outline">
-                {pciInstances.length} control{pciInstances.length !== 1 && 's'}
+                {activeCount} control{activeCount !== 1 && 's'}
               </Badge>
             </CardTitle>
             <div className="flex items-center gap-2">
@@ -235,8 +261,8 @@ export default function PCIControlsSection({
           )}
 
           {/* Effectiveness Summary */}
-          {pciInstances.length > 0 && (() => {
-            const activeInstances = pciInstances.filter(p => p.status === 'active');
+          {activeCount > 0 && (() => {
+            const activeInstances = activePCIInstances.filter(p => p.status === 'active');
             const effectivenessValues = activeInstances
               .map(p => calculateEffectiveness(p.derived_dime_score))
               .filter((e): e is number => e !== null);
@@ -288,7 +314,7 @@ export default function PCIControlsSection({
           })()}
 
           {/* Empty State */}
-          {pciInstances.length === 0 && (
+          {activeCount === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               <Shield className="h-12 w-12 mx-auto mb-3 opacity-30" />
               <p className="mb-4">No controls defined yet</p>
@@ -302,9 +328,9 @@ export default function PCIControlsSection({
           )}
 
           {/* PCI Instance Cards */}
-          {pciInstances.length > 0 && (
+          {activeCount > 0 && (
             <div className="grid gap-4">
-              {pciInstances.map((pci) => (
+              {activePCIInstances.map((pci) => (
                 <PCIInstanceCard
                   key={pci.id}
                   pciInstance={pci}
@@ -323,9 +349,13 @@ export default function PCIControlsSection({
         open={showTemplateSelector}
         onOpenChange={setShowTemplateSelector}
         onSelect={handleSelectTemplate}
+        riskId={riskId}
         riskResponse={riskResponse}
         aiSuggestions={aiSuggestions.map((s) => s.template_id)}
-        existingTemplateIds={pciInstances.map((p) => p.pci_template_id)}
+        existingTemplateIds={activePCIInstances.map((p) => p.pci_template_id)}
+        declinedTemplateIds={declinedTemplateIds}
+        onDecline={handleDeclineTemplate}
+        onUndoDecline={handleUndoDeclineTemplate}
       />
 
       {/* Creation Form Modal */}

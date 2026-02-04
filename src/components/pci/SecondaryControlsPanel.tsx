@@ -274,6 +274,17 @@ export default function SecondaryControlsPanel({
 
   const dimensions: SCDimension[] = ['D', 'I', 'M', 'E'];
 
+  // Check if all D (Design) controls are N/A - if so, I/M/E should auto-cascade to N/A
+  const dControls = controlsByDimension['D'] || [];
+  const allDControlsNA =
+    dControls.length > 0 &&
+    dControls.every((c) => localState[c.id]?.status === 'na');
+
+  // Auto-cascade: when D is all N/A, I/M/E are disabled and treated as N/A
+  const isDimensionDisabled = (dim: SCDimension) => {
+    return allDControlsNA && dim !== 'D';
+  };
+
   function getCriticalityColor(criticality: string) {
     switch (criticality) {
       case 'critical':
@@ -336,6 +347,7 @@ export default function SecondaryControlsPanel({
         const attestedCount = dimControls.filter(
           (c) => localState[c.id]?.status
         ).length;
+        const dimDisabled = isDimensionDisabled(dim);
 
         return (
           <Collapsible
@@ -343,15 +355,21 @@ export default function SecondaryControlsPanel({
             open={isExpanded}
             onOpenChange={() => toggleDimension(dim)}
           >
-            <Card>
+            <Card className={dimDisabled ? 'opacity-60 bg-gray-50' : ''}>
               <CollapsibleTrigger asChild>
                 <CardHeader className="cursor-pointer hover:bg-gray-50 transition-colors">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base flex items-center gap-2">
                       {DIMENSION_LABELS[dim]}
-                      <Badge variant="outline">
-                        {attestedCount}/{dimControls.length} attested
-                      </Badge>
+                      {dimDisabled ? (
+                        <Badge variant="outline" className="bg-gray-200 text-gray-600">
+                          Auto N/A (Design = N/A)
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline">
+                          {attestedCount}/{dimControls.length} attested
+                        </Badge>
+                      )}
                     </CardTitle>
                     {isExpanded ? (
                       <ChevronUp className="h-5 w-5 text-muted-foreground" />
@@ -410,7 +428,7 @@ export default function SecondaryControlsPanel({
                         </div>
 
                         {/* Attestation Fields */}
-                        {!readOnly && (
+                        {!readOnly && !dimDisabled && (
                           <div className="grid grid-cols-2 gap-4">
                             {/* Status */}
                             <div>
@@ -466,8 +484,21 @@ export default function SecondaryControlsPanel({
                           </div>
                         )}
 
+                        {/* Auto N/A due to Design = N/A */}
+                        {dimDisabled && (
+                          <div className="bg-gray-100 rounded p-3 text-sm text-gray-600">
+                            <Badge variant="outline" className="bg-gray-200 text-gray-600 mb-2">
+                              N/A (Auto)
+                            </Badge>
+                            <p className="text-xs">
+                              This control is automatically N/A because all Design controls are marked N/A.
+                              If Design doesn't exist, Implementation/Monitoring/Evaluation don't apply.
+                            </p>
+                          </div>
+                        )}
+
                         {/* N/A Rationale */}
-                        {local.status === 'na' && !readOnly && (
+                        {local.status === 'na' && !readOnly && !dimDisabled && (
                           <div>
                             <Label className="text-xs">
                               N/A Rationale{' '}
@@ -490,7 +521,7 @@ export default function SecondaryControlsPanel({
                         )}
 
                         {/* Notes */}
-                        {!readOnly && local.status && (
+                        {!readOnly && local.status && !dimDisabled && (
                           <div>
                             <Label className="text-xs">Notes (optional)</Label>
                             <Textarea
@@ -510,7 +541,7 @@ export default function SecondaryControlsPanel({
                         )}
 
                         {/* Save Button */}
-                        {local.dirty && !readOnly && (
+                        {local.dirty && !readOnly && !dimDisabled && (
                           <div className="flex justify-end">
                             <Button
                               size="sm"

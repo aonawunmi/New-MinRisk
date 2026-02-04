@@ -22,7 +22,7 @@ export type SCCriticality = 'critical' | 'important' | 'optional';
 
 export type SCStatus = 'yes' | 'partial' | 'no' | 'na';
 
-export type PCIStatus = 'draft' | 'active' | 'retired';
+export type PCIStatus = 'draft' | 'active' | 'retired' | 'not_applicable';
 
 export type EvidenceRequestStatus =
   | 'open'

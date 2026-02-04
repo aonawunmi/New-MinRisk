@@ -433,6 +433,79 @@ export async function activatePCIInstance(pciInstanceId: string) {
 }
 
 /**
+ * Mark a PCI template as "Not Applicable" for a specific risk
+ * Creates a minimal PCI instance with status='not_applicable'
+ */
+export async function declinePCITemplate(riskId: string, templateId: string) {
+  const { data: user } = await supabase.auth.getUser();
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('organization_id')
+    .single();
+
+  if (!profile?.organization_id) {
+    return { data: null, error: { message: 'Organization not found' } };
+  }
+
+  // Get template to freeze version
+  const { data: template } = await getPCITemplate(templateId);
+  if (!template) {
+    return { data: null, error: { message: 'PCI template not found' } };
+  }
+
+  const { data, error } = await supabase
+    .from('pci_instances')
+    .insert({
+      organization_id: profile.organization_id,
+      risk_id: riskId,
+      pci_template_id: templateId,
+      pci_template_version: template.version,
+      objective: template.objective_default,
+      statement: 'Not applicable to this risk',
+      scope_boundary: 'N/A',
+      method: 'N/A',
+      trigger_frequency: 'N/A',
+      owner_role: 'N/A',
+      status: 'not_applicable',
+      created_by: user?.user?.id,
+    })
+    .select()
+    .single();
+
+  return { data, error };
+}
+
+/**
+ * Get declined (not applicable) PCI templates for a risk
+ */
+export async function getDeclinedTemplatesForRisk(riskId: string) {
+  const { data, error } = await supabase
+    .from('pci_instances')
+    .select('pci_template_id')
+    .eq('risk_id', riskId)
+    .eq('status', 'not_applicable');
+
+  return {
+    data: data?.map((d) => d.pci_template_id) || [],
+    error,
+  };
+}
+
+/**
+ * Undo declining a PCI template (delete the not_applicable instance)
+ */
+export async function undoDeclinePCITemplate(riskId: string, templateId: string) {
+  const { error } = await supabase
+    .from('pci_instances')
+    .delete()
+    .eq('risk_id', riskId)
+    .eq('pci_template_id', templateId)
+    .eq('status', 'not_applicable');
+
+  return { error };
+}
+
+/**
  * Check if all secondary controls for a PCI instance have been attested
  */
 export async function checkAttestationComplete(pciInstanceId: string): Promise<{
