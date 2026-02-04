@@ -207,52 +207,72 @@ export async function calculateResidualRiskPCI(
   inherentImpact: number
 ): Promise<{ data: PCIResidualRisk | null; error: Error | null }> {
   try {
-    // Get all active PCI instances for this risk (with DIME scores)
-    const { data: pciInstances, error } = await supabase
+    // Step 1: Get all active PCI instances for this risk
+    const { data: pciInstances, error: pciError } = await supabase
       .from('pci_instances')
-      .select(`
-        id,
-        objective,
-        status,
-        derived_dime_score:derived_dime_scores(
-          design_score,
-          implementation_score,
-          monitoring_score,
-          evaluation_score,
-          average_score
-        )
-      `)
+      .select('id, objective')
       .eq('risk_id', riskId)
       .eq('status', 'active');
 
-    if (error) {
-      return { data: null, error };
+    if (pciError) {
+      console.error('Error fetching PCI instances:', pciError);
+      return { data: null, error: pciError };
+    }
+
+    // If no active PCI instances, return inherent values as residual
+    if (!pciInstances || pciInstances.length === 0) {
+      return {
+        data: {
+          residual_likelihood: inherentLikelihood,
+          residual_impact: inherentImpact,
+          residual_score: inherentLikelihood * inherentImpact,
+          max_likelihood_effectiveness: 0,
+          max_impact_effectiveness: 0,
+        },
+        error: null,
+      };
+    }
+
+    // Step 2: Fetch DIME scores for each active PCI instance
+    const pciIds = pciInstances.map(p => p.id);
+    const { data: dimeScores, error: dimeError } = await supabase
+      .from('derived_dime_scores')
+      .select('pci_instance_id, average_score')
+      .in('pci_instance_id', pciIds);
+
+    if (dimeError) {
+      console.error('Error fetching DIME scores:', dimeError);
+      // Continue with zero effectiveness if DIME scores fail
+    }
+
+    // Create a map of PCI instance ID to average DIME score
+    const dimeMap = new Map<string, number>();
+    if (dimeScores) {
+      for (const score of dimeScores) {
+        dimeMap.set(score.pci_instance_id, score.average_score ?? 0);
+      }
     }
 
     // Calculate max effectiveness for each dimension
     let maxLikelihoodEffectiveness = 0;
     let maxImpactEffectiveness = 0;
 
-    if (pciInstances) {
-      for (const pci of pciInstances) {
-        // Get the DIME average score (0-3 scale)
-        const dimeScore = pci.derived_dime_score as any;
-        if (!dimeScore) continue;
+    for (const pci of pciInstances) {
+      // Get the DIME average score (0-3 scale)
+      const avgScore = dimeMap.get(pci.id) ?? 0;
 
-        // Convert DIME average (0-3) to effectiveness (0-1)
-        // A perfect DIME score of 3 = 100% effectiveness
-        const avgScore = dimeScore.average_score ?? 0;
-        const effectiveness = Math.min(1, avgScore / 3);
+      // Convert DIME average (0-3) to effectiveness (0-1)
+      // A perfect DIME score of 3 = 100% effectiveness
+      const effectiveness = Math.min(1, avgScore / 3);
 
-        // Apply based on control objective
-        const objective = pci.objective as 'likelihood' | 'impact' | 'both';
+      // Apply based on control objective
+      const objective = pci.objective as 'likelihood' | 'impact' | 'both';
 
-        if (objective === 'likelihood' || objective === 'both') {
-          maxLikelihoodEffectiveness = Math.max(maxLikelihoodEffectiveness, effectiveness);
-        }
-        if (objective === 'impact' || objective === 'both') {
-          maxImpactEffectiveness = Math.max(maxImpactEffectiveness, effectiveness);
-        }
+      if (objective === 'likelihood' || objective === 'both') {
+        maxLikelihoodEffectiveness = Math.max(maxLikelihoodEffectiveness, effectiveness);
+      }
+      if (objective === 'impact' || objective === 'both') {
+        maxImpactEffectiveness = Math.max(maxImpactEffectiveness, effectiveness);
       }
     }
 
