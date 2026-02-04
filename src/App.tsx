@@ -28,6 +28,8 @@ import Analytics from '@/components/analytics/Analytics';
 import RiskHistoryView from '@/components/analytics/RiskHistoryView';
 import RiskRegister from '@/components/risks/RiskRegister';
 import ControlRegister from '@/components/controls/ControlRegister';
+import PCIControlsDashboard from '@/components/controls/PCIControlsDashboard';
+import { isPCIWorkflowEnabled } from '@/lib/pci';
 import KRIManagement from '@/components/kri/KRIManagement';
 import RiskIntelligenceManagement from '@/components/riskIntelligence/RiskIntelligenceManagement';
 import IncidentManagement from '@/components/incidents/IncidentManagement';
@@ -53,6 +55,7 @@ export default function App() {
     loading: true,
   });
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [pciWorkflowEnabled, setPciWorkflowEnabled] = useState(false);
 
   useEffect(() => {
     loadAuthState();
@@ -104,6 +107,10 @@ export default function App() {
         isSuperAdmin: superAdminStatus,
         loading: false,
       });
+
+      // 4. Check PCI workflow status
+      const pciEnabled = await isPCIWorkflowEnabled();
+      setPciWorkflowEnabled(pciEnabled);
     } catch (error) {
       console.error('Auth state load error:', error);
       setAuthState(prev => ({ ...prev, loading: false }));
@@ -310,14 +317,22 @@ export default function App() {
             </TabsContent>
 
             <TabsContent value="controls">
-              <Tabs defaultValue="register" className="w-full">
+              <Tabs defaultValue={pciWorkflowEnabled ? "pci" : "register"} className="w-full">
                 <TabsList>
                   <TabsTrigger value="register">🛡️ Control Register</TabsTrigger>
+                  {pciWorkflowEnabled && (
+                    <TabsTrigger value="pci">📊 PCI Controls</TabsTrigger>
+                  )}
                   <TabsTrigger value="import-export">💾 Import/Export</TabsTrigger>
                 </TabsList>
                 <TabsContent value="register">
                   <ControlRegister />
                 </TabsContent>
+                {pciWorkflowEnabled && (
+                  <TabsContent value="pci">
+                    <PCIControlsDashboard />
+                  </TabsContent>
+                )}
                 <TabsContent value="import-export">
                   <ImportExportManager mode="controls" />
                 </TabsContent>

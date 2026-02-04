@@ -3,7 +3,7 @@
 **Project:** MinRisk Risk Management Platform (Clean Rebuild)
 **Location:** NEW-MINRISK/
 **Status:** Active Development
-**Last Updated:** 2025-12-13
+**Last Updated:** February 2, 2026
 
 ---
 
@@ -32,6 +32,198 @@ pwd
 - ❌ Any other MinRisk folders
 
 **This is the ONLY active development folder.**
+
+---
+
+## 🎯 PRODUCTION vs STAGING - NEVER CONFUSE THESE
+
+### Environment Configuration
+
+| Environment | Supabase Project | Project ID | Database URL | Vercel Branch | Safe to Modify? |
+|------------|-----------------|------------|--------------|---------------|-----------------|
+| **PRODUCTION** | MinRisk Production | qrxwgjjgaekalvaqzpuf | qrxwgjjgaekalvaqzpuf.supabase.co | `main` | ❌ NEVER without approval |
+| **STAGING** | MinRisk Staging | oydbriokgjuwxndlsocd | oydbriokgjuwxndlsocd.supabase.co | `staging` | ✅ YES - safe for testing |
+
+### URLs You'll Encounter
+
+- **Production:** https://new-minrisk-production.vercel.app
+- **Staging:** https://new-minrisk-production-git-staging-ayodele-onawunmis-projects.vercel.app
+- **Feature Preview:** https://new-minrisk-production-git-[BRANCH-NAME]-ayodele-onawunmis-projects.vercel.app
+
+### Vercel Environment Variables
+
+**Access:** https://vercel.com/ayodele-onawunmis-projects/new-minrisk-production/settings/environment-variables
+
+**Current Configuration:**
+
+| Variable | Production Scope | Preview Scope | Notes |
+|----------|-----------------|---------------|-------|
+| VITE_SUPABASE_URL | qrxwgjjgaekalvaqzpuf.supabase.co | oydbriokgjuwxndlsocd.supabase.co | Different databases |
+| VITE_SUPABASE_ANON_KEY | [prod key] | [staging key] | Different keys |
+| VITE_ANTHROPIC_API_KEY | [shared key] | [shared key] | Same key OK |
+
+**To Update:**
+1. Go to Environment Variables page
+2. Find variable → Click ⋮ → Edit
+3. **CRITICAL:** Check which scope you're editing (Production vs Preview)
+4. Update value
+5. Trigger new deployment to use new value
+
+---
+
+## 🚨 CRITICAL SAFETY RULES
+
+### NEVER Do These Without User Permission:
+
+1. ❌ Push to `main` branch
+2. ❌ Modify production database (qrxwgjjgaekalvaqzpuf)
+3. ❌ Change Production-scoped Vercel environment variables
+4. ❌ Deploy Edge Functions to production
+5. ❌ Run destructive SQL commands on production
+6. ❌ Merge staging to main
+
+### ALWAYS Do These:
+
+1. ✅ Work on `staging` or feature branches
+2. ✅ Test in staging before proposing production changes
+3. ✅ Ask user before merging to `main`
+4. ✅ Verify which database you're connected to
+5. ✅ Use the recommended workflow (see below)
+
+---
+
+## 📋 RECOMMENDED DEVELOPMENT WORKFLOW
+
+### For New Features
+
+```bash
+# 1. Start from staging
+git checkout staging
+git pull origin staging
+
+# 2. Create feature branch
+git checkout -b feature/my-new-feature
+
+# 3. Make your changes
+# ... code, code, code ...
+
+# 4. Commit changes
+git add .
+git commit -m "feat: Add new feature description
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
+
+# 5. Push to create preview deployment
+git push origin feature/my-new-feature
+
+# 6. Test at preview URL (Vercel will deploy automatically)
+# URL: https://new-minrisk-production-git-feature-my-new-feature-ayodele-onawunmis-projects.vercel.app
+
+# 7. If tests pass, merge to staging
+git checkout staging
+git merge feature/my-new-feature
+git push origin staging
+
+# 8. Test staging preview thoroughly
+# URL: https://new-minrisk-production-git-staging-ayodele-onawunmis-projects.vercel.app
+
+# 9. ONLY AFTER USER APPROVAL, merge to main
+git checkout main
+git merge staging
+git push origin main
+```
+
+### For Bug Fixes
+
+```bash
+# 1. Create hotfix branch from staging
+git checkout staging
+git checkout -b fix/bug-description
+
+# 2. Fix the bug
+# ... fix code ...
+
+# 3. Test in preview deployment
+git add .
+git commit -m "fix: Bug description"
+git push origin fix/bug-description
+
+# 4. If working, merge to staging
+git checkout staging
+git merge fix/bug-description
+git push origin staging
+
+# 5. After user approval, merge to main
+git checkout main
+git merge staging
+git push origin main
+```
+
+---
+
+## 🗄️ DATABASE OPERATIONS
+
+### Connecting to Databases
+
+**Staging (SAFE for testing):**
+```bash
+# Connection string
+postgresql://postgres:213Capital%242026@db.oydbriokgjuwxndlsocd.supabase.co:5432/postgres
+
+# Using Supabase CLI
+supabase link --project-ref oydbriokgjuwxndlsocd
+```
+
+**Production (REQUIRES APPROVAL):**
+```bash
+# Connection string
+postgresql://postgres:213Capital%242026@db.qrxwgjjgaekalvaqzpuf.supabase.co:5432/postgres
+
+# Using Supabase CLI
+supabase link --project-ref qrxwgjjgaekalvaqzpuf
+```
+
+**Important:** Password has `$` which must be URL-encoded as `%24`
+
+### Schema Changes
+
+1. **Test on staging first:**
+   ```bash
+   # Connect to staging
+   supabase link --project-ref oydbriokgjuwxndlsocd
+
+   # Run migration on staging
+   supabase db push
+
+   # Or manually with psql
+   psql "postgresql://postgres:213Capital%242026@db.oydbriokgjuwxndlsocd.supabase.co:5432/postgres" < migration.sql
+   ```
+
+2. **Verify staging works** with new schema
+
+3. **Get user approval**
+
+4. **Apply to production:**
+   ```bash
+   supabase link --project-ref qrxwgjjgaekalvaqzpuf
+   supabase db push
+   ```
+
+---
+
+## 🧪 TESTING CHECKLIST
+
+### Before Proposing Production Deployment:
+
+- [ ] Feature works in local development
+- [ ] Feature works in feature branch preview
+- [ ] Feature works in staging preview
+- [ ] No console errors in browser
+- [ ] Database queries work correctly
+- [ ] Edge Functions (if used) work correctly
+- [ ] User authentication still works
+- [ ] No regression in existing features
+- [ ] User has approved the change
 
 ---
 
@@ -271,6 +463,27 @@ This cost multiple deployment attempts and created user frustration. The systema
 
 ---
 
+## 🎓 USER CONTEXT
+
+### About the User (Ayo)
+
+- **Expertise:** Investment and risk management expert
+- **Coding Level:** Beginner
+- **Preferences:**
+  - Wants to be handheld through coding processes
+  - Prefers Claude to take actions on their behalf
+  - Always deploy to test/staging first
+  - Only go to production with explicit permission
+
+### Communication Style
+
+- Explain what you're doing and why
+- Ask for permission before production changes
+- Show results clearly (provide URLs, screenshots instructions)
+- Be patient and thorough in explanations
+
+---
+
 ## 🏛️ Development Principles
 
 ### World-Class Solutions Architecture Approach
@@ -403,6 +616,44 @@ cat .credentials  # View all tokens and access info
 
 ---
 
+## 🔧 EDGE FUNCTIONS DEPLOYMENT
+
+### Deploying Edge Functions
+
+**Location:** All Edge Functions are in `supabase/functions/` folder
+
+**Deploy to Staging:**
+```bash
+cd /Users/AyodeleOnawunmi/wksadmins-MacBook-Pro-4/New-MinRisk
+supabase link --project-ref oydbriokgjuwxndlsocd
+supabase functions deploy [function-name]  # or omit name to deploy all
+```
+
+**Deploy to Production (REQUIRES APPROVAL):**
+```bash
+supabase link --project-ref qrxwgjjgaekalvaqzpuf
+supabase functions deploy [function-name]
+```
+
+### Current Edge Functions (14 total)
+
+- admin-invite-user
+- admin-list-users
+- admin-manage-user
+- ai-refine
+- analyze-incident
+- analyze-incident-for-risk-mapping
+- analyze-intelligence
+- generate-appetite
+- generate-kri-suggestions
+- generate-library
+- generate-report-narrative
+- get-risk-owners
+- scan-rss-feeds
+- super-admin-invite-primary-admin
+
+---
+
 ## Supabase Edge Functions Configuration
 
 ### CRITICAL: Edge Function Secrets
@@ -531,7 +782,113 @@ Dashboard > Edge Functions > analyze-intelligence > Logs
 
 ---
 
+## 📚 USEFUL COMMANDS
+
+### Git Commands
+
+```bash
+# Check which branch you're on
+git branch
+
+# See uncommitted changes
+git status
+
+# Pull latest changes
+git pull origin staging
+
+# Push changes
+git push origin [branch-name]
+
+# Merge staging into main (REQUIRES USER APPROVAL)
+git checkout main
+git merge staging
+git push origin main
+```
+
+### Supabase Commands
+
+```bash
+# Check which project you're linked to
+supabase projects list
+
+# Link to staging
+supabase link --project-ref oydbriokgjuwxndlsocd
+
+# Link to production (REQUIRES APPROVAL)
+supabase link --project-ref qrxwgjjgaekalvaqzpuf
+
+# Deploy all Edge Functions
+supabase functions deploy
+
+# Deploy specific function
+supabase functions deploy [function-name]
+```
+
+### Database Commands
+
+```bash
+# Connect to staging database
+psql "postgresql://postgres:213Capital%242026@db.oydbriokgjuwxndlsocd.supabase.co:5432/postgres"
+
+# Connect to production database (REQUIRES APPROVAL)
+psql "postgresql://postgres:213Capital%242026@db.qrxwgjjgaekalvaqzpuf.supabase.co:5432/postgres"
+
+# Export production database (BACKUP PURPOSES ONLY)
+pg_dump "postgresql://postgres:213Capital%242026@db.qrxwgjjgaekalvaqzpuf.supabase.co:5432/postgres" > backup.sql
+```
+
+---
+
+## ✅ FINAL CHECKLIST BEFORE ANY PRODUCTION CHANGE
+
+- [ ] Tested in staging
+- [ ] User approved
+- [ ] No errors in staging
+- [ ] Database backup exists (if schema changes)
+- [ ] Can rollback if needed
+- [ ] User is aware change is happening
+- [ ] Change is during acceptable hours
+- [ ] Monitoring plan in place
+
+**Remember: When in doubt, ASK THE USER. Better to be cautious than break production!**
+
+---
+
 ## Common Issues & Troubleshooting
+
+### Issue: "Invalid API key" or Database Connection Error
+
+**Cause:** Environment variables not configured or wrong database
+**Solution:**
+1. Check Vercel environment variables are correct
+2. Verify Preview scope has staging database credentials (oydbriokgjuwxndlsocd)
+3. Verify Production scope has production database credentials (qrxwgjjgaekalvaqzpuf)
+4. Trigger new deployment after updating variables
+
+### Issue: "column does not exist" Error in Staging
+
+**Cause:** Staging database schema doesn't match code
+**Solution:**
+1. Re-export production database with pg_dump
+2. Import to staging
+3. Verify schema matches production
+
+### Issue: Edge Functions Not Working
+
+**Cause:** Not deployed or deployed to wrong environment
+**Solution:**
+1. Check which project you're linked to: `supabase projects list`
+2. Deploy to correct environment (staging vs production)
+3. Verify deployment: Check Supabase dashboard → Functions
+
+### Issue: Changes Not Appearing in Staging Preview
+
+**Cause:** Browser cache or deployment didn't complete
+**Solution:**
+1. Hard refresh (Cmd+Shift+R)
+2. Check Vercel deployments page for status
+3. Wait for "Ready" status before testing
+4. Check git branch matches expected preview URL
 
 ### Issue: "No alerts created" when adding events
 
@@ -630,11 +987,28 @@ This is a **clean rebuild** of the MinRisk platform. Key decisions:
 
 ---
 
+## 📞 GETTING HELP
+
+If you encounter issues beyond your capabilities:
+
+1. **Check this guide first** - CLAUDE.md
+2. **Check STAGING_SETUP_COMPLETE_LOG.md** for historical context (if exists)
+3. **Check SECURITY-HARDENING-TODO.md** for security-related questions
+4. **Ask the user** for clarification
+5. **Search Supabase docs:** https://supabase.com/docs
+6. **Search Vercel docs:** https://vercel.com/docs
+
+---
+
 ## Important Links
 
-- **Supabase Dashboard:** https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf
-- **Edge Functions:** https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/functions
-- **Edge Function Secrets:** https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/settings/functions
+- **Production App:** https://new-minrisk-production.vercel.app
+- **Staging App:** https://new-minrisk-production-git-staging-ayodele-onawunmis-projects.vercel.app
+- **Vercel Dashboard:** https://vercel.com/ayodele-onawunmis-projects/new-minrisk-production
+- **Vercel Environment Variables:** https://vercel.com/ayodele-onawunmis-projects/new-minrisk-production/settings/environment-variables
+- **Supabase Dashboard (Production):** https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf
+- **Supabase Edge Functions:** https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/functions
+- **Supabase Edge Function Secrets:** https://supabase.com/dashboard/project/qrxwgjjgaekalvaqzpuf/settings/functions
 - **Local Dev Server:** http://localhost:3000/
 
 ---

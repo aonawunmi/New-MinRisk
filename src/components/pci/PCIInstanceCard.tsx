@@ -48,6 +48,7 @@ import {
 } from 'lucide-react';
 import DIMEDisplay from './DIMEDisplay';
 import ConfidenceDisplay from './ConfidenceDisplay';
+import EffectivenessDisplay from './EffectivenessDisplay';
 import SecondaryControlsPanel from './SecondaryControlsPanel';
 
 interface PCIInstanceCardProps {
@@ -206,6 +207,9 @@ export default function PCIInstanceCard({
             </div>
             <DIMEDisplay dimeScore={dimeScore} showExplainability />
           </div>
+
+          {/* Effectiveness Display */}
+          <EffectivenessDisplay dimeScore={dimeScore} />
 
           {/* Confidence Display */}
           <div>

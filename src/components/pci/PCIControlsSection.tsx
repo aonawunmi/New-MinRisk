@@ -33,6 +33,8 @@ import {
 import PCIInstanceCard from './PCIInstanceCard';
 import PCITemplateSelector from './PCITemplateSelector';
 import PCICreationForm from './PCICreationForm';
+import { calculateEffectiveness } from './EffectivenessDisplay';
+import { Gauge } from 'lucide-react';
 
 interface PCIControlsSectionProps {
   riskId: string;
@@ -231,6 +233,59 @@ export default function PCIControlsSection({
               </AlertDescription>
             </Alert>
           )}
+
+          {/* Effectiveness Summary */}
+          {pciInstances.length > 0 && (() => {
+            const activeInstances = pciInstances.filter(p => p.status === 'active');
+            const effectivenessValues = activeInstances
+              .map(p => calculateEffectiveness(p.derived_dime_score))
+              .filter((e): e is number => e !== null);
+
+            if (effectivenessValues.length === 0) {
+              return null;
+            }
+
+            const avgEffectiveness = effectivenessValues.reduce((a, b) => a + b, 0) / effectivenessValues.length;
+            const maxEffectiveness = Math.max(...effectivenessValues);
+
+            const getColorClass = (value: number) => {
+              if (value >= 75) return 'text-green-600 bg-green-100';
+              if (value >= 50) return 'text-yellow-600 bg-yellow-100';
+              if (value >= 25) return 'text-orange-600 bg-orange-100';
+              return 'text-red-600 bg-red-100';
+            };
+
+            return (
+              <div className="bg-slate-50 rounded-lg p-4 border">
+                <div className="flex items-center gap-2 mb-3">
+                  <Gauge className="h-4 w-4 text-slate-600" />
+                  <span className="text-sm font-medium text-slate-700">
+                    Effectiveness Summary
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className="text-2xl font-bold text-slate-800">
+                      {activeInstances.length}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Active Controls</div>
+                  </div>
+                  <div>
+                    <div className={`text-2xl font-bold inline-block px-2 rounded ${getColorClass(avgEffectiveness)}`}>
+                      {avgEffectiveness.toFixed(1)}%
+                    </div>
+                    <div className="text-xs text-muted-foreground">Avg. Effectiveness</div>
+                  </div>
+                  <div>
+                    <div className={`text-2xl font-bold inline-block px-2 rounded ${getColorClass(maxEffectiveness)}`}>
+                      {maxEffectiveness.toFixed(1)}%
+                    </div>
+                    <div className="text-xs text-muted-foreground">Best Control</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Empty State */}
           {pciInstances.length === 0 && (
