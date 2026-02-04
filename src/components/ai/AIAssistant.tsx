@@ -142,6 +142,9 @@ export default function AIAssistant() {
         counter++;
       }
 
+      // Normalize status to title case (database constraint requires 'Open' not 'OPEN')
+      const normalizedStatus = risk.status === 'OPEN' ? 'Open' : (risk.status || 'Open');
+
       const { error: createError } = await createRisk({
         risk_code: riskCode,
         risk_title: risk.risk_title,
@@ -152,7 +155,7 @@ export default function AIAssistant() {
         owner: risk.owner,
         likelihood_inherent: risk.likelihood_inherent,
         impact_inherent: risk.impact_inherent,
-        status: risk.status,
+        status: normalizedStatus,
         period: periodString,
         is_priority: false,
       });
@@ -208,6 +211,9 @@ export default function AIAssistant() {
         // Add the used code to the set for next iteration
         existingCodes.add(riskCode);
 
+        // Normalize status to title case (database constraint requires 'Open' not 'OPEN')
+        const normalizedStatus = risk.status === 'OPEN' ? 'Open' : (risk.status || 'Open');
+
         const { error: createError } = await createRisk({
           risk_code: riskCode,
           risk_title: risk.risk_title,
@@ -218,7 +224,7 @@ export default function AIAssistant() {
           owner: risk.owner,
           likelihood_inherent: risk.likelihood_inherent,
           impact_inherent: risk.impact_inherent,
-          status: risk.status,
+          status: normalizedStatus,
           period: periodString,
           is_priority: false,
         });

@@ -371,7 +371,7 @@ function generateDemoRisks(
           owner: 'Risk Officer',
           likelihood_inherent: Math.floor(Math.random() * 3) + 2, // 2-4
           impact_inherent: Math.floor(Math.random() * 3) + 2, // 2-4
-          status: 'OPEN',
+          status: 'Open',
           rationale: `This risk is relevant to ${industry} organizations, particularly within ${businessUnit || 'this business unit'}, based on industry best practices and common risk scenarios.`,
         });
       }
@@ -440,7 +440,7 @@ ${taxonomyInstruction}
 6. **Owner**: Suggested risk owner role (e.g., "CFO", "CTO", "Operations Manager")
 7. **Inherent Likelihood**: Score from 1-5 (how likely without controls)
 8. **Inherent Impact**: Score from 1-5 (severity if it occurs)
-9. **Status**: Always "OPEN" for new risks
+9. **Status**: Always "Open" for new risks (title case)
 10. **Rationale**: Why this risk is relevant (1-2 sentences)
 
 IMPORTANT GUIDELINES:
@@ -463,7 +463,7 @@ Return your response as a valid JSON array of objects. Each object must have thi
   "owner": "string",
   "likelihood_inherent": 1 | 2 | 3 | 4 | 5,
   "impact_inherent": 1 | 2 | 3 | 4 | 5,
-  "status": "OPEN",
+  "status": "Open",
   "rationale": "string"
 }
 
