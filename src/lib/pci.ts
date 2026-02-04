@@ -234,10 +234,11 @@ export async function calculateResidualRiskPCI(
     }
 
     // Step 2: Fetch DIME scores for each active PCI instance
+    // Columns: d_score, i_score, m_score, e_final (each 0-3 scale)
     const pciIds = pciInstances.map(p => p.id);
     const { data: dimeScores, error: dimeError } = await supabase
       .from('derived_dime_scores')
-      .select('pci_instance_id, average_score')
+      .select('pci_instance_id, d_score, i_score, m_score, e_final')
       .in('pci_instance_id', pciIds);
 
     if (dimeError) {
@@ -249,7 +250,13 @@ export async function calculateResidualRiskPCI(
     const dimeMap = new Map<string, number>();
     if (dimeScores) {
       for (const score of dimeScores) {
-        dimeMap.set(score.pci_instance_id, score.average_score ?? 0);
+        // Calculate average of D, I, M, E scores (each 0-3 scale)
+        const d = score.d_score ?? 0;
+        const i = score.i_score ?? 0;
+        const m = score.m_score ?? 0;
+        const e = score.e_final ?? 0;
+        const avgScore = (d + i + m + e) / 4;
+        dimeMap.set(score.pci_instance_id, avgScore);
       }
     }
 
