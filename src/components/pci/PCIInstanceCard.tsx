@@ -76,6 +76,7 @@ export default function PCIInstanceCard({
     draft: 'bg-gray-100 text-gray-800 border-gray-200',
     active: 'bg-green-100 text-green-800 border-green-200',
     retired: 'bg-red-100 text-red-800 border-red-200',
+    not_applicable: 'bg-gray-100 text-gray-500 border-gray-200',
   };
 
   const objectiveColors = {
@@ -185,17 +186,32 @@ export default function PCIInstanceCard({
             </div>
           </div>
 
-          {/* Scope & Method */}
-          {(pciInstance.scope_boundary || pciInstance.method) && (
-            <div className="text-xs text-muted-foreground bg-gray-50 p-2 rounded">
-              <span className="font-medium">Scope:</span>{' '}
-              {pciInstance.scope_boundary}
+          {/* Scope, Method, Target, Dependencies */}
+          {(pciInstance.scope_boundary || pciInstance.method || pciInstance.target_threshold_standard || pciInstance.dependencies) && (
+            <div className="text-xs text-muted-foreground bg-gray-50 p-2 rounded space-y-1">
+              {pciInstance.scope_boundary && (
+                <div>
+                  <span className="font-medium">Scope:</span>{' '}
+                  {pciInstance.scope_boundary}
+                </div>
+              )}
               {pciInstance.method && (
-                <>
-                  {' • '}
+                <div>
                   <span className="font-medium">Method:</span>{' '}
                   {pciInstance.method}
-                </>
+                </div>
+              )}
+              {pciInstance.target_threshold_standard && (
+                <div>
+                  <span className="font-medium">Target/Threshold:</span>{' '}
+                  {pciInstance.target_threshold_standard}
+                </div>
+              )}
+              {pciInstance.dependencies && (
+                <div>
+                  <span className="font-medium">Dependencies:</span>{' '}
+                  {pciInstance.dependencies}
+                </div>
               )}
             </div>
           )}

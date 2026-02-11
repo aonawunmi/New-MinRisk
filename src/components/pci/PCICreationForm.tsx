@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { createPCIInstance, getSecondaryControlTemplates } from '@/lib/pci';
+import { getDepartments, type Department } from '@/lib/divisions';
 import type {
   PCITemplate,
   SecondaryControlTemplate,
@@ -71,6 +72,15 @@ const FREQUENCY_OPTIONS = [
   'Event-driven',
 ];
 
+const METHOD_OPTIONS = [
+  { value: 'System-enforced', label: 'System-enforced', description: 'Automated system controls (e.g., system blocks, auto-rejection)' },
+  { value: 'Manual', label: 'Manual', description: 'Human-executed process (e.g., manual review, sign-off)' },
+  { value: 'Hybrid', label: 'Hybrid', description: 'Combination of system and human actions' },
+  { value: 'Policy-based', label: 'Policy-based', description: 'Governance or procedural controls (e.g., documented policies, mandates)' },
+  { value: 'Contractual', label: 'Contractual', description: 'Third-party or legal obligations (e.g., SLAs, indemnities)' },
+  { value: 'Configuration-based', label: 'Configuration-based', description: 'System settings or parameters (e.g., limits, thresholds, flags)' },
+];
+
 const OBJECTIVE_OPTIONS: { value: PCIObjective; label: string }[] = [
   { value: 'likelihood', label: 'Reduce Likelihood' },
   { value: 'impact', label: 'Reduce Impact' },
@@ -91,6 +101,10 @@ export default function PCICreationForm({
     SecondaryControlTemplate[]
   >([]);
   const [loadingControls, setLoadingControls] = useState(false);
+
+  // Departments for Owner Role dropdown
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [loadingDepartments, setLoadingDepartments] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<Partial<CreatePCIInstanceData>>({
@@ -114,6 +128,27 @@ export default function PCICreationForm({
       loadSecondaryControls(template.id);
     }
   }, [template]);
+
+  // Load departments for Owner Role dropdown when dialog opens
+  useEffect(() => {
+    if (open) {
+      loadDepartmentOptions();
+    }
+  }, [open]);
+
+  async function loadDepartmentOptions() {
+    setLoadingDepartments(true);
+    try {
+      const { data, error } = await getDepartments();
+      if (!error && data) {
+        setDepartments(data);
+      }
+    } catch (err) {
+      console.error('Failed to load departments:', err);
+    } finally {
+      setLoadingDepartments(false);
+    }
+  }
 
   async function loadSecondaryControls(templateId: string) {
     setLoadingControls(true);
@@ -316,13 +351,26 @@ export default function PCICreationForm({
             <Label>
               Method <span className="text-red-500">*</span>
             </Label>
-            <Textarea
-              placeholder="How is this control executed? (e.g., 'System-enforced approval workflow')"
+            <Select
               value={formData.method}
-              onChange={(e) => handleInputChange('method', e.target.value)}
-              className="mt-1"
-              rows={2}
-            />
+              onValueChange={(val) => handleInputChange('method', val)}
+            >
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="How is this control executed?" />
+              </SelectTrigger>
+              <SelectContent>
+                {METHOD_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    <div>
+                      <span>{opt.label}</span>
+                      <span className="text-xs text-muted-foreground ml-2">
+                        — {opt.description}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Target/Threshold/Standard */}
@@ -362,17 +410,36 @@ export default function PCICreationForm({
             </Select>
           </div>
 
-          {/* Owner Role */}
+          {/* Owner Role (Department) */}
           <div>
             <Label>
-              Owner Role <span className="text-red-500">*</span>
+              Owner (Department) <span className="text-red-500">*</span>
             </Label>
-            <Input
-              placeholder="e.g., 'Risk Manager', 'Operations Lead', 'IT Security'"
+            <Select
               value={formData.owner_role}
-              onChange={(e) => handleInputChange('owner_role', e.target.value)}
-              className="mt-1"
-            />
+              onValueChange={(val) => handleInputChange('owner_role', val)}
+            >
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder={loadingDepartments ? 'Loading departments...' : 'Select owning department'} />
+              </SelectTrigger>
+              <SelectContent>
+                {departments.map((dept) => (
+                  <SelectItem key={dept.id} value={dept.name}>
+                    {dept.name}
+                    {dept.division_name && (
+                      <span className="text-xs text-muted-foreground ml-2">
+                        ({dept.division_name})
+                      </span>
+                    )}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {departments.length === 0 && !loadingDepartments && (
+              <p className="text-xs text-amber-600 mt-1">
+                No departments configured. Add departments in Admin → Organization Structure.
+              </p>
+            )}
           </div>
 
           {/* Dependencies */}

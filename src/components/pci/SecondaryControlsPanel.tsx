@@ -16,6 +16,7 @@ import {
 } from '@/lib/pci';
 import type {
   SecondaryControlInstance,
+  PCIStatus,
   SCStatus,
   SCDimension,
   DerivedDIMEScore,
@@ -64,7 +65,7 @@ interface SecondaryControlsPanelProps {
   riskId?: string;
   readOnly?: boolean;
   onUpdate?: () => void;
-  pciStatus?: 'draft' | 'active' | 'retired';
+  pciStatus?: PCIStatus;
 }
 
 interface LocalControlState {

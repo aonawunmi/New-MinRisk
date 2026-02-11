@@ -245,7 +245,7 @@ export default function PCIControlsSection({
               <CheckCircle className="h-4 w-4 text-green-600" />
               <AlertDescription className="text-green-800">
                 Risk can be activated. Response is "{gateResult.response_type}" with{' '}
-                {gateResult.pci_count} control(s).
+                {activeCount} control(s).
               </AlertDescription>
             </Alert>
           )}
