@@ -250,11 +250,11 @@ export async function calculateResidualRiskPCI(
     const dimeMap = new Map<string, number>();
     if (dimeScores) {
       for (const score of dimeScores) {
-        // Calculate average of D, I, M, E scores (each 0-3 scale)
+        // Apply D=0 cascade: if Design=0, I/M/E are all forced to 0
         const d = score.d_score ?? 0;
-        const i = score.i_score ?? 0;
-        const m = score.m_score ?? 0;
-        const e = score.e_final ?? 0;
+        const i = d === 0 ? 0 : (score.i_score ?? 0);
+        const m = d === 0 ? 0 : (score.m_score ?? 0);
+        const e = d === 0 ? 0 : (score.e_final ?? 0);
         const avgScore = (d + i + m + e) / 4;
         dimeMap.set(score.pci_instance_id, avgScore);
       }

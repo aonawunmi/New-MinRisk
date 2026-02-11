@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import type { DerivedDIMEScore, SCDimension } from '@/types/pci';
 import { DIMENSION_LABELS, DIME_SCORE_COLORS } from '@/types/pci';
+import { applyDIMECascade } from './EffectivenessDisplay';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -45,15 +46,19 @@ export default function DIMEDisplay({
     );
   }
 
+  // Apply D=0 cascade: if Design=0, I/M/E forced to 0
+  const cascaded = applyDIMECascade(dimeScore);
+  const designIsZero = (dimeScore.d_score ?? 0) === 0;
+
   const scores: { dimension: SCDimension; score: number; capped: boolean }[] = [
-    { dimension: 'D', score: dimeScore.d_score, capped: dimeScore.cap_details?.d_capped || false },
-    { dimension: 'I', score: dimeScore.i_score, capped: dimeScore.cap_details?.i_capped || false },
-    { dimension: 'M', score: dimeScore.m_score, capped: dimeScore.cap_details?.m_capped || false },
-    { dimension: 'E', score: dimeScore.e_final, capped: dimeScore.cap_details?.e_capped || false },
+    { dimension: 'D', score: cascaded.d, capped: dimeScore.cap_details?.d_capped || false },
+    { dimension: 'I', score: cascaded.i, capped: !designIsZero && (dimeScore.cap_details?.i_capped || false) },
+    { dimension: 'M', score: cascaded.m, capped: !designIsZero && (dimeScore.cap_details?.m_capped || false) },
+    { dimension: 'E', score: cascaded.e, capped: !designIsZero && (dimeScore.cap_details?.e_capped || false) },
   ];
 
   const average = (
-    (dimeScore.d_score + dimeScore.i_score + dimeScore.m_score + dimeScore.e_final) /
+    (cascaded.d + cascaded.i + cascaded.m + cascaded.e) /
     4
   ).toFixed(2);
 
@@ -187,8 +192,17 @@ export default function DIMEDisplay({
         )}
       </div>
 
-      {/* Constrained Effectiveness Note */}
-      {dimeScore.e_final < dimeScore.e_raw && (
+      {/* D=0 Cascade Note */}
+      {designIsZero && (
+        <div className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">
+          <strong>Design = 0:</strong> Because Design is Not Adequate, Implementation,
+          Monitoring, and Evaluation are all forced to 0. A control that is not properly
+          designed cannot be effective regardless of other dimensions.
+        </div>
+      )}
+
+      {/* Constrained Effectiveness Note (only when D is NOT zero — otherwise the cascade note above applies) */}
+      {!designIsZero && dimeScore.e_final < dimeScore.e_raw && (
         <div className="text-xs text-muted-foreground bg-gray-50 p-2 rounded">
           <strong>Note:</strong> Effectiveness (E) constrained from{' '}
           {dimeScore.e_raw.toFixed(2)} to {dimeScore.e_final.toFixed(2)} because

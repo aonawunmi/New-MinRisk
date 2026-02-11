@@ -19,18 +19,37 @@ interface EffectivenessDisplayProps {
 }
 
 /**
+ * Apply D=0 cascade: if Design score is 0, I/M/E are meaningless and forced to 0.
+ * This ensures that a control with inadequate design cannot show positive scores
+ * for implementation, monitoring, or evaluation.
+ */
+export function applyDIMECascade(dimeScore: DerivedDIMEScore): {
+  d: number; i: number; m: number; e: number;
+} {
+  const d = dimeScore.d_score ?? 0;
+  // If Design = 0, cascade: I/M/E all become 0
+  if (d === 0) {
+    return { d: 0, i: 0, m: 0, e: 0 };
+  }
+  return {
+    d,
+    i: dimeScore.i_score ?? 0,
+    m: dimeScore.m_score ?? 0,
+    e: dimeScore.e_final ?? 0,
+  };
+}
+
+/**
  * Calculate effectiveness percentage from DIME scores
  * Each DIME dimension is 0-3 scale
  * Average of 4 dimensions / 3 = 0-1 effectiveness
  * Multiply by 100 for percentage
+ * Applies D=0 cascade: if Design=0, all dimensions forced to 0.
  */
 export function calculateEffectiveness(dimeScore?: DerivedDIMEScore | null): number | null {
   if (!dimeScore) return null;
 
-  const d = dimeScore.d_score ?? 0;
-  const i = dimeScore.i_score ?? 0;
-  const m = dimeScore.m_score ?? 0;
-  const e = dimeScore.e_final ?? 0;
+  const { d, i, m, e } = applyDIMECascade(dimeScore);
 
   // Average of 4 dimensions (0-3 scale each)
   const avgScore = (d + i + m + e) / 4;
