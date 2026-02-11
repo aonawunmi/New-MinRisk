@@ -873,8 +873,20 @@ export async function revalidateEditedStatement(
     }
 
     // Real API call via edge function
-    const taxonomyContext = taxonomy
-      .map((entry) => `- **${entry.category}** → **${entry.subcategory}**: ${entry.subcategory_description}`)
+    // Group taxonomy by category for clearer presentation
+    const categoryGroups: Record<string, string[]> = {};
+    taxonomy.forEach((entry) => {
+      if (!categoryGroups[entry.category]) categoryGroups[entry.category] = [];
+      categoryGroups[entry.category].push(entry.subcategory);
+    });
+
+    const taxonomyContext = Object.entries(categoryGroups)
+      .map(([cat, subs]) => `**${cat}**: ${subs.map(s => `"${s}"`).join(', ')}`)
+      .join('\n');
+
+    // Build a flat list of valid pairs for the AI to reference
+    const validPairs = taxonomy
+      .map((entry) => `"${entry.category}" → "${entry.subcategory}"`)
       .join('\n');
 
     const prompt = `You are a professional risk management expert. A user originally selected:
@@ -890,21 +902,28 @@ EDITED STATEMENT:
 YOUR TASK:
 Check if the edited statement still fits the originally selected category and sub-category.
 
-AVAILABLE TAXONOMY:
+AVAILABLE TAXONOMY (category → valid subcategories):
 ${taxonomyContext}
 
-IMPORTANT:
-- If the edited statement STILL fits the original category/sub-category, confirm it
-- If the edited statement NO LONGER fits, suggest the correct category/sub-category from the taxonomy
-- DO NOT change the wording - only validate the classification
+VALID CATEGORY-SUBCATEGORY PAIRS (you MUST pick from these exact pairs):
+${validPairs}
+
+CRITICAL RULES:
+- Each subcategory belongs to EXACTLY ONE category. You MUST NOT mix them.
+- Your suggested_category and suggested_subcategory MUST form a valid pair from the list above.
+- For example, "Market Liquidity" belongs to "Liquidity & Capital Risk", NOT to "Financial Risk".
+- If the edited statement STILL fits the original category/sub-category, confirm it.
+- If it NO LONGER fits, suggest the correct PAIR from the taxonomy above.
+- DO NOT change the wording - only validate the classification.
+- When in doubt, keep the original classification.
 
 RESPONSE FORMAT:
 Return valid JSON with this exact structure:
 {
   "category_still_valid": true/false,
   "subcategory_still_valid": true/false,
-  "suggested_category": "Category Name" (only if invalid, otherwise same as original),
-  "suggested_subcategory": "Subcategory Name" (only if invalid, otherwise same as original),
+  "suggested_category": "Category Name" (must be an exact category from the taxonomy),
+  "suggested_subcategory": "Subcategory Name" (must be a subcategory that belongs to the suggested_category),
   "explanation": "Brief explanation of why the classification is correct or needs to change (1-2 sentences)",
   "final_statement": "The user's edited statement (no changes to wording)"
 }`;
@@ -923,12 +942,38 @@ Return valid JSON with this exact structure:
 
     const validation = JSON.parse(jsonMatch[0]);
 
+    // Post-processing: Validate that the suggested pair actually exists in the taxonomy
+    let suggestedCat = validation.suggested_category || originalCategory;
+    let suggestedSub = validation.suggested_subcategory || originalSubcategory;
+    let catValid = validation.category_still_valid;
+    let subValid = validation.subcategory_still_valid;
+
+    const pairExists = taxonomy.some(
+      (t) => t.category === suggestedCat && t.subcategory === suggestedSub
+    );
+
+    if (!pairExists) {
+      // AI suggested an invalid pair - try to find the correct category for the subcategory
+      const correctEntry = taxonomy.find((t) => t.subcategory === suggestedSub);
+      if (correctEntry) {
+        suggestedCat = correctEntry.category;
+        console.warn(`AI suggested invalid pair "${suggestedCat}/${suggestedSub}", corrected to "${correctEntry.category}/${suggestedSub}"`);
+      } else {
+        // Subcategory doesn't exist at all - fall back to original
+        console.warn(`AI suggested non-existent subcategory "${suggestedSub}", falling back to original`);
+        suggestedCat = originalCategory;
+        suggestedSub = originalSubcategory;
+        catValid = true;
+        subValid = true;
+      }
+    }
+
     const data: RevalidationResult = {
       edited_statement: editedStatement,
-      category_still_valid: validation.category_still_valid,
-      subcategory_still_valid: validation.subcategory_still_valid,
-      suggested_category: validation.suggested_category || originalCategory,
-      suggested_subcategory: validation.suggested_subcategory || originalSubcategory,
+      category_still_valid: catValid,
+      subcategory_still_valid: subValid,
+      suggested_category: suggestedCat,
+      suggested_subcategory: suggestedSub,
       explanation: validation.explanation || '',
       final_statement: validation.final_statement || editedStatement,
     };
