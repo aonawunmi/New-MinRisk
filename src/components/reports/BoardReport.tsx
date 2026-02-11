@@ -35,6 +35,9 @@ import {
 } from 'lucide-react';
 import { getDashboardMetrics, getTopRisks, getRiskDistribution, type TopRisk } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
+import { isPCIWorkflowEnabled } from '@/lib/pci';
+import { calculateEffectiveness } from '@/components/pci/EffectivenessDisplay';
+import { Gauge } from 'lucide-react';
 
 interface BoardReportProps {
     primaryPeriodId: string;
@@ -82,6 +85,18 @@ export default function BoardReport({
     const [incidentSummary, setIncidentSummary] = useState<IncidentSummary | null>(null);
     const [metrics, setMetrics] = useState<any>(null);
     const [categoryDistribution, setCategoryDistribution] = useState<any[]>([]);
+
+    // PCI data
+    const [pciEnabled, setPciEnabled] = useState(false);
+    const [pciSummary, setPciSummary] = useState<{
+        totalControls: number;
+        activeControls: number;
+        avgEffectiveness: number;
+        avgD: number;
+        avgI: number;
+        avgM: number;
+        avgE: number;
+    } | null>(null);
 
     // Executive summary editing
     const [executiveSummary, setExecutiveSummary] = useState('');
@@ -186,6 +201,53 @@ export default function BoardReport({
                         openCount: incidents.filter(inc => inc.status === 'open' || inc.status === 'investigating').length,
                     };
                     setIncidentSummary(summary);
+                }
+
+                // Load PCI data if workflow is enabled
+                const pciWorkflowEnabled = await isPCIWorkflowEnabled();
+                setPciEnabled(pciWorkflowEnabled);
+
+                if (pciWorkflowEnabled) {
+                    const { data: pciInstances } = await supabase
+                        .from('pci_instances')
+                        .select('id, status, derived_dime_score')
+                        .neq('status', 'not_applicable');
+
+                    if (pciInstances && pciInstances.length > 0) {
+                        const activeInstances = pciInstances.filter(p => p.status === 'active');
+                        const scored = activeInstances.filter(p => p.derived_dime_score);
+
+                        // Calculate DIME averages
+                        let totalD = 0, totalI = 0, totalM = 0, totalE = 0;
+                        const effectivenessValues: number[] = [];
+
+                        scored.forEach(p => {
+                            const ds = p.derived_dime_score;
+                            if (ds) {
+                                totalD += ds.d_score ?? 0;
+                                totalI += ds.i_score ?? 0;
+                                totalM += ds.m_score ?? 0;
+                                totalE += ds.e_final ?? 0;
+                            }
+                            const eff = calculateEffectiveness(ds);
+                            if (eff !== null) effectivenessValues.push(eff);
+                        });
+
+                        const count = scored.length || 1;
+                        const avgEff = effectivenessValues.length > 0
+                            ? effectivenessValues.reduce((a, b) => a + b, 0) / effectivenessValues.length
+                            : 0;
+
+                        setPciSummary({
+                            totalControls: pciInstances.length,
+                            activeControls: activeInstances.length,
+                            avgEffectiveness: avgEff,
+                            avgD: totalD / count,
+                            avgI: totalI / count,
+                            avgM: totalM / count,
+                            avgE: totalE / count,
+                        });
+                    }
                 }
 
                 // Generate default executive summary
@@ -462,6 +524,77 @@ Key areas requiring continued focus include ${risks[0]?.category || 'Operational
                     )}
                 </CardContent>
             </Card>
+
+            {/* Section 6: PCI Control Environment (only when PCI workflow is enabled) */}
+            {pciEnabled && pciSummary && (
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                            <Gauge className="h-5 w-5" />
+                            6. Control Environment (PCI Framework)
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <p className="text-sm text-gray-600">
+                            The organization employs a Primary Control Instance (PCI) framework assessed using the
+                            DIME methodology (Design, Implementation, Monitoring, Evaluation).
+                        </p>
+
+                        {/* Summary Metrics */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="text-center p-4 bg-gray-50 rounded-lg">
+                                <div className="text-2xl font-bold">{pciSummary.totalControls}</div>
+                                <div className="text-sm text-gray-600">Total PCI Controls</div>
+                            </div>
+                            <div className="text-center p-4 bg-gray-50 rounded-lg">
+                                <div className="text-2xl font-bold text-green-600">{pciSummary.activeControls}</div>
+                                <div className="text-sm text-gray-600">Active (Attested)</div>
+                            </div>
+                            <div className="text-center p-4 bg-emerald-50 rounded-lg">
+                                <div className={`text-2xl font-bold ${
+                                    pciSummary.avgEffectiveness >= 75 ? 'text-green-600' :
+                                    pciSummary.avgEffectiveness >= 50 ? 'text-yellow-600' :
+                                    pciSummary.avgEffectiveness >= 25 ? 'text-orange-600' : 'text-red-600'
+                                }`}>
+                                    {pciSummary.avgEffectiveness.toFixed(1)}%
+                                </div>
+                                <div className="text-sm text-gray-600">Avg. Effectiveness</div>
+                            </div>
+                            <div className="text-center p-4 bg-gray-50 rounded-lg">
+                                <div className="text-2xl font-bold">
+                                    {pciSummary.totalControls - pciSummary.activeControls}
+                                </div>
+                                <div className="text-sm text-gray-600">Pending Attestation</div>
+                            </div>
+                        </div>
+
+                        {/* DIME Dimension Breakdown */}
+                        <div className="mt-4">
+                            <h4 className="text-sm font-medium text-gray-700 mb-3">DIME Dimension Scores (Average across active controls)</h4>
+                            <div className="grid grid-cols-4 gap-3">
+                                {[
+                                    { label: 'Design', value: pciSummary.avgD, key: 'D' },
+                                    { label: 'Implementation', value: pciSummary.avgI, key: 'I' },
+                                    { label: 'Monitoring', value: pciSummary.avgM, key: 'M' },
+                                    { label: 'Evaluation', value: pciSummary.avgE, key: 'E' },
+                                ].map((dim) => {
+                                    const pct = (dim.value / 3) * 100;
+                                    const colorClass = pct >= 75 ? 'text-green-600 bg-green-50' :
+                                        pct >= 50 ? 'text-yellow-600 bg-yellow-50' :
+                                        pct >= 25 ? 'text-orange-600 bg-orange-50' : 'text-red-600 bg-red-50';
+                                    return (
+                                        <div key={dim.key} className={`text-center p-3 rounded-lg ${colorClass}`}>
+                                            <div className="text-xs font-medium text-gray-500 mb-1">{dim.label}</div>
+                                            <div className="text-xl font-bold">{dim.value.toFixed(1)}</div>
+                                            <div className="text-xs text-gray-500">of 3.0</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
         </div>
     );
 }

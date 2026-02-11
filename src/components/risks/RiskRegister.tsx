@@ -9,7 +9,7 @@
 import { useState, useEffect } from 'react';
 import { getRisks, deleteRisk, updateRisk } from '@/lib/risks';
 import { calculateResidualRisk } from '@/lib/controls';
-import { isPCIWorkflowEnabled, calculateResidualRiskPCI } from '@/lib/pci';
+import { isPCIWorkflowEnabled, calculateResidualRiskPCI, getPCIInstancesForRisk } from '@/lib/pci';
 import { getActivePeriod as getActivePeriodV2, formatPeriod, type Period } from '@/lib/periods-v2';
 import { getKRIsForRisk, type KRIDefinition } from '@/lib/kri';
 import { getIncidentsForRisk } from '@/lib/incidents';
@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit, Trash2, AlertCircle, RefreshCw, Star, Archive, ArrowUpDown, ArrowUp, ArrowDown, Activity, Calendar, Eye } from 'lucide-react';
+import { Plus, Edit, Trash2, AlertCircle, RefreshCw, Star, Archive, ArrowUpDown, ArrowUp, ArrowDown, Activity, Calendar, Eye, Shield } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -62,6 +62,7 @@ export default function RiskRegister() {
   const [incidentCounts, setIncidentCounts] = useState<Map<string, number>>(new Map());
   const [showIncidentsDialog, setShowIncidentsDialog] = useState(false);
   const [selectedRiskIncidents, setSelectedRiskIncidents] = useState<{ risk: Risk; incidents: any[] } | null>(null);
+  const [pciCounts, setPciCounts] = useState<Map<string, number>>(new Map());
   const [orgConfig, setOrgConfig] = useState<OrganizationConfig | null>(null);
 
   // Bulk delete state
@@ -104,46 +105,62 @@ export default function RiskRegister() {
     const residualMap = new Map<string, ResidualRisk>();
     const kriCountMap = new Map<string, number>();
     const incidentCountMap = new Map<string, number>();
+    const pciCountMap = new Map<string, number>();
 
     // Check if PCI workflow is enabled (determines which residual calc to use)
     const pciEnabled = await isPCIWorkflowEnabled();
     setPciWorkflowEnabled(pciEnabled);
 
-    // Fetch all residual risks, KRI counts, and incident counts in parallel
+    // Fetch all residual risks, KRI counts, incident counts, and PCI counts in parallel
     const promises = risks.map(async (risk) => {
       // Choose residual calculation based on workflow mode
       const residualPromise = pciEnabled
         ? calculateResidualRiskPCI(risk.id, risk.likelihood_inherent, risk.impact_inherent)
         : calculateResidualRisk(risk.id, risk.likelihood_inherent, risk.impact_inherent);
 
-      const [residualResult, krisResult, incidentsResult] = await Promise.all([
+      const fetchPromises: [Promise<any>, Promise<any>, Promise<any>, Promise<any>?] = [
         residualPromise,
         getKRIsForRisk(risk.risk_code),
         getIncidentsForRisk(risk.id),
-      ]);
+      ];
+
+      // Only fetch PCI counts if PCI workflow is enabled
+      if (pciEnabled) {
+        fetchPromises.push(getPCIInstancesForRisk(risk.id));
+      }
+
+      const [residualResult, krisResult, incidentsResult, pciResult] = await Promise.all(fetchPromises);
+
+      // Count active PCI instances (exclude not_applicable)
+      const pciCount = pciResult?.data
+        ? pciResult.data.filter((p: any) => p.status !== 'not_applicable').length
+        : 0;
 
       return {
         riskId: risk.id,
         residual: residualResult.data,
         kriCount: krisResult.data?.length || 0,
         incidentCount: incidentsResult.data?.length || 0,
+        pciCount,
       };
     });
 
     const results = await Promise.all(promises);
 
     // Populate maps
-    results.forEach(({ riskId, residual, kriCount, incidentCount }) => {
+    results.forEach(({ riskId, residual, kriCount, incidentCount, pciCount }) => {
       if (residual) {
         residualMap.set(riskId, residual);
       }
       kriCountMap.set(riskId, kriCount);
       incidentCountMap.set(riskId, incidentCount);
+      pciCountMap.set(riskId, pciCount);
     });
 
     setResidualRisks(residualMap);
     setKriCounts(kriCountMap);
     setIncidentCounts(incidentCountMap);
+    setPciCounts(pciCountMap);
   };
 
   useEffect(() => {
@@ -673,6 +690,9 @@ export default function RiskRegister() {
                     <TableHead className="text-center" colSpan={3}>Residual</TableHead>
                     <TableHead className="text-center">KRIs</TableHead>
                     <TableHead className="text-center">Incidents</TableHead>
+                    {pciWorkflowEnabled && (
+                      <TableHead className="text-center">Controls</TableHead>
+                    )}
                     <TableHead>
                       <button
                         onClick={() => handleSort('status')}
@@ -707,6 +727,9 @@ export default function RiskRegister() {
                     </TableHead>
                     <TableHead className="text-center text-xs w-16">Count</TableHead>
                     <TableHead className="text-center text-xs w-16">Count</TableHead>
+                    {pciWorkflowEnabled && (
+                      <TableHead className="text-center text-xs w-16">Count</TableHead>
+                    )}
                     <TableHead colSpan={2}></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -813,6 +836,26 @@ export default function RiskRegister() {
                             <span className="text-gray-400 text-xs">-</span>
                           )}
                         </TableCell>
+                        {pciWorkflowEnabled && (
+                          <TableCell className="text-center">
+                            {pciCounts.get(risk.id) ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditRisk(risk)}
+                                className="h-7 px-2 hover:bg-emerald-50"
+                                title="View controls in risk form"
+                              >
+                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">
+                                  <Shield className="h-3 w-3 mr-1" />
+                                  {pciCounts.get(risk.id)}
+                                </Badge>
+                              </Button>
+                            ) : (
+                              <span className="text-gray-400 text-xs">-</span>
+                            )}
+                          </TableCell>
+                        )}
                         <TableCell>
                           <span
                             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${

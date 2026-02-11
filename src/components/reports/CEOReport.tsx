@@ -33,6 +33,8 @@ import {
 import { getDashboardMetrics, getTopRisks, getHeatmapData, type TopRisk } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 import { generateReportNarrative } from '@/lib/reportNarrative';
+import { isPCIWorkflowEnabled } from '@/lib/pci';
+import { calculateEffectiveness } from '@/components/pci/EffectivenessDisplay';
 
 interface CEOReportProps {
     primaryPeriodId: string;
@@ -72,6 +74,9 @@ export default function CEOReport({
     const [generatingAI, setGeneratingAI] = useState(false);
     const [periodName, setPeriodName] = useState('');
     const [comparisonPeriodName, setComparisonPeriodName] = useState('');
+    const [pciEnabled, setPciEnabled] = useState(false);
+    const [pciControlCount, setPciControlCount] = useState(0);
+    const [pciAvgEffectiveness, setPciAvgEffectiveness] = useState(0);
 
     // Load report data
     useEffect(() => {
@@ -128,6 +133,32 @@ export default function CEOReport({
 
                 if (risksData) {
                     setTopRisks(risksData);
+                }
+
+                // Load PCI data if workflow is enabled
+                const pciWorkflowEnabled = await isPCIWorkflowEnabled();
+                setPciEnabled(pciWorkflowEnabled);
+
+                if (pciWorkflowEnabled) {
+                    const { data: pciInstances } = await supabase
+                        .from('pci_instances')
+                        .select('id, status, derived_dime_score')
+                        .neq('status', 'not_applicable');
+
+                    if (pciInstances) {
+                        const activeInstances = pciInstances.filter(p => p.status === 'active');
+                        setPciControlCount(pciInstances.length);
+
+                        // Calculate average effectiveness from active instances with DIME scores
+                        const effectivenessValues = activeInstances
+                            .map(p => calculateEffectiveness(p.derived_dime_score))
+                            .filter((e): e is number => e !== null);
+
+                        if (effectivenessValues.length > 0) {
+                            const avg = effectivenessValues.reduce((a, b) => a + b, 0) / effectivenessValues.length;
+                            setPciAvgEffectiveness(avg);
+                        }
+                    }
                 }
 
                 // Generate default executive summary
@@ -284,15 +315,26 @@ export default function CEOReport({
 
                 <Card>
                     <CardContent className="pt-4">
-                        <div className="text-2xl font-bold">{metrics?.totalControls || 0}</div>
-                        <div className="text-sm text-gray-600">Active Controls</div>
+                        <div className="text-2xl font-bold">
+                            {pciEnabled ? pciControlCount : (metrics?.totalControls || 0)}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                            {pciEnabled ? 'PCI Controls' : 'Active Controls'}
+                        </div>
                     </CardContent>
                 </Card>
 
                 <Card>
                     <CardContent className="pt-4">
-                        <div className="text-2xl font-bold">{(metrics?.controlEffectiveness || 0).toFixed(0)}%</div>
-                        <div className="text-sm text-gray-600">Control Effectiveness</div>
+                        <div className="text-2xl font-bold">
+                            {pciEnabled
+                                ? `${pciAvgEffectiveness.toFixed(0)}%`
+                                : `${(metrics?.controlEffectiveness || 0).toFixed(0)}%`
+                            }
+                        </div>
+                        <div className="text-sm text-gray-600">
+                            {pciEnabled ? 'DIME Effectiveness' : 'Control Effectiveness'}
+                        </div>
                     </CardContent>
                 </Card>
             </div>
