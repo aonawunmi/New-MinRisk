@@ -275,15 +275,22 @@ export default function SecondaryControlsPanel({
 
   const dimensions: SCDimension[] = ['D', 'I', 'M', 'E'];
 
-  // Check if all D (Design) controls are N/A - if so, I/M/E should auto-cascade to N/A
+  // Check if all D (Design) controls yield zero score (N/A or Not Met)
+  // If Design is zero, I/M/E are meaningless and should be blocked
   const dControls = controlsByDimension['D'] || [];
-  const allDControlsNA =
-    dControls.length > 0 &&
+  const allDControlsAttested = dControls.length > 0 &&
+    dControls.every((c) => localState[c.id]?.status != null);
+  const allDControlsZero = allDControlsAttested &&
+    dControls.every((c) => {
+      const status = localState[c.id]?.status;
+      return status === 'na' || status === 'no';
+    });
+  const allDControlsNA = allDControlsZero &&
     dControls.every((c) => localState[c.id]?.status === 'na');
 
-  // Auto-cascade: when D is all N/A, I/M/E are disabled and treated as N/A
+  // Auto-cascade: when D is all zero (N/A or Not Met), I/M/E are disabled
   const isDimensionDisabled = (dim: SCDimension) => {
-    return allDControlsNA && dim !== 'D';
+    return allDControlsZero && dim !== 'D';
   };
 
   function getCriticalityColor(criticality: string) {
@@ -364,7 +371,7 @@ export default function SecondaryControlsPanel({
                       {DIMENSION_LABELS[dim]}
                       {dimDisabled ? (
                         <Badge variant="outline" className="bg-gray-200 text-gray-600">
-                          Auto N/A (Design = N/A)
+                          {allDControlsNA ? 'Auto N/A (Design = N/A)' : 'Blocked (Design = 0)'}
                         </Badge>
                       ) : (
                         <Badge variant="outline">
@@ -485,15 +492,16 @@ export default function SecondaryControlsPanel({
                           </div>
                         )}
 
-                        {/* Auto N/A due to Design = N/A */}
+                        {/* Auto-disabled due to Design = 0 */}
                         {dimDisabled && (
                           <div className="bg-gray-100 rounded p-3 text-sm text-gray-600">
                             <Badge variant="outline" className="bg-gray-200 text-gray-600 mb-2">
-                              N/A (Auto)
+                              {allDControlsNA ? 'N/A (Auto)' : 'Blocked (Design = 0)'}
                             </Badge>
                             <p className="text-xs">
-                              This control is automatically N/A because all Design controls are marked N/A.
-                              If Design doesn't exist, Implementation/Monitoring/Evaluation don't apply.
+                              {allDControlsNA
+                                ? 'This control is automatically N/A because all Design controls are marked N/A. If Design doesn\'t exist, Implementation/Monitoring/Evaluation don\'t apply.'
+                                : 'This control is blocked because all Design controls scored zero (Not Met). If Design is inadequate, Implementation/Monitoring/Evaluation are meaningless.'}
                             </p>
                           </div>
                         )}
