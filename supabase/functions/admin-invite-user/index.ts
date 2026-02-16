@@ -1,12 +1,16 @@
 // Edge Function: admin-invite-user
 // Purpose: Invite new users via email (sends Supabase invite email)
 // Security: Verifies admin role before executing, uses service role internally
-// Updated: 2026-02-02 (Converted from invite-code to email-based invitations)
+// Updated: 2026-02-16 (Auth Overhaul: removed auto-approval, added invite tracking)
 //
 // IMPORTANT: There is a database trigger `on_auth_user_created` on auth.users
 // that automatically creates a user_profiles row when inviteUserByEmail is called.
 // The trigger reads role/full_name/organization_id from raw_user_meta_data.
-// Therefore we must NOT insert a new profile - we UPDATE the trigger-created one.
+// The profile is created with status='pending' — admin must manually approve.
+//
+// INVITATION TRACKING: Before sending the email, we create a record in
+// user_invitations via create_invitation_admin() RPC. The invite_code is stored
+// in the user's metadata so SetPasswordForm can mark it as used.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -119,9 +123,31 @@ serve(async (req) => {
       );
     }
 
-    // 6. Invite user via email
+    // 6. Create invitation tracking record in user_invitations table
+    // This uses the admin variant that accepts p_created_by instead of auth.uid()
+    const { data: invitation, error: inviteRecordError } = await supabaseAdmin.rpc('create_invitation_admin', {
+      p_email: email,
+      p_organization_id: organizationId,
+      p_role: role,
+      p_created_by: user.id,
+      p_expires_in_days: 7,
+      p_notes: `Invited by admin as ${role}`,
+    });
+
+    if (inviteRecordError) {
+      console.error('Error creating invitation record:', inviteRecordError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to create invitation record: ' + inviteRecordError.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const inviteCode = invitation?.invite_code;
+    console.log(`Invitation record created: ${inviteCode} for ${email}`);
+
+    // 7. Invite user via email
     // The trigger `on_auth_user_created` will auto-create a user_profiles row
-    // using the metadata below. We then UPDATE it to set approved status.
+    // using the metadata below. User stays as 'pending' until admin approves.
     const appUrl = Deno.env.get('APP_URL') || supabaseUrl;
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       data: {
@@ -129,6 +155,7 @@ serve(async (req) => {
         organization_id: organizationId,
         invited_by: user.id,
         role,
+        invite_code: inviteCode,
       },
       redirectTo: `${appUrl}/auth/callback`,
     });
@@ -143,23 +170,10 @@ serve(async (req) => {
 
     const newUserId = inviteData.user.id;
 
-    // 7. Approve the trigger-created profile via stored procedure
-    // The trigger already created profile with the correct role/org from metadata.
-    // We use change_user_status() RPC which handles write-protection triggers
-    // and creates an audit trail. Must use supabaseClient (user auth) so auth.uid() works.
-    const { data: approveResult, error: approveError } = await supabaseClient.rpc('change_user_status', {
-      p_user_id: newUserId,
-      p_new_status: 'approved',
-      p_reason: `User invited by admin as ${role}`,
-      p_request_id: crypto.randomUUID(),
-    });
+    // NOTE: No auto-approval. User profile stays as 'pending' (created by trigger).
+    // Admin must manually approve via UserManagement > Pending Approvals.
 
-    if (approveError) {
-      console.error('Error approving user profile:', approveError);
-      console.warn('User was created but approval failed. Manual approval may be needed.');
-    }
-
-    console.log(`User invited: ${fullName} (${email}) as ${role} to org ${organizationId}`);
+    console.log(`User invited (pending approval): ${fullName} (${email}) as ${role} to org ${organizationId}`);
 
     return new Response(
       JSON.stringify({
@@ -169,8 +183,9 @@ serve(async (req) => {
           full_name: fullName,
           role,
           organization_id: organizationId,
-          status: 'approved',
+          status: 'pending',
           invite_sent: true,
+          invite_code: inviteCode,
         },
         error: null,
       }),

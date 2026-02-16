@@ -57,6 +57,10 @@ export default function SetPasswordForm() {
     setIsLoading(true);
 
     try {
+      // Get user metadata before updating password (need invite_code)
+      const { data: { user } } = await supabase.auth.getUser();
+      const inviteCode = user?.user_metadata?.invite_code;
+
       const { error: updateError } = await supabase.auth.updateUser({
         password,
       });
@@ -67,13 +71,24 @@ export default function SetPasswordForm() {
         return;
       }
 
+      // Mark the invitation as used in user_invitations table
+      if (inviteCode && user) {
+        try {
+          await supabase.rpc('use_invitation', {
+            p_invite_code: inviteCode,
+            p_user_id: user.id,
+          });
+        } catch (inviteErr) {
+          // Non-fatal: invitation tracking is supplementary
+          console.warn('Failed to mark invitation as used:', inviteErr);
+        }
+      }
+
       // Sign out so they can log in fresh with their new password
       await supabase.auth.signOut();
 
       setSuccess(true);
-      setTimeout(() => {
-        navigate('/login', { replace: true });
-      }, 3000);
+      // No auto-redirect — user needs to know their account is pending approval
     } catch (err) {
       console.error('Set password error:', err);
       setError('An unexpected error occurred. Please try again.');
@@ -129,8 +144,18 @@ export default function SetPasswordForm() {
           {success ? (
             <div className="space-y-4">
               <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded text-sm">
-                Password set successfully! Redirecting to login...
+                Your password has been set successfully!
               </div>
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded text-sm">
+                <p className="font-medium mb-1">Account Pending Approval</p>
+                <p>Your account is now pending approval by your organization administrator. You will be able to log in once your account has been approved.</p>
+              </div>
+              <a
+                href="/login"
+                className="inline-block w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded transition-colors"
+              >
+                Go to Login
+              </a>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">

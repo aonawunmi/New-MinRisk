@@ -3,6 +3,7 @@
 // Security: Only super_admin role can call this
 // Flow: Uses inviteUserByEmail - user receives email, clicks link, sets password
 // Created: 2026-01-26
+// Updated: 2026-02-16 (Auth Overhaul: removed auto-approval, added invite tracking)
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -109,9 +110,30 @@ serve(async (req: Request) => {
             );
         }
 
-        // 6. Invite user via email - they will receive an invite link
+        // 6. Create invitation tracking record in user_invitations table
+        const { data: invitation, error: inviteRecordError } = await supabaseAdmin.rpc('create_invitation_admin', {
+            p_email: email,
+            p_organization_id: organizationId,
+            p_role: 'primary_admin',
+            p_created_by: user.id,
+            p_expires_in_days: 7,
+            p_notes: `Primary Admin invited by super admin for organization ${org.name}`,
+        });
+
+        if (inviteRecordError) {
+            console.error('Error creating invitation record:', inviteRecordError);
+            return new Response(
+                JSON.stringify({ error: 'Failed to create invitation record: ' + inviteRecordError.message }),
+                { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+        }
+
+        const inviteCode = invitation?.invite_code;
+        console.log(`Invitation record created: ${inviteCode} for ${email}`);
+
+        // 7. Invite user via email - they will receive an invite link
         // The trigger `on_auth_user_created` will auto-create a user_profiles row
-        // using the metadata below. We then UPDATE it to set approved status.
+        // using the metadata below. User stays as 'pending' until admin approves.
         const appUrl = Deno.env.get('APP_URL') || supabaseUrl;
         const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
             data: {
@@ -119,6 +141,7 @@ serve(async (req: Request) => {
                 organization_id: organizationId,
                 invited_by: user.id,
                 role: 'primary_admin',
+                invite_code: inviteCode,
             },
             redirectTo: `${appUrl}/auth/callback`,
         });
@@ -133,23 +156,10 @@ serve(async (req: Request) => {
 
         const newUserId = inviteData.user.id;
 
-        // 7. Approve the trigger-created profile via stored procedure
-        // The trigger already created profile with role='primary_admin', status='pending'
-        // We use change_user_status() RPC which handles write-protection triggers
-        // and creates an audit trail. Must use supabaseClient (user auth) so auth.uid() works.
-        const { data: approveResult, error: approveError } = await supabaseClient.rpc('change_user_status', {
-            p_user_id: newUserId,
-            p_new_status: 'approved',
-            p_reason: `Primary Admin invited by super admin for organization ${org.name}`,
-            p_request_id: crypto.randomUUID(),
-        });
+        // NOTE: No auto-approval. User profile stays as 'pending' (created by trigger).
+        // Super Admin must manually approve via Admin Panel > Pending Approvals.
 
-        if (approveError) {
-            console.error('Failed to approve user profile:', approveError);
-            console.warn('User was created but approval failed. Manual approval may be needed.');
-        }
-
-        console.log(`Primary Admin invite sent: ${fullName} (${email}) for org ${org.name}`);
+        console.log(`Primary Admin invite sent (pending approval): ${fullName} (${email}) for org ${org.name}`);
 
         return new Response(
             JSON.stringify({
@@ -160,8 +170,9 @@ serve(async (req: Request) => {
                     role: 'primary_admin',
                     organization_id: organizationId,
                     organization_name: org.name,
-                    status: 'approved',
+                    status: 'pending',
                     invite_sent: true,
+                    invite_code: inviteCode,
                 },
                 error: null,
             }),

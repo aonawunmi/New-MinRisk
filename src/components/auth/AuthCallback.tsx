@@ -28,6 +28,23 @@ export default function AuthCallback() {
       // Parse the hash fragment to determine the auth type
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       const type = hashParams.get('type');
+      const errorCode = hashParams.get('error_code');
+      const errorDescription = hashParams.get('error_description');
+
+      // Check for explicit error in the URL (e.g., expired link)
+      if (errorCode || errorDescription) {
+        console.error('Auth callback URL error:', errorCode, errorDescription);
+        const desc = errorDescription?.replace(/\+/g, ' ') || '';
+
+        if (desc.includes('expired') || errorCode === 'otp_expired') {
+          setError('Your invitation link has expired. Please contact your administrator to resend the invitation.');
+        } else if (desc.includes('already') || errorCode === 'otp_disabled') {
+          setError('This invitation link has already been used. If you need a new invitation, please contact your administrator.');
+        } else {
+          setError(desc || 'Failed to process authentication. Please contact your administrator for a new invitation.');
+        }
+        return;
+      }
 
       // Wait for Supabase to process the tokens from the URL
       // The client auto-detects tokens in the hash and establishes a session
@@ -35,7 +52,11 @@ export default function AuthCallback() {
 
       if (sessionError) {
         console.error('Auth callback session error:', sessionError);
-        setError('Failed to process authentication. The link may have expired.');
+        if (sessionError.message?.includes('expired')) {
+          setError('Your invitation link has expired. Please contact your administrator to resend the invitation.');
+        } else {
+          setError('Failed to process authentication. The link may have expired or been used already. Please contact your administrator for a new invitation.');
+        }
         return;
       }
 
@@ -56,7 +77,7 @@ export default function AuthCallback() {
         // Timeout after 10 seconds
         setTimeout(() => {
           subscription.unsubscribe();
-          setError('Authentication timed out. Please try again or request a new link.');
+          setError('Authentication timed out. Please try again or request a new invitation link from your administrator.');
         }, 10000);
 
         return;
@@ -66,7 +87,7 @@ export default function AuthCallback() {
       redirectByType(type);
     } catch (err) {
       console.error('Auth callback error:', err);
-      setError('An unexpected error occurred. Please try again.');
+      setError('An unexpected error occurred. Please try again or contact your administrator.');
     }
   }
 

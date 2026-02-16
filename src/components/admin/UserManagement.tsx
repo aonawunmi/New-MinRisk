@@ -388,6 +388,11 @@ export default function UserManagement() {
         <TabsTrigger value="users" className="flex items-center gap-2">
           <Users className="h-4 w-4" />
           User Management
+          {pendingUsers.length > 0 && (
+            <Badge className="bg-amber-500 text-white text-xs px-1.5 py-0 min-w-[20px] h-5 flex items-center justify-center rounded-full ml-1">
+              {pendingUsers.length}
+            </Badge>
+          )}
         </TabsTrigger>
         <TabsTrigger value="invitations" className="flex items-center gap-2">
           <Mail className="h-4 w-4" />

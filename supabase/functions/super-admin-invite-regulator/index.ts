@@ -2,11 +2,15 @@
 // Purpose: Super Admin can invite regulator users and assign them to regulators
 // Security: Only super_admin role can call this
 // Pattern: Matches super-admin-invite-primary-admin for consistency
+// Updated: 2026-02-16 (Auth Overhaul: removed auto-approval)
 //
 // IMPORTANT: There is a database trigger `on_auth_user_created` on auth.users
 // that automatically creates a user_profiles row when inviteUserByEmail is called.
 // The trigger reads role/full_name/organization_id from raw_user_meta_data.
-// Therefore we must NOT insert a new profile - we UPDATE the trigger-created one.
+// The profile is created with status='pending' — super admin must manually approve.
+//
+// NOTE: No invite tracking in user_invitations for regulators because regulators
+// don't belong to an organization (user_invitations requires organization_id).
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -149,23 +153,10 @@ serve(async (req: Request) => {
 
         const newUserId = inviteData.user.id;
 
-        // 7. Approve the trigger-created profile via stored procedure
-        // The trigger already created profile with role='regulator', status='pending'
-        // We use change_user_status() RPC which handles write-protection triggers
-        // and creates an audit trail. Must use supabaseClient (user auth) so auth.uid() works.
-        const { data: approveResult, error: approveError } = await supabaseClient.rpc('change_user_status', {
-            p_user_id: newUserId,
-            p_new_status: 'approved',
-            p_reason: `Regulator user invited by super admin, assigned to: ${regulators.map(r => r.name).join(', ')}`,
-            p_request_id: crypto.randomUUID(),
-        });
+        // NOTE: No auto-approval. User profile stays as 'pending' (created by trigger).
+        // Super Admin must manually approve via Admin Panel > Pending Approvals.
 
-        if (approveError) {
-            console.error('Error approving user profile:', approveError);
-            console.warn('User was created but approval failed. Manual approval may be needed.');
-        }
-
-        // 8. Grant access to specified regulators
+        // 7. Grant access to specified regulators
         const accessRecords = regulator_ids.map((regulator_id) => ({
             user_id: newUserId,
             regulator_id,
@@ -186,8 +177,8 @@ serve(async (req: Request) => {
             );
         }
 
-        // 9. Success
-        console.log(`Regulator user invited: ${email}, assigned to: ${regulators.map(r => r.name).join(', ')}`);
+        // 8. Success
+        console.log(`Regulator user invited (pending approval): ${email}, assigned to: ${regulators.map(r => r.name).join(', ')}`);
 
         return new Response(
             JSON.stringify({
@@ -197,7 +188,7 @@ serve(async (req: Request) => {
                     full_name,
                     role: 'regulator',
                     regulators: regulators.map(r => r.name),
-                    status: 'approved',
+                    status: 'pending',
                     invite_sent: true,
                 },
                 error: null,
