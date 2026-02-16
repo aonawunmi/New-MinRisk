@@ -39,7 +39,7 @@ import AIAssistant from '@/components/ai/AIAssistant';
 import AdminPanel from '@/components/admin/AdminPanel';
 import AdminCheck from '@/components/debug/AdminCheck';
 import RegulatorDashboard from '@/components/regulator/RegulatorDashboard';
-import RegulatoryReports from '@/components/reports/RegulatoryReports';
+import ReportHub from '@/components/reports/ReportHub';
 import type { AuthState } from '@/types/auth';
 
 export default function App() {
@@ -258,11 +258,6 @@ export default function App() {
                       </TabsTrigger>
                     )}
 
-                    {features.risk_intel && (
-                      <TabsTrigger value="intel" className="text-xs sm:text-sm whitespace-nowrap">
-                        <span className="hidden sm:inline">🧠 </span>Intel
-                      </TabsTrigger>
-                    )}
                   </>
                 )}
 
@@ -392,7 +387,7 @@ export default function App() {
 
             {authState.isAdmin && !authState.isSuperAdmin && (
               <TabsContent value="reports">
-                <RegulatoryReports />
+                <ReportHub />
               </TabsContent>
             )}
 
