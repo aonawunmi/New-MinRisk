@@ -188,6 +188,11 @@ export async function signOut(): Promise<{ error: AuthError | Error | null }> {
     const { error } = await supabase.auth.signOut();
 
     if (error) {
+      // "Auth session missing" means session is already gone — treat as success
+      if (error.message?.includes('session missing') || error.message?.includes('Session not found')) {
+        console.log('Session already expired, clearing local state');
+        return { error: null };
+      }
       console.error('Sign out error:', error.message);
       return { error };
     }
