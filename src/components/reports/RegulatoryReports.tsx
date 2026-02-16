@@ -82,10 +82,13 @@ export default function RegulatoryReports() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [profile?.organization_id]);
 
   async function loadData() {
-    if (!profile?.organization_id) return;
+    if (!profile?.organization_id) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     setError(null);
