@@ -26,6 +26,7 @@ import {
   type RiskIntelligenceAlert,
 } from '@/lib/riskIntelligence';
 import { supabase } from '@/lib/supabase';
+import { getAuthenticatedProfile } from '@/lib/auth';
 import { isUserAdmin } from '@/lib/profiles';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -837,22 +838,15 @@ function IntelligenceAlerts() {
     setScanMessage('🔍 Counting unanalyzed events...');
 
     try {
-      // Get auth session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      // Get authenticated user profile
+      const authProfile = await getAuthenticatedProfile();
+      if (!authProfile) {
         setScanMessage('❌ Not authenticated. Please log in.');
         setScanning(false);
         return;
       }
 
-      // Get count of unanalyzed events
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('organization_id')
-        .eq('id', session.user.id)
-        .single();
-
-      if (!profile) {
+      if (!authProfile.organization_id) {
         setScanMessage('❌ User profile not found');
         setScanning(false);
         return;
@@ -861,7 +855,7 @@ function IntelligenceAlerts() {
       const { count } = await supabase
         .from('external_events')
         .select('*', { count: 'exact', head: true })
-        .eq('organization_id', profile.organization_id)
+        .eq('organization_id', authProfile.organization_id)
         .eq('relevance_checked', false);
 
       if (!count || count === 0) {
@@ -940,21 +934,15 @@ function IntelligenceAlerts() {
     setScanMessage('🔄 Resetting events...');
 
     try {
-      // Get auth session and profile
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      // Get authenticated user profile
+      const authProfile = await getAuthenticatedProfile();
+      if (!authProfile) {
         setScanMessage('❌ Not authenticated');
         setResetting(false);
         return;
       }
 
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('organization_id')
-        .eq('id', session.user.id)
-        .single();
-
-      if (!profile) {
+      if (!authProfile.organization_id) {
         setScanMessage('❌ Profile not found');
         setResetting(false);
         return;
@@ -964,7 +952,7 @@ function IntelligenceAlerts() {
       const { data: eventsToReset } = await supabase
         .from('external_events')
         .select('id')
-        .eq('organization_id', profile.organization_id)
+        .eq('organization_id', authProfile.organization_id)
         .eq('relevance_checked', true)
         .order('created_at', { ascending: false })
         .limit(20);

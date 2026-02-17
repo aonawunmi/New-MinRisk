@@ -4,7 +4,7 @@
  * Functions for managing regulators and regulator user access
  */
 
-import { supabase } from './supabase';
+import { supabase, getClerkToken } from './supabase';
 
 export interface Regulator {
   id: string;
@@ -144,8 +144,8 @@ export async function inviteRegulatorUser(
   regulator_ids: string[]
 ): Promise<{ data: any; error: Error | null }> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    const token = await getClerkToken();
+    if (!token) {
       return { data: null, error: new Error('Not authenticated') };
     }
 
@@ -156,7 +156,7 @@ export async function inviteRegulatorUser(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           email,

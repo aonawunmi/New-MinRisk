@@ -15,6 +15,7 @@ import { getKRIsForRisk, type KRIDefinition } from '@/lib/kri';
 import { getIncidentsForRisk } from '@/lib/incidents';
 import { getOrganizationConfig, getLikelihoodLabel, getImpactLabel, type OrganizationConfig } from '@/lib/config';
 import { supabase } from '@/lib/supabase';
+import { getAuthenticatedProfile } from '@/lib/auth';
 import type { Risk } from '@/types/risk';
 import type { ResidualRisk } from '@/types/control';
 import RiskForm from './RiskForm';
@@ -171,18 +172,12 @@ export default function RiskRegister() {
   }, []);
 
   async function loadActivePeriodData() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const authProfile = await getAuthenticatedProfile();
+    if (!authProfile) return;
 
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
+    if (!authProfile.organization_id) return;
 
-    if (!profile) return;
-
-    const { data } = await getActivePeriodV2(profile.organization_id);
+    const { data } = await getActivePeriodV2(authProfile.organization_id);
     if (data) {
       setActivePeriod({
         year: data.current_period_year,
@@ -193,20 +188,14 @@ export default function RiskRegister() {
 
   async function checkAdminRole() {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const authProfile = await getAuthenticatedProfile();
+      if (!authProfile) return;
 
       // Store current user ID
-      setCurrentUserId(user.id);
-
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
+      setCurrentUserId(authProfile.id);
 
       // Check if user has any admin role (primary_admin, secondary_admin, or super_admin)
-      const isAdminRole = profile?.role && ['super_admin', 'primary_admin', 'secondary_admin'].includes(profile.role);
+      const isAdminRole = authProfile.role && ['super_admin', 'primary_admin', 'secondary_admin'].includes(authProfile.role);
       setIsAdmin(!!isAdminRole);
     } catch (err) {
       console.error('Error checking admin role:', err);

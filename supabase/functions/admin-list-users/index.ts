@@ -1,10 +1,11 @@
 // Edge Function: admin-list-users
 // Replaces client-side supabaseAdmin operations for listing users
-// Security: Verifies admin role before executing, uses service role internally
+// Security: Verifies admin role via Clerk auth before executing, uses service role internally
 // Created: 2025-12-21 (Security Hardening - Remove service role from client)
+// Updated: 2026-02-16 (Migrated to Clerk auth)
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { verifyClerkAuth, isAdmin } from '../_shared/clerk-auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,55 +26,20 @@ serve(async (req) => {
   }
 
   try {
-    // Get authorization header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
+    // 1. Verify user is authenticated via Clerk
+    let profile, supabaseClient, supabaseAdmin;
+    try {
+      ({ profile, supabaseClient, supabaseAdmin } = await verifyClerkAuth(req));
+    } catch (authError) {
+      console.error('Auth verification failed:', authError);
       return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Initialize Supabase clients
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-
-    // Client with user's auth token (for verification)
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    // Admin client with service role (for privileged operations)
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
-    // 1. Verify user is authenticated
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) {
-      console.error('Auth verification failed:', userError);
-      return new Response(
-        JSON.stringify({ error: 'Authentication failed' }),
+        JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // 2. Verify user is admin
-    const { data: profile, error: profileError } = await supabaseClient
-      .from('user_profiles')
-      .select('role, organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      console.error('Profile lookup failed:', profileError);
-      return new Response(
-        JSON.stringify({ error: 'User profile not found' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const isAdmin = profile.role === 'super_admin' || profile.role === 'primary_admin' || profile.role === 'secondary_admin';
-    if (!isAdmin) {
+    if (!isAdmin(profile)) {
       console.error(`❌ Admin check failed - User role: "${profile.role}" (expected: super_admin, primary_admin, or secondary_admin)`);
       return new Response(
         JSON.stringify({
@@ -97,6 +63,7 @@ serve(async (req) => {
     }
 
     // 5. Use admin client to query user_profiles (bypasses RLS)
+    // Emails are now stored in user_profiles, no need to query auth.users
     let query = supabaseAdmin
       .from('user_profiles')
       .select('*')
@@ -118,36 +85,17 @@ serve(async (req) => {
       );
     }
 
-    // 6. Get emails from auth.users for each profile
-    const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers();
-
-    if (authError) {
-      console.error('List auth users error:', authError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to fetch user emails' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 7. Create a map of user_id -> email
-    const emailMap = new Map(authUsers.users.map(u => [u.id, u.email]));
-
-    // 8. Merge profiles with emails
-    const usersWithEmail = (profiles || []).map(profile => ({
-      ...profile,
-      email: emailMap.get(profile.id) || '',
-    }));
-
-    console.log(`✅ Listed ${usersWithEmail.length} users for org ${organizationId} (pending: ${filterPending})`);
+    console.log(`✅ Listed ${(profiles || []).length} users for org ${organizationId} (pending: ${filterPending})`);
 
     return new Response(
-      JSON.stringify({ data: usersWithEmail, error: null }),
+      JSON.stringify({ data: profiles || [], error: null }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('❌ Unexpected error:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

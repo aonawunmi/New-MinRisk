@@ -1,13 +1,11 @@
 /**
- * UserMenu Component
+ * UserMenu Component — CLERK VERSION
  *
- * User menu with profile info and logout.
- * Clean implementation using new auth system.
- * UI pattern referenced from old UserMenu.tsx.
+ * User menu with profile info and logout via Clerk.
  */
 
 import { useState } from 'react';
-import { signOut } from '@/lib/auth';
+import { useClerk } from '@clerk/clerk-react';
 import { Button } from '@/components/ui/button';
 import {
   Popover,
@@ -15,40 +13,29 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { User, LogOut, Mail, Shield } from 'lucide-react';
-import type { UserProfile, AuthUser } from '@/types/auth';
 
 interface UserMenuProps {
-  user: AuthUser;
-  profile: UserProfile;
+  user: { id: string; email?: string };
+  profile: { full_name: string; role: string; status: string };
   isAdmin: boolean;
 }
 
 export default function UserMenu({ user, profile, isAdmin }: UserMenuProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const { signOut } = useClerk();
 
   const handleLogout = async () => {
     setIsLoading(true);
-    console.log('Logging out...');
-
     try {
-      const { error } = await signOut();
-      if (error) {
-        console.error('Logout error:', error);
-        alert('Failed to logout: ' + error.message);
-        setIsLoading(false);
-      } else {
-        console.log('Logged out successfully');
-        // Reload to clear all state
-        window.location.href = '/';
-      }
+      await signOut();
     } catch (err) {
-      console.error('Unexpected logout error:', err);
-      alert('An unexpected error occurred during logout');
+      console.error('Logout error:', err);
       setIsLoading(false);
     }
   };
 
   const getRoleBadge = () => {
+    if (profile.role === 'super_admin') return 'Super Admin';
     if (profile.role === 'primary_admin') return 'Primary Admin';
     if (profile.role === 'secondary_admin') return 'Secondary Admin';
     return 'User';
@@ -87,7 +74,6 @@ export default function UserMenu({ user, profile, isAdmin }: UserMenuProps) {
             )}
             <div className="pt-2 text-xs text-gray-500">
               <div>Status: {profile.status}</div>
-              <div>User ID: {user.id.slice(0, 8)}...</div>
             </div>
           </div>
 

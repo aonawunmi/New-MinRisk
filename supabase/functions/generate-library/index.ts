@@ -2,6 +2,7 @@
 // Uses Claude to match custom taxonomy categories to seed library data
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { verifyClerkAuth } from '../_shared/clerk-auth.ts'
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -161,6 +162,17 @@ serve(async (req) => {
     }
 
     try {
+        // Authenticate user via Clerk
+        let profile, supabaseClient, supabaseAdmin;
+        try {
+            ({ profile, supabaseClient, supabaseAdmin } = await verifyClerkAuth(req));
+        } catch (authError) {
+            return new Response(
+                JSON.stringify({ error: "Unauthorized" }),
+                { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+        }
+
         const claudeApiKey = Deno.env.get('ANTHROPIC_API_KEY');
         if (!claudeApiKey) {
             throw new Error('ANTHROPIC_API_KEY not configured');

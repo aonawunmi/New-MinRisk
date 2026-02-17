@@ -1,11 +1,12 @@
 // Edge Function: admin-manage-user
 // Replaces client-side supabaseAdmin operations for managing users
 // Operations: approve, reject, update role, update status, delete user
-// Security: Uses stored procedures with auth.uid() for audit trail
+// Security: Uses stored procedures with Clerk auth for audit trail
 // Updated: 2025-12-21 (Phase 4 - Use stored procedures instead of direct UPDATEs)
+// Updated: 2026-02-16 (Migrated to Clerk auth)
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { verifyClerkAuth, isAdmin } from '../_shared/clerk-auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -35,58 +36,20 @@ serve(async (req) => {
   }
 
   try {
-    // Get authorization header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
+    // 1. Verify user is authenticated via Clerk
+    let profile, supabaseClient, supabaseAdmin;
+    try {
+      ({ profile, supabaseClient, supabaseAdmin } = await verifyClerkAuth(req));
+    } catch (authError) {
+      console.error('Auth verification failed:', authError);
       return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Initialize Supabase clients
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-
-    // Client with user's auth token (for RPC calls and verification)
-    // IMPORTANT: Use this for RPC calls so auth.uid() works in stored procedures
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    // Admin client with service role (for privileged operations like delete)
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
-    // 1. Verify user is authenticated
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) {
-      console.error('Auth verification failed:', userError);
-      return new Response(
-        JSON.stringify({ error: 'Authentication failed' }),
+        JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // 2. Verify user is admin
-    const { data: adminProfile, error: profileError } = await supabaseClient
-      .from('user_profiles')
-      .select('role, organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !adminProfile) {
-      console.error('Profile lookup failed:', profileError);
-      return new Response(
-        JSON.stringify({ error: 'User profile not found' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const isAdmin = adminProfile.role === 'super_admin' ||
-                   adminProfile.role === 'primary_admin' ||
-                   adminProfile.role === 'secondary_admin';
-    if (!isAdmin) {
+    if (!isAdmin(profile)) {
       return new Response(
         JSON.stringify({ error: 'Admin access required' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -100,7 +63,7 @@ serve(async (req) => {
     // Generate request ID for correlation
     const requestId = crypto.randomUUID();
 
-    console.log(`📋 Admin action: ${action} by ${user.id} on user ${userId} (request: ${requestId})`);
+    console.log(`📋 Admin action: ${action} by ${profile.id} on user ${userId} (request: ${requestId})`);
 
     // 4. Execute the requested action
     let result: any;
@@ -260,8 +223,9 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error('❌ Unexpected error:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

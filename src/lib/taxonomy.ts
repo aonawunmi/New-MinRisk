@@ -6,6 +6,7 @@
  */
 
 import { supabase } from './supabase';
+import { getAuthenticatedProfile } from './auth';
 import type { ApiResponse } from '@/types/api';
 import type {
   RiskCategory,
@@ -74,16 +75,10 @@ export async function createCategory(
     }
 
     // Get user's organization_id
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    const profile = await getAuthenticatedProfile();
+    if (!profile) throw new Error('Not authenticated');
 
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!profile?.organization_id) {
+    if (!profile.organization_id) {
       throw new Error('No organization found for user');
     }
 
@@ -224,16 +219,10 @@ export async function createSubcategory(
     }
 
     // Get user's organization_id
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    const profile = await getAuthenticatedProfile();
+    if (!profile) throw new Error('Not authenticated');
 
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!profile?.organization_id) {
+    if (!profile.organization_id) {
       throw new Error('No organization found for user');
     }
 

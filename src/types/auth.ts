@@ -19,6 +19,8 @@ export type UserStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 
 export interface UserProfile {
   id: string;
+  clerk_id: string | null;
+  email: string | null;
   organization_id: string | null;
   full_name: string;
   role: UserRole;

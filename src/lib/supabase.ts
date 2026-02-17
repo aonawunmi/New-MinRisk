@@ -11,25 +11,37 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 /**
- * Supabase client - Uses RLS policies for security
+ * Clerk token getter — set by ClerkSupabaseProvider when Clerk session is available.
+ * Returns the Clerk JWT that Supabase validates via Third-Party Auth.
+ */
+let getToken: (() => Promise<string | null>) | null = null;
+
+export function setClerkTokenGetter(fn: (() => Promise<string | null>) | null) {
+  getToken = fn;
+}
+
+/**
+ * Get the current Clerk JWT token (for Edge Function calls).
+ */
+export async function getClerkToken(): Promise<string | null> {
+  return getToken ? await getToken() : null;
+}
+
+/**
+ * Supabase client — Uses Clerk JWT via Third-Party Auth
  *
- * Security Model (Updated Dec 2025):
- * - All queries go through Row-Level Security (RLS) policies
- * - Admin operations now handled via secure Edge Functions
- * - Service role key NEVER exposed to browser
- *
- * Use this for ALL operations:
- * - Reading user data (filtered by RLS)
- * - Creating/updating resources (validated by RLS)
- * - Calling Edge Functions (admin operations verified server-side)
+ * Security Model (Updated Feb 2026 — Clerk Migration):
+ * - Clerk handles all authentication (sign-in, sign-up, sessions)
+ * - Supabase validates Clerk JWT via JWKS endpoint
+ * - auth.jwt()->>'sub' returns the Clerk user ID
+ * - RLS policies use clerk_user_uuid() helper to map Clerk ID → UUID
+ * - Admin operations still use Edge Functions (service role server-side)
  */
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-    storageKey: 'minrisk-auth', // Unique key to avoid conflicts
-    flowType: 'pkce',
+  accessToken: async () => {
+    if (!getToken) return null;
+    const token = await getToken();
+    return token ?? null;
   },
   global: {
     headers: {
@@ -37,16 +49,3 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     },
   },
 });
-
-/**
- * ❌ REMOVED: supabaseAdmin client (Security Hardening - Dec 2025)
- *
- * Previously exposed service role key to browser - CRITICAL SECURITY RISK
- *
- * Admin operations now use Edge Functions:
- * - admin-list-users: List users in organization
- * - admin-manage-user: Approve/reject/role changes
- * - admin-invite-user: Create user invitations
- *
- * See src/lib/admin.ts for updated API
- */

@@ -4,6 +4,7 @@
  */
 
 import { supabase } from './supabase';
+import { getAuthenticatedProfile } from './auth';
 import type {
   RiskResponse,
   CreateRiskResponseData,
@@ -69,7 +70,7 @@ export async function getRiskResponse(riskId: string) {
  * Create or update risk response (upsert)
  */
 export async function upsertRiskResponse(input: CreateRiskResponseData) {
-  const { data: user } = await supabase.auth.getUser();
+  const authProfile = await getAuthenticatedProfile();
 
   const { data, error } = await supabase
     .from('risk_responses')
@@ -80,7 +81,7 @@ export async function upsertRiskResponse(input: CreateRiskResponseData) {
         response_rationale: input.response_rationale || null,
         ai_proposed_response: input.ai_proposed_response || null,
         ai_response_rationale: input.ai_response_rationale || null,
-        updated_by: user?.user?.id,
+        updated_by: authProfile?.id,
       },
       {
         onConflict: 'risk_id',
@@ -99,13 +100,13 @@ export async function updateRiskResponse(
   riskId: string,
   updates: UpdateRiskResponseData
 ) {
-  const { data: user } = await supabase.auth.getUser();
+  const authProfile = await getAuthenticatedProfile();
 
   const { data, error } = await supabase
     .from('risk_responses')
     .update({
       ...updates,
-      updated_by: user?.user?.id,
+      updated_by: authProfile?.id,
     })
     .eq('risk_id', riskId)
     .select()
@@ -342,7 +343,7 @@ export async function getPCIInstance(pciInstanceId: string) {
  * Note: This will trigger auto-creation of 10 secondary control instances
  */
 export async function createPCIInstance(input: CreatePCIInstanceData) {
-  const { data: user } = await supabase.auth.getUser();
+  const authProfile = await getAuthenticatedProfile();
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('organization_id')
@@ -375,7 +376,7 @@ export async function createPCIInstance(input: CreatePCIInstanceData) {
       owner_user_id: input.owner_user_id || null,
       dependencies: input.dependencies || null,
       status: 'draft',
-      created_by: user?.user?.id,
+      created_by: authProfile?.id,
     })
     .select(`
       *,
@@ -397,13 +398,13 @@ export async function updatePCIInstance(
   pciInstanceId: string,
   updates: UpdatePCIInstanceData
 ) {
-  const { data: user } = await supabase.auth.getUser();
+  const authProfile = await getAuthenticatedProfile();
 
   const { data, error } = await supabase
     .from('pci_instances')
     .update({
       ...updates,
-      updated_by: user?.user?.id,
+      updated_by: authProfile?.id,
     })
     .eq('id', pciInstanceId)
     .select(`
@@ -437,7 +438,7 @@ export async function activatePCIInstance(pciInstanceId: string) {
  * Creates a minimal PCI instance with status='not_applicable'
  */
 export async function declinePCITemplate(riskId: string, templateId: string) {
-  const { data: user } = await supabase.auth.getUser();
+  const authProfile = await getAuthenticatedProfile();
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('organization_id')
@@ -467,7 +468,7 @@ export async function declinePCITemplate(riskId: string, templateId: string) {
       trigger_frequency: 'N/A',
       owner_role: 'N/A',
       status: 'not_applicable',
-      created_by: user?.user?.id,
+      created_by: authProfile?.id,
     })
     .select()
     .single();
@@ -559,13 +560,13 @@ export async function updateSecondaryControlInstance(
   instanceId: string,
   updates: UpdateSecondaryControlData
 ) {
-  const { data: user } = await supabase.auth.getUser();
+  const authProfile = await getAuthenticatedProfile();
 
   // If status is being set, update attestation metadata
   const attestationFields =
     updates.status !== undefined
       ? {
-          attested_by: user?.user?.id,
+          attested_by: authProfile?.id,
           attested_at: new Date().toISOString(),
         }
       : {};
@@ -592,7 +593,7 @@ export async function updateSecondaryControlInstance(
 export async function batchUpdateSecondaryControls(
   updates: Array<{ id: string } & UpdateSecondaryControlData>
 ) {
-  const { data: user } = await supabase.auth.getUser();
+  const authProfile = await getAuthenticatedProfile();
   const results = [];
 
   for (const update of updates) {
@@ -600,7 +601,7 @@ export async function batchUpdateSecondaryControls(
     const attestationFields =
       fields.status !== undefined
         ? {
-            attested_by: user?.user?.id,
+            attested_by: authProfile?.id,
             attested_at: new Date().toISOString(),
           }
         : {};
@@ -729,7 +730,7 @@ export async function getEvidenceRequests(filters?: {
  * Create an evidence request
  */
 export async function createEvidenceRequest(input: CreateEvidenceRequestData) {
-  const { data: user } = await supabase.auth.getUser();
+  const authProfile = await getAuthenticatedProfile();
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('organization_id')
@@ -746,7 +747,7 @@ export async function createEvidenceRequest(input: CreateEvidenceRequestData) {
       risk_id: input.risk_id || null,
       pci_instance_id: input.pci_instance_id || null,
       secondary_control_instance_id: input.secondary_control_instance_id || null,
-      requested_by: user?.user?.id,
+      requested_by: authProfile?.id,
       due_date: input.due_date,
       notes: input.notes || null,
       is_critical_scope: input.is_critical_scope || false,
@@ -798,14 +799,14 @@ export async function getEvidenceSubmissions(requestId: string) {
 export async function createEvidenceSubmission(
   input: CreateEvidenceSubmissionData
 ) {
-  const { data: user } = await supabase.auth.getUser();
+  const authProfile = await getAuthenticatedProfile();
 
   const { data, error } = await supabase
     .from('evidence_submissions')
     .insert({
       evidence_request_id: input.evidence_request_id,
       submission_note: input.submission_note,
-      submitted_by: user?.user?.id,
+      submitted_by: authProfile?.id,
     })
     .select()
     .single();
@@ -826,12 +827,12 @@ export async function reviewEvidenceSubmission(
   decision: 'accepted' | 'rejected',
   reviewNotes?: string
 ) {
-  const { data: user } = await supabase.auth.getUser();
+  const authProfile = await getAuthenticatedProfile();
 
   const { data, error } = await supabase
     .from('evidence_submissions')
     .update({
-      reviewed_by: user?.user?.id,
+      reviewed_by: authProfile?.id,
       reviewed_at: new Date().toISOString(),
       decision,
       review_notes: reviewNotes || null,

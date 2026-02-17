@@ -2,8 +2,8 @@
 // Securely handles Anthropic API calls for the Risk Appetite framework
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { USE_CASE_MODELS } from '../_shared/ai-models.ts'
+import { verifyClerkAuth } from '../_shared/clerk-auth.ts'
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -17,26 +17,15 @@ serve(async (req) => {
     }
 
     try {
-        // 1. Authenticate User
-        const supabaseClient = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        )
-
-        const authHeader = req.headers.get('Authorization')
-        if (!authHeader) {
-            throw new Error('Missing Authorization header')
-        }
-
-        const { data: { user }, error: userError } = await supabaseClient.auth.getUser(
-            authHeader.replace('Bearer ', '')
-        )
-
-        if (userError || !user) {
+        // 1. Authenticate User via Clerk
+        let profile, supabaseClient, supabaseAdmin;
+        try {
+            ({ profile, supabaseClient, supabaseAdmin } = await verifyClerkAuth(req));
+        } catch (authError) {
             return new Response(
-                JSON.stringify({ error: 'Unauthorized', details: userError }),
-                { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            )
+                JSON.stringify({ error: "Unauthorized" }),
+                { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
         }
 
         // 2. Get API Key

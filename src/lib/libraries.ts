@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getAuthenticatedProfile } from './auth';
 
 /**
  * Library Management Service Layer
@@ -251,18 +252,12 @@ export async function createCustomRootCause(
 ): Promise<{ data: RootCause | null; error: Error | null }> {
   try {
     // Get current user and organization
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
+    const profile = await getAuthenticatedProfile();
+    if (!profile) {
       return { data: null, error: new Error('User not authenticated') };
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
+    if (!profile.organization_id) {
       return { data: null, error: new Error('User profile not found') };
     }
 
@@ -305,18 +300,12 @@ export async function createCustomImpact(
 ): Promise<{ data: Impact | null; error: Error | null }> {
   try {
     // Get current user and organization
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
+    const profile = await getAuthenticatedProfile();
+    if (!profile) {
       return { data: null, error: new Error('User not authenticated') };
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
+    if (!profile.organization_id) {
       return { data: null, error: new Error('User profile not found') };
     }
 

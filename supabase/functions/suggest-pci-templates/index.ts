@@ -13,13 +13,11 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { USE_CASE_MODELS } from "../_shared/ai-models.ts";
+import { verifyClerkAuth } from '../_shared/clerk-auth.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -72,6 +70,17 @@ serve(async (req) => {
   }
 
   try {
+    // Verify Clerk authentication
+    let profile, supabaseClient, supabaseAdmin;
+    try {
+      ({ profile, supabaseClient, supabaseAdmin } = await verifyClerkAuth(req));
+    } catch (authError) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Parse request body
     const body = await req.json();
     const { risk_id, response_type } = body;
@@ -89,11 +98,8 @@ serve(async (req) => {
       );
     }
 
-    // Create Supabase client
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
     // Fetch risk data
-    const { data: risk, error: riskError } = await supabase
+    const { data: risk, error: riskError } = await supabaseAdmin
       .from("risks")
       .select("id, risk_title, risk_description, category")
       .eq("id", risk_id)
@@ -111,7 +117,7 @@ serve(async (req) => {
     }
 
     // Fetch all active PCI templates
-    const { data: templates, error: templatesError } = await supabase
+    const { data: templates, error: templatesError } = await supabaseAdmin
       .from("pci_templates")
       .select("id, name, category, objective_default, purpose")
       .eq("is_active", true)

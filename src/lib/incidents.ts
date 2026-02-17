@@ -4,7 +4,8 @@
  * RLS policies automatically enforce access control
  */
 
-import { supabase } from './supabase';
+import { supabase, getClerkToken } from './supabase';
+import { getAuthenticatedProfile } from './auth';
 import type {
   Incident,
   IncidentSummary,
@@ -103,9 +104,9 @@ export async function getIncidentById(incidentId: string) {
  */
 export async function createIncident(input: CreateIncidentInput) {
   try {
-    // Get current user (needed for authentication check)
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    // Get current user profile (needed for authentication check)
+    const profile = await getAuthenticatedProfile();
+    if (!profile) throw new Error('Not authenticated');
 
     // Call PostgreSQL function that bypasses PostgREST cache
     const { data, error } = await supabase
@@ -165,9 +166,9 @@ export async function updateIncidentDescription(
   reason: string
 ) {
   try {
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    // Get current user profile
+    const profile = await getAuthenticatedProfile();
+    if (!profile) throw new Error('Not authenticated');
 
     // Get current incident
     const { data: incident, error: fetchError } = await supabase
@@ -196,7 +197,7 @@ export async function updateIncidentDescription(
       .insert({
         incident_id: incidentId,
         organization_id: incident.organization_id,
-        amended_by: user.id,
+        amended_by: profile.id,
         field_name: 'description',
         old_value: incident.description,
         new_value: newDescription,
@@ -278,8 +279,8 @@ export async function linkIncidentToRisk(
   confidenceScore?: number
 ) {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    const profile = await getAuthenticatedProfile();
+    if (!profile) throw new Error('Not authenticated');
 
     // Get incident's organization
     const { data: incident, error: incidentError } = await supabase
@@ -304,7 +305,7 @@ export async function linkIncidentToRisk(
         .from('incident_risk_links')
         .update({
           risk_id: riskId,
-          linked_by: user.id,
+          linked_by: profile.id,
           linked_at: new Date().toISOString(),
         })
         .eq('incident_id', incidentId);
@@ -317,7 +318,7 @@ export async function linkIncidentToRisk(
         .insert({
           organization_id: incident.organization_id,
           incident_id: incidentId,
-          modified_by: user.id,
+          modified_by: profile.id,
           old_risk_id: existingLink.risk_id,
           new_risk_id: riskId,
           mapping_source: mappingSource,
@@ -331,7 +332,7 @@ export async function linkIncidentToRisk(
         .insert({
           incident_id: incidentId,
           risk_id: riskId,
-          linked_by: user.id,
+          linked_by: profile.id,
         });
 
       if (insertError) throw insertError;
@@ -342,7 +343,7 @@ export async function linkIncidentToRisk(
         .insert({
           organization_id: incident.organization_id,
           incident_id: incidentId,
-          modified_by: user.id,
+          modified_by: profile.id,
           old_risk_id: null,
           new_risk_id: riskId,
           mapping_source: mappingSource,
@@ -363,8 +364,8 @@ export async function linkIncidentToRisk(
  */
 export async function unlinkIncidentFromRisk(incidentId: string, reason?: string) {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    const profile = await getAuthenticatedProfile();
+    if (!profile) throw new Error('Not authenticated');
 
     // Get current link and incident org
     const { data: currentLink } = await supabase
@@ -397,7 +398,7 @@ export async function unlinkIncidentFromRisk(incidentId: string, reason?: string
       .insert({
         organization_id: incident.organization_id,
         incident_id: incidentId,
-        modified_by: user.id,
+        modified_by: profile.id,
         old_risk_id: currentLink.risk_id,
         new_risk_id: null,
         mapping_source: 'USER_MANUAL',
@@ -476,8 +477,8 @@ export async function getIncidentTypes() {
  */
 export async function analyzeIncidentForRiskMapping(incidentId: string) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) throw new Error('Not authenticated');
+    const token = await getClerkToken();
+    if (!token) throw new Error('Not authenticated');
 
     console.log(`🧠 Triggering AI analysis for incident: ${incidentId}`);
 
@@ -486,7 +487,7 @@ export async function analyzeIncidentForRiskMapping(incidentId: string) {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ incident_id: incidentId })

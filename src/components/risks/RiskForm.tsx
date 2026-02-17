@@ -18,6 +18,7 @@ import { getDivisions, getDepartmentsByDivision, type Division, type Department 
 import { listUsersInOrganization } from '@/lib/admin';
 import { isUserAdmin } from '@/lib/profiles';
 import { supabase } from '@/lib/supabase';
+import { getAuthenticatedProfile } from '@/lib/auth';
 import { isPCIWorkflowEnabled, checkActivationGate, getRiskResponse } from '@/lib/pci';
 import type { RiskResponse, G1GateResult } from '@/types/pci';
 import type { Control, UpdateControlData } from '@/types/control';
@@ -423,25 +424,19 @@ export default function RiskForm({
     setLoadingUsers(true);
     try {
       // Get current user's organization_id
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const authProfile = await getAuthenticatedProfile();
+      if (!authProfile) {
         console.error('User not authenticated');
         return;
       }
 
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('organization_id')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile) {
+      if (!authProfile.organization_id) {
         console.error('User profile not found');
         return;
       }
 
       // Load all users in organization
-      const { data: users, error } = await listUsersInOrganization(profile.organization_id);
+      const { data: users, error } = await listUsersInOrganization(authProfile.organization_id);
 
       if (error) {
         console.error('Failed to load users:', error);
@@ -469,20 +464,14 @@ export default function RiskForm({
   useEffect(() => {
     async function loadIndustryType() {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        const authProfile = await getAuthenticatedProfile();
+        if (!authProfile) return;
 
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('organization_id')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.organization_id) {
+        if (authProfile.organization_id) {
           const { data: org } = await supabase
             .from('organizations')
             .select('industry_type')
-            .eq('id', profile.organization_id)
+            .eq('id', authProfile.organization_id)
             .single();
 
           setIndustryType(org?.industry_type || null);

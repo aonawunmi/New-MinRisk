@@ -108,18 +108,17 @@ export default function UserAuditTrail() {
         if (statusError) {
           console.error('Error loading status transitions:', statusError);
         } else if (statusData) {
-          // Get emails for users
+          // Get emails and names for users
           const userIds = [...new Set(statusData.map(s => s.user_id))];
           const actorIds = [...new Set(statusData.map(s => s.actor_user_id))];
           const allIds = [...new Set([...userIds, ...actorIds])];
 
-          const { data: users } = await supabase.auth.admin.listUsers();
           const { data: profiles } = await supabase
             .from('user_profiles')
-            .select('id, full_name')
+            .select('id, email, full_name')
             .in('id', allIds);
 
-          const emailMap = new Map(users?.users.map(u => [u.id, u.email]) || []);
+          const emailMap = new Map(profiles?.map(p => [p.id, p.email]) || []);
           const nameMap = new Map(profiles?.map(p => [p.id, p.full_name]) || []);
 
           for (const item of statusData) {
@@ -172,13 +171,12 @@ export default function UserAuditTrail() {
           const actorIds = [...new Set(roleData.map(r => r.actor_user_id))];
           const allIds = [...new Set([...userIds, ...actorIds])];
 
-          const { data: users } = await supabase.auth.admin.listUsers();
           const { data: profiles } = await supabase
             .from('user_profiles')
-            .select('id, full_name')
+            .select('id, email, full_name')
             .in('id', allIds);
 
-          const emailMap = new Map(users?.users.map(u => [u.id, u.email]) || []);
+          const emailMap = new Map(profiles?.map(p => [p.id, p.email]) || []);
           const nameMap = new Map(profiles?.map(p => [p.id, p.full_name]) || []);
 
           for (const item of roleData) {

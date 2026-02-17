@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getAuthenticatedProfile } from './auth';
 
 /**
  * KRI (Key Risk Indicator) Management Service Layer
@@ -222,29 +223,26 @@ export async function createKRI(
   kriData: CreateKRIData
 ): Promise<{ data: KRIDefinition | null; error: Error | null }> {
   try {
-    // Get current user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    // Get current user profile
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { data: null, error: new Error('User not authenticated') };
     }
 
-    // Get user profile to get organization_id
-    const { data: profile, error: profileError } = await supabase
+    // Get organization_id from profile
+    const { data: userProfile, error: profileError } = await supabase
       .from('user_profiles')
       .select('organization_id')
-      .eq('id', user.id)
+      .eq('id', profile.id)
       .single();
 
-    if (profileError || !profile) {
+    if (profileError || !userProfile) {
       return { data: null, error: new Error('User profile not found') };
     }
 
     // Auto-generate kri_code if not provided
-    const kriCode = kriData.kri_code || await generateKRICode(profile.organization_id);
+    const kriCode = kriData.kri_code || await generateKRICode(userProfile.organization_id);
 
     const { data, error } = await supabase
       .from('kri_definitions')
@@ -252,8 +250,8 @@ export async function createKRI(
         {
           ...kriData,
           kri_code: kriCode,
-          organization_id: profile.organization_id,
-          user_id: user.id,
+          organization_id: userProfile.organization_id,
+          user_id: profile.id,
           enabled: kriData.enabled !== undefined ? kriData.enabled : true,
         },
       ])
@@ -413,13 +411,10 @@ export async function createKRIDataEntry(
   entryData: CreateKRIDataEntryInput
 ): Promise<{ data: KRIDataEntry | null; error: Error | null }> {
   try {
-    // Get current user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    // Get current user profile
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { data: null, error: new Error('User not authenticated') };
     }
 
@@ -446,7 +441,7 @@ export async function createKRIDataEntry(
           data_quality: entryData.data_quality || 'verified',
           notes: entryData.notes || null,
           alert_status: alertStatus,
-          entered_by: user.id,
+          entered_by: profile.id,
         },
       ])
       .select()
@@ -620,12 +615,9 @@ export async function acknowledgeKRIAlert(
   notes?: string
 ): Promise<{ error: Error | null }> {
   try {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { error: new Error('User not authenticated') };
     }
 
@@ -633,7 +625,7 @@ export async function acknowledgeKRIAlert(
       .from('kri_alerts')
       .update({
         status: 'acknowledged',
-        acknowledged_by: user.id,
+        acknowledged_by: profile.id,
         acknowledged_at: new Date().toISOString(),
         acknowledged_notes: notes || null,
       })
@@ -662,12 +654,9 @@ export async function resolveKRIAlert(
   resolutionNotes: string
 ): Promise<{ error: Error | null }> {
   try {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { error: new Error('User not authenticated') };
     }
 
@@ -675,7 +664,7 @@ export async function resolveKRIAlert(
       .from('kri_alerts')
       .update({
         status: 'resolved',
-        resolved_by: user.id,
+        resolved_by: profile.id,
         resolved_at: new Date().toISOString(),
         resolution_notes: resolutionNotes,
       })
@@ -709,12 +698,9 @@ export async function linkKRIToRisk(
   aiConfidence?: number
 ): Promise<{ data: KRIRiskLink | null; error: Error | null }> {
   try {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { data: null, error: new Error('User not authenticated') };
     }
 
@@ -743,7 +729,7 @@ export async function linkKRIToRisk(
           kri_id: kriId,
           risk_id: riskId,  // Now using risk_id (UUID)
           ai_link_confidence: aiConfidence || null,
-          linked_by: user.id,
+          linked_by: profile.id,
         },
       ])
       .select()

@@ -1,27 +1,21 @@
 /**
- * MinRisk - Clean Rebuild Main App
+ * MinRisk - Main App
  *
- * Phase 2: Auth & Layout
- * Using new auth system with proper admin tab visibility.
- * Mobile-optimized with responsive navigation.
+ * Authentication handled by Clerk.
+ * When signed out: shows Clerk <SignIn /> component.
+ * When signed in: loads profile from Supabase and shows main app.
  */
 
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { signOut, useAuth, getCurrentUser } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { BrowserRouter } from 'react-router-dom';
+import { SignIn, useClerk } from '@clerk/clerk-react';
+import { useAuth } from '@/lib/auth';
 import { useOrgBranding } from '@/hooks/useOrgBranding';
 import { useOrgFeatures } from '@/hooks/useOrgFeatures';
-import { getCurrentUserProfile, isUserAdmin, isSuperAdmin } from '@/lib/profiles';
+import { isUserAdmin, isSuperAdmin as checkSuperAdmin } from '@/lib/profiles';
+import { isPCIWorkflowEnabled } from '@/lib/pci';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import LoginForm from '@/components/auth/LoginForm';
-import SignupForm from '@/components/auth/SignupForm';
-import AuthCallback from '@/components/auth/AuthCallback';
-import SetPasswordForm from '@/components/auth/SetPasswordForm';
-import ForgotPasswordForm from '@/components/auth/ForgotPasswordForm';
-import ResetPasswordForm from '@/components/auth/ResetPasswordForm';
 import UserMenu from '@/components/auth/UserMenu';
-import { SessionManager } from '@/components/auth/SessionManager';
 import MobileNav from '@/components/layout/MobileNav';
 import Dashboard from '@/components/dashboard/Dashboard';
 import Analytics from '@/components/analytics/Analytics';
@@ -29,7 +23,6 @@ import RiskHistoryView from '@/components/analytics/RiskHistoryView';
 import RiskRegister from '@/components/risks/RiskRegister';
 import ControlRegister from '@/components/controls/ControlRegister';
 import PCIControlsDashboard from '@/components/controls/PCIControlsDashboard';
-import { isPCIWorkflowEnabled } from '@/lib/pci';
 import KRIManagement from '@/components/kri/KRIManagement';
 import RiskIntelligenceManagement from '@/components/riskIntelligence/RiskIntelligenceManagement';
 import IncidentManagement from '@/components/incidents/IncidentManagement';
@@ -37,88 +30,70 @@ import { AdminIncidentReview } from '@/components/incidents/AdminIncidentReview'
 import ImportExportManager from '@/components/importExport/ImportExportManager';
 import AIAssistant from '@/components/ai/AIAssistant';
 import AdminPanel from '@/components/admin/AdminPanel';
-import AdminCheck from '@/components/debug/AdminCheck';
 import RegulatorDashboard from '@/components/regulator/RegulatorDashboard';
 import ReportHub from '@/components/reports/ReportHub';
-import type { AuthState } from '@/types/auth';
 
 export default function App() {
-  const { user: authUser, profile: authProfile } = useAuth(); // rename to avoid conflict
+  const { user, profile, loading } = useAuth();
+  const { signOut } = useClerk();
   const { logoUrl } = useOrgBranding();
   const { features } = useOrgFeatures();
 
-  const [authState, setAuthState] = useState<AuthState>({
-    user: null,
-    profile: null,
-    isAdmin: false,
-    isSuperAdmin: false,
-    loading: true,
-  });
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdminUser, setIsSuperAdminUser] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [pciWorkflowEnabled, setPciWorkflowEnabled] = useState(false);
+  const [adminLoaded, setAdminLoaded] = useState(false);
 
+  // Load admin status and PCI config when profile is available
   useEffect(() => {
-    loadAuthState();
-  }, []);
+    if (!profile) {
+      setIsAdmin(false);
+      setIsSuperAdminUser(false);
+      setAdminLoaded(false);
+      return;
+    }
 
+    async function loadAdminStatus() {
+      try {
+        const [adminStatus, superAdminStatus, pciEnabled] = await Promise.all([
+          isUserAdmin(),
+          checkSuperAdmin(),
+          isPCIWorkflowEnabled(),
+        ]);
+
+        console.log('Auth state loaded:', {
+          email: user?.email,
+          role: profile?.role,
+          isAdmin: adminStatus,
+          isSuperAdmin: superAdminStatus,
+        });
+
+        setIsAdmin(adminStatus);
+        setIsSuperAdminUser(superAdminStatus);
+        setPciWorkflowEnabled(pciEnabled);
+        setAdminLoaded(true);
+      } catch (error) {
+        console.error('Admin status load error:', error);
+        setAdminLoaded(true);
+      }
+    }
+
+    loadAdminStatus();
+  }, [profile]);
+
+  // Redirect Super Admin to Admin tab by default
   useEffect(() => {
-    // Redirect Super Admin to Admin tab by default
-    if (authState.isSuperAdmin && activeTab === 'dashboard') {
+    if (isSuperAdminUser && activeTab === 'dashboard') {
       setActiveTab('admin');
     }
-    // Redirect Regulator to oversight dashboard by default
-    if (authState.profile?.role === 'regulator' && activeTab === 'dashboard') {
+    if (profile?.role === 'regulator' && activeTab === 'dashboard') {
       setActiveTab('regulator-oversight');
     }
-  }, [authState.isSuperAdmin, authState.profile?.role]);
-
-  async function loadAuthState() {
-    try {
-      // 1. Get authenticated user
-      const currentUser = await getCurrentUser();
-      if (!currentUser) {
-        setAuthState(prev => ({ ...prev, loading: false }));
-        return;
-      }
-
-      // 2. Get user profile
-      const { data: profileData, error: profileError } = await getCurrentUserProfile();
-      if (profileError || !profileData) {
-        console.error('Profile error:', profileError);
-        setAuthState(prev => ({ ...prev, loading: false }));
-        return;
-      }
-
-      // 3. Check admin status
-      const adminStatus = await isUserAdmin();
-      const superAdminStatus = await isSuperAdmin();
-
-      console.log('Auth state loaded:', {
-        user: currentUser.email,
-        role: profileData.role,
-        isAdmin: adminStatus,
-        isSuperAdmin: superAdminStatus,
-      });
-
-      setAuthState({
-        user: currentUser,
-        profile: profileData,
-        isAdmin: adminStatus,
-        isSuperAdmin: superAdminStatus,
-        loading: false,
-      });
-
-      // 4. Check PCI workflow status
-      const pciEnabled = await isPCIWorkflowEnabled();
-      setPciWorkflowEnabled(pciEnabled);
-    } catch (error) {
-      console.error('Auth state load error:', error);
-      setAuthState(prev => ({ ...prev, loading: false }));
-    }
-  }
+  }, [isSuperAdminUser, profile?.role]);
 
   // Loading state
-  if (authState.loading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-lg text-gray-600">Loading...</div>
@@ -126,51 +101,41 @@ export default function App() {
     );
   }
 
-  // Not logged in - show auth pages with routing
-  if (!authState.user || !authState.profile) {
+  // Not signed in — show Clerk Sign In
+  if (!user || !profile) {
     return (
-      <BrowserRouter>
-        <Routes>
-          <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route path="/set-password" element={<SetPasswordForm />} />
-          <Route path="/reset-password" element={<ResetPasswordForm />} />
-          <Route path="/forgot-password" element={<ForgotPasswordForm />} />
-          <Route path="/login" element={<LoginForm onSuccess={loadAuthState} />} />
-          <Route path="/signup" element={<SignupForm onSuccess={loadAuthState} />} />
-          <Route path="/admin-check" element={<AdminCheck />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </BrowserRouter>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <SignIn routing="hash" />
+      </div>
     );
   }
 
-  // Handle logout
-  async function handleLogout() {
-    await signOut();
-    setAuthState({
-      user: null,
-      profile: null,
-      isAdmin: false,
-      isSuperAdmin: false,
-      loading: false,
-    });
+  // Waiting for admin status to resolve
+  if (!adminLoaded) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-lg text-gray-600">Loading...</div>
+      </div>
+    );
   }
 
-  // Logged in - show main app
+  // Handle logout via Clerk
+  async function handleLogout() {
+    await signOut();
+  }
+
+  // Signed in — show main app
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-gray-50">
         {/* Mobile Navigation */}
         <MobileNav
-          isAdmin={authState.isAdmin}
-          isSuperAdmin={authState.isSuperAdmin}
+          isAdmin={isAdmin}
+          isSuperAdmin={isSuperAdminUser}
           onLogout={handleLogout}
           activeTab={activeTab}
           onTabChange={setActiveTab}
         />
-
-        {/* Session Enforcement */}
-        <SessionManager />
 
         {/* Desktop Header - hidden on mobile */}
         <header className="mobile-hidden bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
@@ -187,13 +152,13 @@ export default function App() {
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
               <div className="text-sm text-right hidden sm:block">
-                <div className="font-medium">{authState.profile.full_name}</div>
-                <div className="text-gray-600">{authState.profile.role}</div>
+                <div className="font-medium">{profile.full_name}</div>
+                <div className="text-gray-600">{profile.role}</div>
               </div>
               <UserMenu
-                user={authState.user}
-                profile={authState.profile}
-                isAdmin={authState.isAdmin}
+                user={user}
+                profile={profile}
+                isAdmin={isAdmin}
               />
             </div>
           </div>
@@ -202,7 +167,7 @@ export default function App() {
         {/* Main Content - with mobile padding adjustments */}
         <main className="container mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-20 sm:pb-6">
           {/* USER Role Context Banner */}
-          {!authState.isAdmin && (
+          {!isAdmin && (
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-start gap-3">
                 <div className="text-blue-600 text-lg">ℹ️</div>
@@ -224,14 +189,14 @@ export default function App() {
             <div className="mobile-scroll-x -mx-3 px-3 sm:mx-0 sm:px-0">
               <TabsList className="mb-4 sm:mb-6 inline-flex sm:flex w-max sm:w-auto">
                 {/* Regulator-specific tabs */}
-                {authState.profile?.role === 'regulator' && (
+                {profile?.role === 'regulator' && (
                   <TabsTrigger value="regulator-oversight" className="text-xs sm:text-sm whitespace-nowrap">
                     <span className="hidden sm:inline">🏛️ </span>Oversight Dashboard
                   </TabsTrigger>
                 )}
 
                 {/* Tabs visible to all users (First Line of Defense) - HIDDEN for Super Admin and Regulators */}
-                {!authState.isSuperAdmin && authState.profile?.role !== 'regulator' && (
+                {!isSuperAdminUser && profile?.role !== 'regulator' && (
                   <>
                     <TabsTrigger value="dashboard" className="text-xs sm:text-sm whitespace-nowrap">
                       <span className="hidden sm:inline">📊 </span>Dashboard
@@ -262,9 +227,9 @@ export default function App() {
                 )}
 
                 {/* Tabs visible only to ADMIN (Second/Third Line of Defense) */}
-                {authState.isAdmin && (
+                {isAdmin && (
                   <>
-                    {!authState.isSuperAdmin && (
+                    {!isSuperAdminUser && (
                       <>
                         <TabsTrigger value="analytics" className="text-xs sm:text-sm whitespace-nowrap">
                           <span className="hidden sm:inline">📈 </span>Analytics
@@ -335,7 +300,7 @@ export default function App() {
             </TabsContent>
 
             {/* Admin-only tabs */}
-            {authState.isAdmin && (
+            {isAdmin && (
               <>
                 <TabsContent value="analytics">
                   <Tabs defaultValue="current" className="w-full">
@@ -366,14 +331,14 @@ export default function App() {
               <Tabs defaultValue="management" className="w-full">
                 <TabsList>
                   <TabsTrigger value="management">📝 Incident Management</TabsTrigger>
-                  {authState.isAdmin && (
+                  {isAdmin && (
                     <TabsTrigger value="ai-review">🧠 AI Review (ADMIN)</TabsTrigger>
                   )}
                 </TabsList>
                 <TabsContent value="management">
                   <IncidentManagement />
                 </TabsContent>
-                {authState.isAdmin && (
+                {isAdmin && (
                   <TabsContent value="ai-review">
                     <AdminIncidentReview />
                   </TabsContent>
@@ -385,13 +350,13 @@ export default function App() {
               <AIAssistant />
             </TabsContent>
 
-            {authState.isAdmin && !authState.isSuperAdmin && (
+            {isAdmin && !isSuperAdminUser && (
               <TabsContent value="reports">
                 <ReportHub />
               </TabsContent>
             )}
 
-            {authState.isAdmin && (
+            {isAdmin && (
               <TabsContent value="admin">
                 <AdminPanel />
               </TabsContent>

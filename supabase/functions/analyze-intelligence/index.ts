@@ -3,8 +3,8 @@
 // Updated: 2025-12-13
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { USE_CASE_MODELS } from '../_shared/ai-models.ts'
+import { verifyClerkAuth } from '../_shared/clerk-auth.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -188,47 +188,19 @@ serve(async (req) => {
   }
 
   try {
-    // Create Supabase client with service role key
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
-
-    // Get user from authorization header
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
+    // Authenticate user via Clerk
+    let profile, supabaseClient, supabaseAdmin;
+    try {
+      ({ profile, supabaseClient, supabaseAdmin } = await verifyClerkAuth(req));
+    } catch (authError) {
       return new Response(
-        JSON.stringify({ error: 'Authorization header required' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token)
-
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Get user's organization
-    console.log(`👤 Analyzing events for user: ${user.id}`)
-
-    const { data: profile, error: profileError } = await supabaseClient
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single()
-
-    if (profileError || !profile) {
-      console.error('❌ User profile not found:', profileError)
-      return new Response(
-        JSON.stringify({ error: 'User profile not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    console.log(`👤 Analyzing events for user: ${profile.id}`)
 
     const organizationId = profile.organization_id
     console.log(`🏢 User organization_id: ${organizationId}`)
@@ -257,7 +229,7 @@ serve(async (req) => {
     }
 
     // Get events to analyze
-    let eventsQuery = supabaseClient
+    let eventsQuery = supabaseAdmin
       .from('external_events')
       .select('*')
       .eq('organization_id', organizationId)
@@ -296,7 +268,7 @@ serve(async (req) => {
     console.log(`📊 Found ${events.length} unchecked events`)
 
     // Get all active risks for organization
-    const { data: risks, error: risksError } = await supabaseClient
+    const { data: risks, error: risksError } = await supabaseAdmin
       .from('risks')
       .select('risk_code, risk_title, risk_description, category')
       .eq('organization_id', organizationId)
@@ -339,7 +311,7 @@ serve(async (req) => {
         if (analysis.is_relevant && analysis.confidence >= minConfidence) {
           const riskCodes = analysis.risk_analyses?.map((r: any) => r.risk_code) || []
           console.log(`   ✅ Relevant! Confidence: ${analysis.confidence}%, Risks: ${riskCodes.join(', ')}`)
-          const created = await createRiskAlerts(supabaseClient, event, analysis, organizationId)
+          const created = await createRiskAlerts(supabaseAdmin, event, analysis, organizationId)
           alertsCreated += created
         } else if (analysis.is_relevant) {
           console.log(`   ⚠️ Relevant but below confidence threshold (${analysis.confidence}% < ${minConfidence}%)`)
@@ -348,7 +320,7 @@ serve(async (req) => {
         }
 
         // Mark event as checked
-        await supabaseClient
+        await supabaseAdmin
           .from('external_events')
           .update({ relevance_checked: true })
           .eq('id', event.id)
@@ -361,7 +333,7 @@ serve(async (req) => {
         errors.push(`Event ${event.id}: ${error.message}`)
 
         // Mark as checked even if error occurred
-        await supabaseClient
+        await supabaseAdmin
           .from('external_events')
           .update({ relevance_checked: true })
           .eq('id', event.id)

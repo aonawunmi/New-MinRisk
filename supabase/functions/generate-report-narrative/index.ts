@@ -8,6 +8,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { USE_CASE_MODELS } from '../_shared/ai-models.ts';
+import { verifyClerkAuth } from '../_shared/clerk-auth.ts';
 
 interface ReportNarrativeRequest {
     reportType: 'ceo' | 'board' | 'regulatory';
@@ -42,6 +43,17 @@ serve(async (req: Request) => {
     }
 
     try {
+        // Verify Clerk authentication
+        let profile, supabaseClient, supabaseAdmin;
+        try {
+            ({ profile, supabaseClient, supabaseAdmin } = await verifyClerkAuth(req));
+        } catch (authError) {
+            return new Response(
+                JSON.stringify({ error: "Unauthorized" }),
+                { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+        }
+
         const { reportType, context, regulator } = (await req.json()) as ReportNarrativeRequest;
 
         const apiKey = Deno.env.get('ANTHROPIC_API_KEY');

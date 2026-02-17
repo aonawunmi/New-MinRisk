@@ -28,6 +28,7 @@ import {
     AlertTriangle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getAuthenticatedProfile } from '@/lib/auth';
 import { getCacheStats, clearCache } from '@/lib/aiCache';
 
 interface AIOptimizationConfig {
@@ -81,21 +82,15 @@ export function AIOptimizationSettings() {
 
     const loadConfig = async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            const authProfile = await getAuthenticatedProfile();
+            if (!authProfile) return;
 
-            const { data: profile } = await supabase
-                .from('user_profiles')
-                .select('organization_id')
-                .eq('id', user.id)
-                .single();
-
-            if (!profile?.organization_id) return;
+            if (!authProfile.organization_id) return;
 
             const { data: org } = await supabase
                 .from('organizations')
                 .select('settings')
-                .eq('id', profile.organization_id)
+                .eq('id', authProfile.organization_id)
                 .single();
 
             if (org?.settings?.ai_optimization) {
@@ -123,22 +118,16 @@ export function AIOptimizationSettings() {
     const saveConfig = async () => {
         setSaving(true);
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error('Not authenticated');
+            const authProfile = await getAuthenticatedProfile();
+            if (!authProfile) throw new Error('Not authenticated');
 
-            const { data: profile } = await supabase
-                .from('user_profiles')
-                .select('organization_id')
-                .eq('id', user.id)
-                .single();
-
-            if (!profile?.organization_id) throw new Error('No organization found');
+            if (!authProfile.organization_id) throw new Error('No organization found');
 
             // Get existing settings
             const { data: org } = await supabase
                 .from('organizations')
                 .select('settings')
-                .eq('id', profile.organization_id)
+                .eq('id', authProfile.organization_id)
                 .single();
 
             // Merge with new AI optimization config
@@ -150,7 +139,7 @@ export function AIOptimizationSettings() {
             await supabase
                 .from('organizations')
                 .update({ settings: updatedSettings })
-                .eq('id', profile.organization_id);
+                .eq('id', authProfile.organization_id);
 
             alert('AI optimization settings saved');
         } catch (err) {

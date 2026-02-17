@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getAuthenticatedProfile } from './auth';
 import type { Risk } from '@/types/risk';
 import type { Control, ControlType, ControlTarget, DIMEScore } from '@/types/control';
 
@@ -298,22 +299,13 @@ export async function importRisksFromCSV(
 ): Promise<{ data: ImportResult | null; error: Error | null }> {
   try {
     // Get current user and org
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { data: null, error: new Error('User not authenticated') };
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
+    if (!profile.organization_id) {
       return { data: null, error: new Error('User profile not found') };
     }
 
@@ -381,8 +373,8 @@ export async function importRisksFromCSV(
           {
             ...riskData,
             organization_id: profile.organization_id,
-            user_id: user.id,
-            owner_profile_id: user.id,
+            user_id: profile.id,
+            owner_profile_id: profile.id,
           },
         ]);
 
@@ -827,22 +819,13 @@ export async function importControlsFromCSV(
 ): Promise<{ data: ImportResult | null; error: Error | null }> {
   try {
     // Get current user and org
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { data: null, error: new Error('User not authenticated') };
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
+    if (!profile.organization_id) {
       return { data: null, error: new Error('User profile not found') };
     }
 
@@ -923,7 +906,7 @@ export async function importControlsFromCSV(
           {
             ...controlData,
             organization_id: profile.organization_id,
-            created_by_profile_id: user.id,
+            created_by_profile_id: profile.id,
           },
         ]);
 

@@ -13,6 +13,7 @@
  */
 
 import { supabase } from './supabase';
+import { getAuthenticatedProfile } from './auth';
 
 // =====================================================
 // TYPES
@@ -193,16 +194,16 @@ export async function logAuditEntry(
   metadata?: any
 ): Promise<void> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const profile = await getAuthenticatedProfile();
+    if (!profile) return;
 
-    const { data: profile } = await supabase
+    const { data: userProfile } = await supabase
       .from('user_profiles')
       .select('organization_id')
-      .eq('id', user.id)
+      .eq('id', profile.id)
       .single();
 
-    if (!profile) return;
+    if (!userProfile) return;
 
     // Use the database function for consistency
     await supabase.rpc('log_audit_entry', {

@@ -1,4 +1,5 @@
-import { supabase } from './supabase';
+import { supabase, getClerkToken } from './supabase';
+import { getAuthenticatedProfile } from './auth';
 import type { Risk, RiskWithControls, Control } from '@/types/risk';
 
 /**
@@ -114,9 +115,9 @@ export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | 
     // Fetch owner information via Edge Function (bypasses RLS, uses service role)
     console.log('🔍 Fetching owner profiles for IDs via Edge Function:', ownerIds);
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.error('❌ No session found for Edge Function call');
+    const token = await getClerkToken();
+    if (!token) {
+      console.error('❌ No token found for Edge Function call');
       // Return risks with legacy owner fallback
       return {
         data: risks.map(risk => ({
@@ -237,22 +238,11 @@ export async function createRisk(
   riskData: CreateRiskData
 ): Promise<{ data: Risk | null; error: Error | null }> {
   try {
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    // Get current user profile
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { data: null, error: new Error('User not authenticated') };
-    }
-
-    // Get user profile to get organization_id
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return { data: null, error: new Error('User profile not found') };
     }
 
     // Auto-generate risk_code if not provided
@@ -269,9 +259,9 @@ export async function createRisk(
           ...riskData,
           risk_code: riskCode,
           organization_id: profile.organization_id,
-          user_id: user.id,
-          owner_profile_id: user.id,
-          owner_id: riskData.owner_id || user.id, // Default to creator if not specified
+          user_id: profile.id,
+          owner_profile_id: profile.id,
+          owner_id: riskData.owner_id || profile.id, // Default to creator if not specified
           status: riskData.status || 'Open',
           is_priority: riskData.is_priority || false,
         },
@@ -373,22 +363,11 @@ export async function addControl(
   controlData: Omit<Control, 'id' | 'created_at' | 'updated_at'>
 ): Promise<{ data: Control | null; error: Error | null }> {
   try {
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    // Get current user profile
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { data: null, error: new Error('User not authenticated') };
-    }
-
-    // Get user profile to get organization_id
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return { data: null, error: new Error('User profile not found') };
     }
 
     // Create the control (without risk_id - controls are independent)
@@ -398,8 +377,8 @@ export async function addControl(
         {
           ...controlData,
           organization_id: profile.organization_id,
-          owner_profile_id: user.id,
-          created_by_profile_id: user.id,
+          owner_profile_id: profile.id,
+          created_by_profile_id: profile.id,
           // Note: risk_id is now nullable and not set here
         },
       ])
@@ -418,7 +397,7 @@ export async function addControl(
         {
           risk_id: riskId,
           control_id: control.id,
-          created_by: user.id,
+          created_by: profile.id,
         },
       ]);
 
@@ -507,8 +486,8 @@ export async function linkControlToRisk(
   riskId: string
 ): Promise<{ error: Error | null }> {
   try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
+    const profile = await getAuthenticatedProfile();
+    if (!profile) {
       return { error: new Error('User not authenticated') };
     }
 
@@ -518,7 +497,7 @@ export async function linkControlToRisk(
         {
           risk_id: riskId,
           control_id: controlId,
-          created_by: user.id,
+          created_by: profile.id,
         },
       ]);
 
@@ -575,8 +554,8 @@ export async function linkKRIToRisk(
   aiConfidence?: number
 ): Promise<{ error: Error | null }> {
   try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
+    const profile = await getAuthenticatedProfile();
+    if (!profile) {
       return { error: new Error('User not authenticated') };
     }
 
@@ -587,7 +566,7 @@ export async function linkKRIToRisk(
           kri_id: kriId,
           risk_id: riskId,
           ai_link_confidence: aiConfidence,
-          linked_by: user.id,
+          linked_by: profile.id,
         },
       ]);
 

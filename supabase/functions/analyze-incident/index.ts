@@ -5,6 +5,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { USE_CASE_MODELS } from '../_shared/ai-models.ts'
+import { verifyClerkAuth } from '../_shared/clerk-auth.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -465,6 +466,17 @@ serve(async (req) => {
   }
 
   try {
+    // Verify Clerk authentication
+    let profile, supabaseClient, supabaseAdmin;
+    try {
+      ({ profile, supabaseClient, supabaseAdmin } = await verifyClerkAuth(req));
+    } catch (authError) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Get Claude API key from environment
     const claudeApiKey = Deno.env.get('ANTHROPIC_API_KEY')
     if (!claudeApiKey) {

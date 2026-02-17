@@ -8,7 +8,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { verifyClerkAuth } from '../_shared/clerk-auth.ts';
 import { USE_CASE_MODELS } from '../_shared/ai-models.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
@@ -27,14 +27,15 @@ serve(async (req) => {
   }
 
   try {
-    // Verify user is authenticated
-    const authHeader = req.headers.get("Authorization");
-    console.log("Auth header received:", authHeader ? "Present" : "Missing");
-
-    if (!authHeader) {
-      console.error("No Authorization header found in request");
+    // Verify user is authenticated via Clerk
+    let profile;
+    try {
+      const authResult = await verifyClerkAuth(req);
+      profile = authResult.profile;
+    } catch (authError) {
+      console.error("Authentication failed:", authError.message);
       return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
+        JSON.stringify({ error: "Unauthorized", details: authError.message }),
         {
           status: 401,
           headers: {
@@ -45,36 +46,7 @@ serve(async (req) => {
       );
     }
 
-    // Verify JWT token - create fresh Supabase client with the JWT
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
-    );
-
-    // Extract token from "Bearer <token>"
-    const token = authHeader.replace("Bearer ", "");
-
-    // Verify the JWT by getting user with the token
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseClient.auth.getUser(token);
-
-    if (userError || !user) {
-      console.error("User verification failed:", userError?.message);
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", details: userError?.message || "Invalid or expired token" }),
-        {
-          status: 401,
-          headers: {
-            "Content-Type": "application/json",
-            ...corsHeaders
-          }
-        }
-      );
-    }
-
-    console.log("User authenticated:", user.email);
+    console.log("User authenticated:", profile.email);
 
     // Parse request body
     const body = await req.json();

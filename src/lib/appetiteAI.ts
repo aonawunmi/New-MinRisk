@@ -6,7 +6,7 @@
  * This prevents exposure of API keys in the client-side browser.
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabase, getClerkToken } from '@/lib/supabase';
 import { APPETITE_LEVEL_DEFINITIONS, type AppetiteLevel } from './appetiteDefinitions';
 
 interface RiskContext {
@@ -30,10 +30,10 @@ interface RiskContext {
  * Helper to call the secure Edge Function
  */
 async function callAppetiteEdgeFunction(mode: string, params: any, context?: any) {
-  // Get user session for authorization
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  // Get user token for authorization
+  const token = await getClerkToken();
 
-  if (sessionError || !session) {
+  if (!token) {
     throw new Error('Authentication required to generate AI content');
   }
 
@@ -44,7 +44,7 @@ async function callAppetiteEdgeFunction(mode: string, params: any, context?: any
       ...params
     },
     headers: {
-      Authorization: `Bearer ${session?.access_token}`
+      Authorization: `Bearer ${token}`
     }
   });
 

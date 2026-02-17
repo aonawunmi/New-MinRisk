@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getAuthenticatedProfile } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function AdminCheck() {
@@ -19,31 +20,25 @@ export default function AdminCheck() {
 
   async function checkStatus() {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const authProfile = await getAuthenticatedProfile();
 
-      if (!user) {
+      if (!authProfile) {
         setStatus({ error: 'Not logged in' });
         setLoading(false);
         return;
       }
 
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('id, email, role, full_name, organization_id')
-        .eq('id', user.id)
-        .single();
-
       // Check if user has any admin role
-      const isAdminRole = profile?.role && ['super_admin', 'primary_admin', 'secondary_admin'].includes(profile.role);
+      const isAdminRole = authProfile.role && ['super_admin', 'primary_admin', 'secondary_admin'].includes(authProfile.role);
 
       setStatus({
-        user_id: user.id,
-        email: user.email,
-        profile_email: profile?.email,
-        full_name: profile?.full_name,
-        role: profile?.role,
+        user_id: authProfile.id,
+        email: authProfile.email,
+        profile_email: authProfile.email,
+        full_name: authProfile.full_name,
+        role: authProfile.role,
         is_admin: !!isAdminRole,
-        organization_id: profile?.organization_id,
+        organization_id: authProfile.organization_id,
       });
     } catch (err: any) {
       setStatus({ error: err.message });

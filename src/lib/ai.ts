@@ -4,7 +4,7 @@
  * Functions for AI-powered features using Claude API via Supabase Edge Function
  */
 
-import { supabase } from './supabase';
+import { supabase, getClerkToken } from './supabase';
 import type { ControlType, ControlTarget, DIMEScore } from '@/types/control';
 import type { RiskCategory, RiskStatus } from '@/types/risk';
 
@@ -43,10 +43,10 @@ async function callAI(prompt: string, maxTokens: number = 1024): Promise<string>
   console.log('Max tokens:', maxTokens);
 
   try {
-    // Get the current session for auth token
-    const { data: { session } } = await supabase.auth.getSession();
+    // Get the current auth token
+    const token = await getClerkToken();
 
-    if (!session) {
+    if (!token) {
       throw new Error('Authentication required. Please log in.');
     }
 
@@ -65,7 +65,7 @@ async function callAI(prompt: string, maxTokens: number = 1024): Promise<string>
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
+        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({ prompt, maxTokens }),
     });
@@ -567,10 +567,10 @@ export async function classifyRiskStatement(
       return generateDemoClassification(userStatement, taxonomy);
     }
 
-    // Get authentication session for Edge Function
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    // Get authentication token for Edge Function
+    const token = await getClerkToken();
 
-    if (sessionError || !session) {
+    if (!token) {
       return {
         data: null,
         error: new Error('Not authenticated. Please log in to use AI classification.'),
@@ -630,7 +630,7 @@ IMPORTANT:
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

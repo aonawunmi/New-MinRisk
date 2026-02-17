@@ -1,4 +1,5 @@
-import { supabase } from './supabase';
+import { supabase, getClerkToken } from './supabase';
+import { getAuthenticatedProfile } from './auth';
 
 /**
  * Risk Intelligence Service Layer
@@ -153,23 +154,10 @@ export async function createExternalEvent(
 ): Promise<{ data: ExternalEvent | null; error: Error | null }> {
   try {
     // Get user profile for organization_id
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { data: null, error: new Error('User not authenticated') };
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return { data: null, error: new Error('User profile not found') };
     }
 
     // DUPLICATE DETECTION: Check for existing event within same week
@@ -254,19 +242,9 @@ export async function createExternalEventWithAutoScan(
     }
 
     // Step 2: Immediately trigger AI analysis for this single event
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const token = await getClerkToken();
+    if (!token) {
       // Event created but can't scan - return event only
-      return {
-        data: event,
-        scanResults: { alertsCreated: 0, scanned: false },
-        error: null
-      };
-    }
-
-    // Get auth token for Edge Function
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
       return {
         data: event,
         scanResults: { alertsCreated: 0, scanned: false },
@@ -281,7 +259,7 @@ export async function createExternalEventWithAutoScan(
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -480,23 +458,10 @@ export async function cleanupDuplicateEvents(): Promise<{
   error: Error | null;
 }> {
   try {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { deletedCount: 0, error: new Error('User not authenticated') };
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return { deletedCount: 0, error: new Error('User profile not found') };
     }
 
     // Get all events for the organization
@@ -593,10 +558,10 @@ export async function analyzeEventRelevance(
   }
 ): Promise<{ data: AIRelevanceAnalysis | null; error: Error | null }> {
   try {
-    // Get authentication session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    // Get authentication token
+    const token = await getClerkToken();
 
-    if (sessionError || !session) {
+    if (!token) {
       return {
         data: null,
         error: new Error('Not authenticated'),
@@ -609,7 +574,7 @@ export async function analyzeEventRelevance(
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -892,23 +857,10 @@ export async function createIntelligenceAlert(alertData: {
 }): Promise<{ data: RiskIntelligenceAlert | null; error: Error | null }> {
   try {
     // Get user profile for organization_id
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { data: null, error: new Error('User not authenticated') };
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return { data: null, error: new Error('User profile not found') };
     }
 
     const { data, error } = await supabase
@@ -948,12 +900,9 @@ export async function acceptIntelligenceAlert(
   notes?: string
 ): Promise<{ error: Error | null }> {
   try {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { error: new Error('User not authenticated') };
     }
 
@@ -973,7 +922,7 @@ export async function acceptIntelligenceAlert(
       .from('risk_intelligence_alerts')
       .update({
         status: 'accepted',
-        reviewed_by: user.id,
+        reviewed_by: profile.id,
         reviewed_at: new Date().toISOString(),
         applied_to_risk: false, // Not applied yet - just accepted as valid recommendation
       })
@@ -1002,12 +951,9 @@ export async function applyIntelligenceAlert(
   treatmentNotes?: string
 ): Promise<{ error: Error | null }> {
   try {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { error: new Error('User not authenticated') };
     }
 
@@ -1128,7 +1074,7 @@ export async function applyIntelligenceAlert(
           previous_impact: risk.impact_inherent,
           new_impact: risk.impact_inherent,       // NO CHANGE
           notes: (treatmentNotes || '') + ' [Advisory Mode: Alert Acknowledged. Scores not automatically updated.]',
-          applied_by: user.id,
+          applied_by: profile.id,
           applied_at: new Date().toISOString(),
         },
       ]);
@@ -1208,12 +1154,9 @@ export async function rejectIntelligenceAlert(
   notes?: string
 ): Promise<{ error: Error | null }> {
   try {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { error: new Error('User not authenticated') };
     }
 
@@ -1233,7 +1176,7 @@ export async function rejectIntelligenceAlert(
       .from('risk_intelligence_alerts')
       .update({
         status: 'rejected',
-        reviewed_by: user.id,
+        reviewed_by: profile.id,
         reviewed_at: new Date().toISOString(),
         applied_to_risk: false,
       })
@@ -1252,7 +1195,7 @@ export async function rejectIntelligenceAlert(
           risk_code: alert.risk_code,
           action_taken: 'reject',
           notes: notes || null,
-          applied_by: user.id,
+          applied_by: profile.id,
           applied_at: new Date().toISOString(),
         },
       ]);
@@ -1280,12 +1223,9 @@ export async function undoAppliedAlert(
   notes?: string
 ): Promise<{ error: Error | null }> {
   try {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { error: new Error('User not authenticated') };
     }
 
@@ -1411,7 +1351,7 @@ export async function undoAppliedAlert(
           previous_impact: risk.impact_inherent,
           new_impact: risk.impact_inherent,       // NO CHANGE
           notes: (notes || 'Alert application undone') + ' [Advisory Mode: Alert Unlinked. Scores not automatically updated.]',
-          applied_by: user.id,
+          applied_by: profile.id,
           applied_at: new Date().toISOString(),
         },
       ]);
@@ -1471,12 +1411,9 @@ export async function softDeleteTreatmentLogEntry(
   logId: string
 ): Promise<{ error: Error | null }> {
   try {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const profile = await getAuthenticatedProfile();
 
-    if (userError || !user) {
+    if (!profile) {
       return { error: new Error('User not authenticated') };
     }
 
@@ -1631,8 +1568,8 @@ export interface RssScanResult {
  */
 export async function triggerRssScan(): Promise<RssScanResult> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    const token = await getClerkToken();
+    if (!token) {
       return {
         success: false,
         message: 'Not authenticated',
@@ -1655,7 +1592,7 @@ export async function triggerRssScan(): Promise<RssScanResult> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
+        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({ trigger: 'manual-scan' }),
     });
@@ -1758,19 +1695,9 @@ export async function createRssSource(
 }> {
   try {
     // Get current user's profile to get organization_id
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      throw new Error('Not authenticated');
-    }
-
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', session.user.id)
-      .single();
-
+    const profile = await getAuthenticatedProfile();
     if (!profile) {
-      throw new Error('User profile not found');
+      throw new Error('Not authenticated');
     }
 
     const { data, error } = await supabase
@@ -1782,7 +1709,7 @@ export async function createRssSource(
         description: input.description || null,
         category: input.category,
         is_active: true,
-        created_by: session.user.id
+        created_by: profile.id
       })
       .select()
       .single();
@@ -1939,19 +1866,9 @@ export async function createRiskKeyword(
 }> {
   try {
     // Get current user's profile to get organization_id
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      throw new Error('Not authenticated');
-    }
-
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', session.user.id)
-      .single();
-
+    const profile = await getAuthenticatedProfile();
     if (!profile) {
-      throw new Error('User profile not found');
+      throw new Error('Not authenticated');
     }
 
     const { data, error } = await supabase
@@ -1961,7 +1878,7 @@ export async function createRiskKeyword(
         keyword: input.keyword.trim(),
         category: input.category,
         weight: input.weight || 1.0,
-        created_by: session.user.id
+        created_by: profile.id
       })
       .select()
       .single();

@@ -22,6 +22,7 @@ import { parse } from 'https://deno.land/x/xml@2.1.1/mod.ts';
 import { DEFAULT_RSS_SOURCES, getRSSSources, updateScanStats, type RSSSource } from './rss-sources.ts';
 import { extractKeywords, getAllKeywords, matchesCategory, getKeywords, KEYWORD_CATEGORIES, type KeywordsMap } from './keywords.ts';
 import { USE_CASE_MODELS } from '../_shared/ai-models.ts';
+import { verifyClerkAuth } from '../_shared/clerk-auth.ts';
 
 // AI Cost Optimization Modules
 import { checkDuplicate, addToDedupIndex, extractDomain } from './deduplication.ts';
@@ -744,24 +745,14 @@ serve(async (req) => {
     let authenticatedUser = false;
 
     if (req.headers.get('authorization')) {
-      // Manual trigger - try to get organization from authenticated user
+      // Manual trigger - try to get organization from authenticated Clerk user
       try {
-        const authHeader = req.headers.get('authorization')!;
-        const token = authHeader.replace('Bearer ', '');
+        const { profile, supabaseClient: _client, supabaseAdmin: _admin } = await verifyClerkAuth(req);
 
-        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-        if (!authError && user) {
-          const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('organization_id')
-            .eq('id', user.id)
-            .single();
-
-          if (profile) {
-            organizationId = profile.organization_id;
-            authenticatedUser = true;
-            console.log('✅ Authenticated user request');
-          }
+        if (profile && profile.organization_id) {
+          organizationId = profile.organization_id;
+          authenticatedUser = true;
+          console.log('✅ Authenticated user request (Clerk)');
         }
       } catch (error) {
         console.log('⚠️  Authentication failed, falling back to first organization');

@@ -1,11 +1,13 @@
 import { supabase } from './supabase';
-import { getCurrentUser } from './auth';
 
 /**
- * Profile Management Service Layer
+ * Profile Management Service Layer — CLERK VERSION
  *
- * Handles user profile operations using RLS-protected queries.
- * All operations respect multi-tenant isolation via RLS policies.
+ * With Clerk Third-Party Auth, the Supabase client includes the Clerk JWT.
+ * RLS policies on user_profiles use: clerk_id = auth.jwt()->>'sub'
+ * So queries automatically return only the current user's data.
+ *
+ * No need for getCurrentUser() — RLS handles identity.
  */
 
 export type UserRole = 'super_admin' | 'primary_admin' | 'secondary_admin' | 'user' | 'viewer';
@@ -13,6 +15,8 @@ export type UserStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 
 export interface UserProfile {
   id: string;
+  clerk_id: string | null;
+  email: string | null;
   organization_id: string | null;
   full_name: string;
   role: UserRole;
@@ -29,37 +33,16 @@ export interface ProfileResult<T = UserProfile> {
 }
 
 /**
- * Get the current user's profile
- *
- * Uses RLS policy - user can only see their own profile
- *
- * @returns Profile data or null if not found
- *
- * @example
- * const { data: profile, error } = await getCurrentUserProfile();
- * if (profile) {
- *   console.log('User role:', profile.role);
- *   console.log('Organization:', profile.organization_id);
- * }
+ * Get the current user's profile.
+ * RLS ensures only the authenticated user's profile is returned.
  */
 export async function getCurrentUserProfile(): Promise<ProfileResult> {
   try {
-    // Get current authenticated user
-    const user = await getCurrentUser();
-
-    if (!user) {
-      return {
-        data: null,
-        error: new Error('No authenticated user'),
-      };
-    }
-
-    // Query user profile (RLS will ensure user can only see their own)
     const { data, error } = await supabase
       .from('user_profiles')
       .select('*')
-      .eq('id', user.id)
-      .maybeSingle();
+      .limit(1)
+      .single();
 
     if (error) {
       console.error('Get profile error:', error.message);
@@ -67,10 +50,7 @@ export async function getCurrentUserProfile(): Promise<ProfileResult> {
     }
 
     if (!data) {
-      return {
-        data: null,
-        error: new Error('Profile not found'),
-      };
+      return { data: null, error: new Error('Profile not found') };
     }
 
     return { data: data as UserProfile, error: null };
@@ -84,40 +64,19 @@ export async function getCurrentUserProfile(): Promise<ProfileResult> {
 }
 
 /**
- * Update the current user's profile
- *
- * NOTE: Only updateable fields are allowed (full_name)
- * Role and status changes must be done via admin service
- *
- * @param updates - Fields to update
- * @returns Updated profile or error
- *
- * @example
- * const { data, error } = await updateProfile({
- *   full_name: 'Updated Name'
- * });
+ * Update the current user's profile.
+ * RLS ensures user can only update their own profile.
  */
 export async function updateProfile(updates: {
   full_name?: string;
 }): Promise<ProfileResult> {
   try {
-    const user = await getCurrentUser();
-
-    if (!user) {
-      return {
-        data: null,
-        error: new Error('No authenticated user'),
-      };
-    }
-
-    // Update profile (RLS will ensure user can only update their own)
     const { data, error } = await supabase
       .from('user_profiles')
       .update({
         ...updates,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', user.id)
       .select()
       .single();
 
@@ -126,150 +85,79 @@ export async function updateProfile(updates: {
       return { data: null, error: new Error(error.message) };
     }
 
-    console.log('Profile updated successfully');
     return { data: data as UserProfile, error: null };
   } catch (err) {
     console.error('Unexpected update profile error:', err);
     return {
       data: null,
-      error:
-        err instanceof Error ? err : new Error('Unknown update profile error'),
+      error: err instanceof Error ? err : new Error('Unknown update profile error'),
     };
   }
 }
 
 /**
- * Check if current user can access a specific organization
- *
- * @param organizationId - Organization ID to check
- * @returns true if user belongs to the organization, false otherwise
- *
- * @example
- * const canAccess = await canAccessOrganization('11111111-1111-1111-1111-111111111111');
- * if (canAccess) {
- *   // Load organization data
- * }
+ * Check if current user can access a specific organization.
  */
 export async function canAccessOrganization(
   organizationId: string
 ): Promise<boolean> {
   try {
     const { data: profile } = await getCurrentUserProfile();
-
-    if (!profile) {
-      return false;
-    }
-
-    // Super admins can access all organizations
-    if (profile.role === 'super_admin') {
-      return true;
-    }
-
-    // Regular users can only access their own organization
+    if (!profile) return false;
+    if (profile.role === 'super_admin') return true;
     return profile.organization_id === organizationId;
-  } catch (err) {
-    console.error('Error checking organization access:', err);
+  } catch {
     return false;
   }
 }
 
 /**
- * Check if current user has admin privileges
- *
- * @returns true if user is super_admin, primary_admin, or secondary_admin
- *
- * @example
- * const isAdmin = await isUserAdmin();
- * if (isAdmin) {
- *   // Show admin features
- * }
+ * Check if current user has admin privileges.
  */
 export async function isUserAdmin(): Promise<boolean> {
   try {
     const { data: profile } = await getCurrentUserProfile();
-
-    if (!profile) {
-      return false;
-    }
-
-    return ['super_admin', 'primary_admin', 'secondary_admin'].includes(
-      profile.role
-    );
-  } catch (err) {
-    console.error('Error checking admin status:', err);
+    if (!profile) return false;
+    return ['super_admin', 'primary_admin', 'secondary_admin'].includes(profile.role);
+  } catch {
     return false;
   }
 }
 
 /**
- * Check if current user is a super admin
- *
- * @returns true if user is super_admin
- *
- * @example
- * const isSuperAdmin = await isSuperAdmin();
- * if (isSuperAdmin) {
- *   // Show super admin features
- * }
+ * Check if current user is a super admin.
  */
 export async function isSuperAdmin(): Promise<boolean> {
   try {
     const { data: profile } = await getCurrentUserProfile();
-
-    if (!profile) {
-      return false;
-    }
-
+    if (!profile) return false;
     return profile.role === 'super_admin';
-  } catch (err) {
-    console.error('Error checking super admin status:', err);
+  } catch {
     return false;
   }
 }
 
 /**
- * Check if current user's status is approved
- *
- * @returns true if user status is 'approved'
- *
- * @example
- * const isApproved = await isUserApproved();
- * if (!isApproved) {
- *   // Show "pending approval" message
- * }
+ * Check if current user's status is approved.
  */
 export async function isUserApproved(): Promise<boolean> {
   try {
     const { data: profile } = await getCurrentUserProfile();
-
-    if (!profile) {
-      return false;
-    }
-
+    if (!profile) return false;
     return profile.status === 'approved';
-  } catch (err) {
-    console.error('Error checking approval status:', err);
+  } catch {
     return false;
   }
 }
 
 /**
- * Get user's organization ID
- *
- * @returns Organization ID or null
- *
- * @example
- * const orgId = await getUserOrganizationId();
- * if (orgId) {
- *   // Query organization-scoped data
- * }
+ * Get user's organization ID.
  */
 export async function getUserOrganizationId(): Promise<string | null> {
   try {
     const { data: profile } = await getCurrentUserProfile();
     return profile?.organization_id || null;
-  } catch (err) {
-    console.error('Error getting organization ID:', err);
+  } catch {
     return null;
   }
 }

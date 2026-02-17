@@ -20,6 +20,7 @@
  */
 
 import { supabase } from './supabase';
+import { getAuthenticatedProfile } from './auth';
 
 // ================================================================
 // TYPES
@@ -565,14 +566,14 @@ async function resolveBreach(
   metricId: string
 ): Promise<Result> {
 
-  const { data: user } = await supabase.auth.getUser();
+  const profile = await getAuthenticatedProfile();
 
   const { error } = await supabase
     .from('appetite_breaches')
     .update({
       status: 'RESOLVED',
       resolved_at: new Date().toISOString(),
-      resolved_by: user.user?.id,
+      resolved_by: profile?.id,
       resolution_notes: 'Metric returned to GREEN zone'
     })
     .eq('tolerance_metric_id', metricId)

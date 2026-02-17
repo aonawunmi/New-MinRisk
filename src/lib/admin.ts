@@ -1,21 +1,13 @@
-import { supabase } from './supabase';
+import { supabase, getClerkToken } from './supabase';
 import type { UserProfile, UserRole, UserStatus } from './profiles';
 
 /**
- * Admin Service Layer - SECURE VERSION
+ * Admin Service Layer — CLERK VERSION
  *
- * Security: All operations now call Edge Functions which verify admin privileges
- * server-side before using service role. Service role is NEVER exposed to client.
+ * Security: All operations call Edge Functions which verify admin privileges
+ * server-side. The Clerk JWT is sent as the Authorization bearer token.
  *
- * Migration Date: 2025-12-21 (Security Hardening)
- *
- * Operations:
- * - List all users in an organization
- * - List pending users
- * - Approve/reject user requests
- * - Update user roles
- * - Suspend/unsuspend users
- * - Invite new users
+ * Updated: Feb 2026 (Clerk Migration)
  */
 
 const EDGE_FUNCTION_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, '') + '/functions/v1';
@@ -26,15 +18,15 @@ export interface AdminResult<T = any> {
 }
 
 /**
- * Helper: Call Edge Function with authentication
+ * Helper: Call Edge Function with Clerk JWT authentication
  */
 async function callEdgeFunction<T = any>(
   functionName: string,
   body: any
 ): Promise<AdminResult<T>> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    const token = await getClerkToken();
+    if (!token) {
       return { data: null, error: new Error('Not authenticated') };
     }
 
@@ -42,7 +34,7 @@ async function callEdgeFunction<T = any>(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
+        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify(body),
     });

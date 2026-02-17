@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getAuthenticatedProfile } from '@/lib/auth';
 import { listUsersInOrganization } from '@/lib/admin';
 import { updateRisk } from '@/lib/risks';
 import type { Risk } from '@/types/risk';
@@ -72,27 +73,21 @@ export default function OwnerMappingTool() {
 
     try {
       // Get current user's organization
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const authProfile = await getAuthenticatedProfile();
+      if (!authProfile) {
         setError('User not authenticated');
         setLoading(false);
         return;
       }
 
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('organization_id')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile) {
+      if (!authProfile.organization_id) {
         setError('User profile not found');
         setLoading(false);
         return;
       }
 
       // Load all users in organization
-      const { data: users, error: usersError } = await listUsersInOrganization(profile.organization_id);
+      const { data: users, error: usersError } = await listUsersInOrganization(authProfile.organization_id);
 
       if (usersError) {
         setError('Failed to load users: ' + usersError.message);
@@ -106,7 +101,7 @@ export default function OwnerMappingTool() {
       const { data: risks, error: risksError } = await supabase
         .from('risks')
         .select('*')
-        .eq('organization_id', profile.organization_id)
+        .eq('organization_id', authProfile.organization_id)
         .is('owner_id', null);
 
       if (risksError) {
@@ -182,20 +177,14 @@ export default function OwnerMappingTool() {
       }
 
       // Update all risks with this owner text
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const authProfile = await getAuthenticatedProfile();
+      if (!authProfile) {
         setError('User not authenticated');
         setApplying(null);
         return;
       }
 
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('organization_id')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile) {
+      if (!authProfile.organization_id) {
         setError('User profile not found');
         setApplying(null);
         return;
@@ -208,7 +197,7 @@ export default function OwnerMappingTool() {
           owner_id: userId,
           owner: selectedUser.full_name, // Update the display name too
         })
-        .eq('organization_id', profile.organization_id)
+        .eq('organization_id', authProfile.organization_id)
         .eq('owner', ownerText)
         .is('owner_id', null);
 
@@ -258,16 +247,10 @@ export default function OwnerMappingTool() {
         const selectedUser = orgUsers.find(u => u.id === userId);
         if (!selectedUser) continue;
 
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) continue;
+        const authProfile = await getAuthenticatedProfile();
+        if (!authProfile) continue;
 
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('organization_id')
-          .eq('id', user.id)
-          .single();
-
-        if (!profile) continue;
+        if (!authProfile.organization_id) continue;
 
         const { error: updateError } = await supabase
           .from('risks')
@@ -275,7 +258,7 @@ export default function OwnerMappingTool() {
             owner_id: userId,
             owner: selectedUser.full_name,
           })
-          .eq('organization_id', profile.organization_id)
+          .eq('organization_id', authProfile.organization_id)
           .eq('owner', ownerText)
           .is('owner_id', null);
 

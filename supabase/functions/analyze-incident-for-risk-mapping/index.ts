@@ -9,8 +9,8 @@
 // 4. Tracks keywords, confidence, and reasoning for audit trail
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { USE_CASE_MODELS } from '../_shared/ai-models.ts'
+import { verifyClerkAuth } from '../_shared/clerk-auth.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -290,21 +290,25 @@ serve(async (req) => {
   }
 
   try {
-    // Initialize Supabase client with service role
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const claudeApiKey = Deno.env.get('ANTHROPIC_API_KEY')
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
+    // Verify Clerk authentication
+    let profile, supabaseClient, supabaseAdmin;
+    try {
+      ({ profile, supabaseClient, supabaseAdmin } = await verifyClerkAuth(req));
+    } catch (authError) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+
+    const claudeApiKey = Deno.env.get('ANTHROPIC_API_KEY')
 
     if (!claudeApiKey) {
       throw new Error('Missing ANTHROPIC_API_KEY - AI analysis is not configured')
     }
 
-    // Create Supabase client with service role (bypasses RLS)
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    // Use supabaseAdmin for privileged database operations (bypasses RLS)
+    const supabase = supabaseAdmin
 
     // Parse request body
     const { incident_id } = await req.json()

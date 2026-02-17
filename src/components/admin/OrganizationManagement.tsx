@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, getClerkToken } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -195,8 +195,8 @@ export function OrganizationManagement() {
 
         setSubmitting(true);
         try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
+            const token = await getClerkToken();
+            if (!token) {
                 alert('Not authenticated');
                 return;
             }
@@ -207,7 +207,7 @@ export function OrganizationManagement() {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`,
+                        'Authorization': `Bearer ${token}`,
                     },
                     body: JSON.stringify({
                         organizationId: inviteForm.organizationId,
