@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { SignIn, SignUp, useClerk, useSignIn } from '@clerk/clerk-react';
+import { SignIn, SignUp, useClerk, useSignIn, SignOutButton } from '@clerk/clerk-react';
 import { useAuth } from '@/lib/auth';
 import { useOrgBranding } from '@/hooks/useOrgBranding';
 import { useOrgFeatures } from '@/hooks/useOrgFeatures';
@@ -34,7 +34,7 @@ import RegulatorDashboard from '@/components/regulator/RegulatorDashboard';
 import ReportHub from '@/components/reports/ReportHub';
 
 export default function App() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, profileStatus, loading } = useAuth();
   const { signOut } = useClerk();
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn();
   const { logoUrl } = useOrgBranding();
@@ -133,7 +133,7 @@ export default function App() {
   }
 
   // Not signed in — show magic link processing, Clerk Sign In, or Sign Up
-  if (!user || !profile) {
+  if (!user) {
     // Magic link is being processed — show welcome screen
     if (autoSigningIn) {
       return (
@@ -176,6 +176,35 @@ export default function App() {
               </p>
             </>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // Signed in via Clerk but no approved profile — show appropriate message
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8 text-center">
+          <div className="text-5xl mb-4">
+            {profileStatus === 'pending' ? '\u23F3' : '\u{1F512}'}
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            {profileStatus === 'pending' ? 'Account Pending Approval' : 'Account Not Found'}
+          </h1>
+          <p className="text-gray-600 mb-2">
+            Signed in as <strong>{user.email}</strong>
+          </p>
+          <p className="text-gray-500 text-sm mb-6">
+            {profileStatus === 'pending'
+              ? 'Your account is awaiting administrator approval. You will be able to access MinRisk once approved.'
+              : 'No MinRisk account was found for your email. If you were invited, please use the sign-in link from your invitation email. Otherwise, contact your administrator.'}
+          </p>
+          <SignOutButton>
+            <button className="px-6 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors">
+              Sign Out
+            </button>
+          </SignOutButton>
         </div>
       </div>
     );

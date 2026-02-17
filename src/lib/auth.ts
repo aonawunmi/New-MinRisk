@@ -37,7 +37,7 @@ export async function getAuthenticatedProfile(): Promise<{
       .from('user_profiles')
       .select('id, organization_id, role, status, email, full_name')
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('getAuthenticatedProfile error:', error.message);
@@ -83,10 +83,12 @@ export function useAuth() {
   const { isSignedIn } = useClerkAuth();
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileStatus, setProfileStatus] = useState<'loading' | 'found' | 'no_profile' | 'pending'>('loading');
 
   const loadProfile = useCallback(async () => {
     if (!isSignedIn || !clerkUser) {
       setProfile(null);
+      setProfileStatus('no_profile');
       setLoading(false);
       return;
     }
@@ -98,27 +100,65 @@ export function useAuth() {
         .from('user_profiles')
         .select('*')
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Load profile error:', error.message);
         setProfile(null);
+        setProfileStatus('no_profile');
+        setLoading(false);
+        return;
+      }
+
+      // No profile found — try auto-claiming a pending invitation by email
+      if (!data) {
+        const email = clerkUser.primaryEmailAddress?.emailAddress;
+        if (email) {
+          console.log('No profile found, attempting to claim invitation for:', email);
+          const { data: claimResult, error: claimError } = await supabase
+            .rpc('claim_profile_by_email', { p_email: email });
+
+          if (!claimError && claimResult?.claimed) {
+            console.log('Successfully claimed invitation, reloading profile...');
+            // Re-query the profile now that clerk_id is linked
+            const { data: claimedProfile } = await supabase
+              .from('user_profiles')
+              .select('*')
+              .limit(1)
+              .maybeSingle();
+
+            if (claimedProfile && claimedProfile.status === 'approved') {
+              setProfile(claimedProfile);
+              setProfileStatus('found');
+              setLoading(false);
+              return;
+            }
+          } else if (claimResult && !claimResult.claimed) {
+            console.log('Claim result:', claimResult.reason);
+          }
+        }
+
+        setProfile(null);
+        setProfileStatus('no_profile');
         setLoading(false);
         return;
       }
 
       // SECURITY: Only approved users get a profile
-      if (data && data.status !== 'approved') {
+      if (data.status !== 'approved') {
         console.warn(`User status is '${data.status}' — access restricted`);
         setProfile(null);
+        setProfileStatus('pending');
         setLoading(false);
         return;
       }
 
       setProfile(data);
+      setProfileStatus('found');
     } catch (err) {
       console.error('Unexpected load profile error:', err);
       setProfile(null);
+      setProfileStatus('no_profile');
     } finally {
       setLoading(false);
     }
@@ -135,6 +175,7 @@ export function useAuth() {
       email: clerkUser.primaryEmailAddress?.emailAddress,
     } : null,
     profile,
+    profileStatus,
     loading: !clerkLoaded || loading,
   };
 }
