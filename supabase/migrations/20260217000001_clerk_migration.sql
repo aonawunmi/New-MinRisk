@@ -30,6 +30,12 @@ ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS email TEXT;
 -- 1B. Add clerk_org_id to organizations
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS clerk_org_id TEXT UNIQUE;
 
+-- 1B2. Add organization_id to risk_intelligence_alerts if missing
+ALTER TABLE risk_intelligence_alerts ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+
+-- 1B3. Add organization_id to risk_intelligence_treatment_log if missing
+ALTER TABLE risk_intelligence_treatment_log ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+
 -- 1C. Drop the FK from user_profiles.id → auth.users(id)
 -- This is the critical constraint that ties profiles to Supabase Auth
 DO $$
