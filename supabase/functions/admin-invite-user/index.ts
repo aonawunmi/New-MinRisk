@@ -1,28 +1,20 @@
-// Edge Function: admin-invite-user
-// Purpose: Invite new users via email (sends Supabase invite email)
-// Security: Verifies admin role before executing, uses service role internally
-// Updated: 2026-02-16 (Auth Overhaul: removed auto-approval, added invite tracking)
+// Edge Function: admin-invite-user (Clerk Version)
+// Purpose: Org admins invite new users to their organization
+// Flow:
+//   1. Verify caller is admin (via Clerk JWT)
+//   2. Create pending user_profiles entry
+//   3. Create user directly in Clerk via Backend API
+//   4. Immediately activate profile with clerk_id
+//   5. Generate one-time sign-in token → magic link for instant access
 //
-// IMPORTANT: There is a database trigger `on_auth_user_created` on auth.users
-// that automatically creates a user_profiles row when inviteUserByEmail is called.
-// The trigger reads role/full_name/organization_id from raw_user_meta_data.
-// The profile is created with status='pending' — admin must manually approve.
-//
-// INVITATION TRACKING: Before sending the email, we create a record in
-// user_invitations via create_invitation_admin() RPC. The invite_code is stored
-// in the user's metadata so SetPasswordForm can mark it as used.
+// Required env vars: CLERK_SECRET_KEY, APP_URL
+// Updated: 2026-02-17 (Magic link flow — world-class UX)
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { verifyClerkAuth, isAdmin, isSuperAdmin } from "../_shared/clerk-auth.ts";
+import { corsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Max-Age': '86400',
-};
-
-type UserRole = 'secondary_admin' | 'user';
+type UserRole = "secondary_admin" | "user";
 
 interface InviteUserRequest {
   email: string;
@@ -32,171 +24,211 @@ interface InviteUserRequest {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Get authorization header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
+    // 1. Verify caller is admin
+    const { profile, supabaseAdmin } = await verifyClerkAuth(req);
+
+    if (!isAdmin(profile)) {
       return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: "Admin access required" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Initialize Supabase clients
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    // 2. Parse request
+    const { email, fullName, organizationId, role }: InviteUserRequest = await req.json();
 
-    // Client with user's auth token (for verification)
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    // Admin client with service role (for privileged operations)
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
-    // 1. Verify user is authenticated
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) {
-      console.error('Auth verification failed:', userError);
-      return new Response(
-        JSON.stringify({ error: 'Authentication failed' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 2. Verify user is admin
-    const { data: adminProfile, error: profileError } = await supabaseClient
-      .from('user_profiles')
-      .select('role, organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !adminProfile) {
-      console.error('Profile lookup failed:', profileError);
-      return new Response(
-        JSON.stringify({ error: 'User profile not found' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const isAdmin = adminProfile.role === 'super_admin' || adminProfile.role === 'primary_admin' || adminProfile.role === 'secondary_admin';
-    if (!isAdmin) {
-      return new Response(
-        JSON.stringify({ error: 'Admin access required' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 3. Parse request body
-    const userData: InviteUserRequest = await req.json();
-    const { email, fullName, organizationId, role } = userData;
-
-    // Validate required fields
     if (!email || !fullName || !organizationId || !role) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: email, fullName, organizationId, role' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: "Missing required fields: email, fullName, organizationId, role" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 4. Verify admin is inviting to their own organization (or super_admin can invite to any)
-    if (adminProfile.role !== 'super_admin' && adminProfile.organization_id !== organizationId) {
+    // 3. Verify admin is inviting to their own organization (super_admin can invite to any)
+    if (!isSuperAdmin(profile) && profile.organization_id !== organizationId) {
       return new Response(
-        JSON.stringify({ error: 'Cannot invite users to different organization' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: "Cannot invite users to different organization" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 5. Check if email already exists
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    const emailExists = existingUsers?.users?.some((u: { email?: string }) => u.email === email);
-    if (emailExists) {
+    // 4. Check if email already exists in user_profiles
+    const { data: existingProfile } = await supabaseAdmin
+      .from("user_profiles")
+      .select("id, status")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (existingProfile && existingProfile.status !== "pending_invite") {
       return new Response(
         JSON.stringify({ error: `User with email already exists: ${email}` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 6. Create invitation tracking record in user_invitations table
-    // This uses the admin variant that accepts p_created_by instead of auth.uid()
-    const { data: invitation, error: inviteRecordError } = await supabaseAdmin.rpc('create_invitation_admin', {
-      p_email: email,
-      p_organization_id: organizationId,
-      p_role: role,
-      p_created_by: user.id,
-      p_expires_in_days: 7,
-      p_notes: `Invited by admin as ${role}`,
-    });
+    // 5. Create or update pending user_profiles entry
+    if (existingProfile) {
+      await supabaseAdmin
+        .from("user_profiles")
+        .update({
+          full_name: fullName,
+          role,
+          organization_id: organizationId,
+          status: "pending_invite",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingProfile.id);
+    } else {
+      const { error: insertError } = await supabaseAdmin
+        .from("user_profiles")
+        .insert({
+          email,
+          full_name: fullName,
+          role,
+          organization_id: organizationId,
+          status: "pending_invite",
+        });
 
-    if (inviteRecordError) {
-      console.error('Error creating invitation record:', inviteRecordError);
+      if (insertError) {
+        console.error("Error creating pending profile:", insertError);
+        return new Response(
+          JSON.stringify({ error: "Failed to create user profile: " + insertError.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // 6. Create user directly in Clerk via Backend API
+    const clerkSecretKey = Deno.env.get("CLERK_SECRET_KEY");
+    if (!clerkSecretKey) {
+      console.error("CLERK_SECRET_KEY not set");
       return new Response(
-        JSON.stringify({ error: 'Failed to create invitation record: ' + inviteRecordError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: "Server misconfigured: missing Clerk secret key" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const inviteCode = invitation?.invite_code;
-    console.log(`Invitation record created: ${inviteCode} for ${email}`);
+    const nameParts = fullName.trim().split(/\s+/);
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || "";
 
-    // 7. Invite user via email
-    // The trigger `on_auth_user_created` will auto-create a user_profiles row
-    // using the metadata below. User stays as 'pending' until admin approves.
-    const appUrl = Deno.env.get('APP_URL') || supabaseUrl;
-    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      data: {
-        full_name: fullName,
-        organization_id: organizationId,
-        invited_by: user.id,
-        role,
-        invite_code: inviteCode,
+    const clerkResponse = await fetch("https://api.clerk.com/v1/users", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${clerkSecretKey}`,
+        "Content-Type": "application/json",
       },
-      redirectTo: `${appUrl}/auth/callback`,
+      body: JSON.stringify({
+        email_address: [email],
+        first_name: firstName,
+        last_name: lastName,
+        skip_password_checks: true,
+        skip_password_requirement: true,
+        public_metadata: {
+          invited_role: role,
+          invited_org_id: organizationId,
+          invited_by: profile.id,
+        },
+      }),
     });
 
-    if (inviteError || !inviteData.user) {
-      console.error('Error inviting user:', inviteError);
+    const clerkResult = await clerkResponse.json();
+
+    if (!clerkResponse.ok) {
+      console.error("Clerk user creation failed:", clerkResult);
+      const errorMsg = clerkResult?.errors?.[0]?.long_message
+        || clerkResult?.errors?.[0]?.message
+        || clerkResult?.message
+        || "Failed to create Clerk user";
       return new Response(
-        JSON.stringify({ error: inviteError?.message || 'Failed to invite user' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: errorMsg }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const newUserId = inviteData.user.id;
+    // 7. Directly activate the profile with the Clerk user ID (no webhook dependency)
+    const { error: activateError } = await supabaseAdmin
+      .from("user_profiles")
+      .update({
+        clerk_id: clerkResult.id,
+        status: "approved",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("email", email)
+      .eq("status", "pending_invite");
 
-    // NOTE: No auto-approval. User profile stays as 'pending' (created by trigger).
-    // Admin must manually approve via UserManagement > Pending Approvals.
+    if (activateError) {
+      console.error("Error activating profile:", activateError);
+      // Non-fatal: the webhook can still activate it as backup
+    }
 
-    console.log(`User invited (pending approval): ${fullName} (${email}) as ${role} to org ${organizationId}`);
+    // 8. Generate one-time sign-in token for magic link
+    let magicLink: string | null = null;
+    try {
+      const tokenResponse = await fetch("https://api.clerk.com/v1/sign_in_tokens", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${clerkSecretKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_id: clerkResult.id,
+          expires_in_seconds: 604800, // 7 days
+        }),
+      });
+
+      if (tokenResponse.ok) {
+        const tokenResult = await tokenResponse.json();
+        const appUrl = Deno.env.get("APP_URL") || "";
+        magicLink = `${appUrl}?signin_token=${tokenResult.token}`;
+      } else {
+        console.warn("Failed to create sign-in token:", await tokenResponse.text());
+      }
+    } catch (tokenError) {
+      console.warn("Sign-in token creation failed (non-fatal):", tokenError);
+    }
+
+    // 9. Track invitation
+    await supabaseAdmin.from("user_invitations").insert({
+      email,
+      organization_id: organizationId,
+      role,
+      status: "accepted",
+      created_by: profile.id,
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      notes: `Invited by admin as ${role}.`,
+    }).then(({ error }) => {
+      if (error) console.warn("Invitation tracking insert failed (non-fatal):", error.message);
+    });
+
+    console.log(`User created and activated: ${fullName} (${email}) as ${role} to org ${organizationId}, clerk_user_id=${clerkResult.id}`);
 
     return new Response(
       JSON.stringify({
         data: {
-          user_id: newUserId,
-          email: inviteData.user.email,
+          email,
           full_name: fullName,
           role,
           organization_id: organizationId,
-          status: 'pending',
-          invite_sent: true,
-          invite_code: inviteCode,
+          status: "approved",
+          clerk_user_id: clerkResult.id,
+          magic_link: magicLink,
         },
         error: null,
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
-    console.error('Unexpected error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error("Unexpected error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

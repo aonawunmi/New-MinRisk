@@ -70,6 +70,12 @@ export default function RegulatorManagement() {
   const [selectedRegulators, setSelectedRegulators] = useState<string[]>([]);
   const [inviteLoading, setInviteLoading] = useState(false);
 
+  // Magic link dialog state
+  const [magicLinkDialogOpen, setMagicLinkDialogOpen] = useState(false);
+  const [magicLink, setMagicLink] = useState('');
+  const [magicLinkEmail, setMagicLinkEmail] = useState('');
+  const [copied, setCopied] = useState(false);
+
   // Edit access dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editUserId, setEditUserId] = useState<string>('');
@@ -138,8 +144,18 @@ export default function RegulatorManagement() {
         return;
       }
 
-      setSuccess(`Regulator user ${inviteEmail} invited successfully! Password reset email sent.`);
       setInviteDialogOpen(false);
+
+      // Show magic link dialog if available
+      if (data?.magic_link) {
+        setMagicLink(data.magic_link);
+        setMagicLinkEmail(inviteEmail);
+        setCopied(false);
+        setMagicLinkDialogOpen(true);
+      } else {
+        setSuccess(`Regulator user ${inviteEmail} created successfully.`);
+      }
+
       loadData(); // Reload data
     } catch (err) {
       setError('Unexpected error inviting user');
@@ -455,6 +471,59 @@ export default function RegulatorManagement() {
             </Button>
             <Button onClick={handleEditSubmit} disabled={editLoading}>
               {editLoading ? 'Updating...' : 'Update Access'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Magic Link Success Dialog */}
+      <Dialog open={magicLinkDialogOpen} onOpenChange={setMagicLinkDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Regulator Account Created
+            </DialogTitle>
+            <DialogDescription>
+              Share this one-time sign-in link with <strong>{magicLinkEmail}</strong>.
+              They'll be signed in instantly when they click it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>One-Time Sign-In Link</Label>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={magicLink}
+                  className="font-mono text-xs"
+                />
+                <Button
+                  variant={copied ? 'default' : 'outline'}
+                  className="shrink-0"
+                  onClick={() => {
+                    navigator.clipboard.writeText(magicLink);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 3000);
+                  }}
+                >
+                  {copied ? 'Copied!' : 'Copy'}
+                </Button>
+              </div>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
+              <p className="font-medium mb-1">How it works:</p>
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                <li>Share this link with the user via email or message</li>
+                <li>When they click it, they'll be signed in automatically</li>
+                <li>The link is valid for 7 days and can only be used once</li>
+                <li>After signing in, they can set a password in their profile</li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setMagicLinkDialogOpen(false)}>
+              Done
             </Button>
           </DialogFooter>
         </DialogContent>

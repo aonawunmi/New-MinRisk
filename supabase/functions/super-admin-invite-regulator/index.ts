@@ -1,212 +1,256 @@
-// Edge Function: super-admin-invite-regulator
-// Purpose: Super Admin can invite regulator users and assign them to regulators
-// Security: Only super_admin role can call this
-// Pattern: Matches super-admin-invite-primary-admin for consistency
-// Updated: 2026-02-16 (Auth Overhaul: removed auto-approval)
+// Edge Function: super-admin-invite-regulator (Clerk Version)
+// Purpose: Super Admin invites regulator users and assigns them to regulators
+// Flow:
+//   1. Verify caller is super_admin (via Clerk JWT)
+//   2. Validate regulator IDs
+//   3. Create pending user_profiles entry with role='regulator'
+//   4. Create user directly in Clerk via Backend API
+//   5. Pre-create regulator_access records
+//   6. Immediately activate profile with clerk_id
+//   7. Generate one-time sign-in token → magic link for instant access
 //
-// IMPORTANT: There is a database trigger `on_auth_user_created` on auth.users
-// that automatically creates a user_profiles row when inviteUserByEmail is called.
-// The trigger reads role/full_name/organization_id from raw_user_meta_data.
-// The profile is created with status='pending' — super admin must manually approve.
-//
-// NOTE: No invite tracking in user_invitations for regulators because regulators
-// don't belong to an organization (user_invitations requires organization_id).
+// Required env vars: CLERK_SECRET_KEY, APP_URL
+// Updated: 2026-02-17 (Magic link flow — world-class UX)
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Max-Age': '86400',
-};
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { verifyClerkAuth, isSuperAdmin } from "../_shared/clerk-auth.ts";
+import { corsHeaders } from "../_shared/cors.ts";
 
 interface InviteRegulatorRequest {
-    email: string;
-    full_name: string;
-    regulator_ids: string[];
+  email: string;
+  full_name: string;
+  regulator_ids: string[];
 }
 
 serve(async (req: Request) => {
-    // Handle CORS preflight
-    if (req.method === 'OPTIONS') {
-        return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    // 1. Verify caller is super_admin
+    const { profile, supabaseAdmin } = await verifyClerkAuth(req);
+
+    if (!isSuperAdmin(profile)) {
+      return new Response(
+        JSON.stringify({ error: "Only super_admin can invite regulator users" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
+    // 2. Parse request
+    const { email, full_name, regulator_ids }: InviteRegulatorRequest = await req.json();
+
+    if (!email || !full_name || !regulator_ids || regulator_ids.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields: email, full_name, regulator_ids" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // 3. Validate regulator IDs
+    const { data: regulators, error: regulatorError } = await supabaseAdmin
+      .from("regulators")
+      .select("id, name")
+      .in("id", regulator_ids);
+
+    if (regulatorError || !regulators || regulators.length !== regulator_ids.length) {
+      return new Response(
+        JSON.stringify({ error: "One or more regulator IDs are invalid" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // 4. Check if email already exists
+    const { data: existingProfile } = await supabaseAdmin
+      .from("user_profiles")
+      .select("id, status")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (existingProfile && existingProfile.status !== "pending_invite") {
+      return new Response(
+        JSON.stringify({ error: `User with email already exists: ${email}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // 5. Create or update pending user_profiles entry
+    let pendingProfileId: string;
+
+    if (existingProfile) {
+      pendingProfileId = existingProfile.id;
+      await supabaseAdmin
+        .from("user_profiles")
+        .update({
+          full_name,
+          role: "regulator",
+          organization_id: null,
+          status: "pending_invite",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingProfile.id);
+    } else {
+      const { data: newProfile, error: insertError } = await supabaseAdmin
+        .from("user_profiles")
+        .insert({
+          email,
+          full_name,
+          role: "regulator",
+          organization_id: null,
+          status: "pending_invite",
+        })
+        .select("id")
+        .single();
+
+      if (insertError || !newProfile) {
+        console.error("Error creating pending profile:", insertError);
+        return new Response(
+          JSON.stringify({ error: "Failed to create user profile: " + (insertError?.message || "unknown") }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      pendingProfileId = newProfile.id;
+    }
+
+    // 6. Pre-create regulator_access records
+    // Delete existing access (in case of re-invite) then insert
+    await supabaseAdmin
+      .from("regulator_access")
+      .delete()
+      .eq("user_id", pendingProfileId);
+
+    const accessRecords = regulator_ids.map((regulator_id) => ({
+      user_id: pendingProfileId,
+      regulator_id,
+      granted_by: profile.id,
+    }));
+
+    const { error: accessError } = await supabaseAdmin
+      .from("regulator_access")
+      .insert(accessRecords);
+
+    if (accessError) {
+      console.error("Error granting regulator access:", accessError);
+      return new Response(
+        JSON.stringify({ error: "Failed to grant regulator access: " + accessError.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // 7. Create user directly in Clerk via Backend API
+    const clerkSecretKey = Deno.env.get("CLERK_SECRET_KEY");
+    if (!clerkSecretKey) {
+      console.error("CLERK_SECRET_KEY not set");
+      return new Response(
+        JSON.stringify({ error: "Server misconfigured: missing Clerk secret key" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const nameParts = full_name.trim().split(/\s+/);
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || "";
+
+    const clerkResponse = await fetch("https://api.clerk.com/v1/users", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${clerkSecretKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email_address: [email],
+        first_name: firstName,
+        last_name: lastName,
+        skip_password_checks: true,
+        skip_password_requirement: true,
+        public_metadata: {
+          invited_role: "regulator",
+          invited_regulators: regulators.map(r => r.name),
+          invited_by: profile.id,
+        },
+      }),
+    });
+
+    const clerkResult = await clerkResponse.json();
+
+    if (!clerkResponse.ok) {
+      console.error("Clerk user creation failed:", clerkResult);
+      const errorMsg = clerkResult?.errors?.[0]?.long_message
+        || clerkResult?.errors?.[0]?.message
+        || clerkResult?.message
+        || "Failed to create Clerk user";
+      return new Response(
+        JSON.stringify({ error: errorMsg }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // 8. Directly activate the profile with the Clerk user ID (no webhook dependency)
+    const { error: activateError } = await supabaseAdmin
+      .from("user_profiles")
+      .update({
+        clerk_id: clerkResult.id,
+        status: "approved",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", pendingProfileId);
+
+    if (activateError) {
+      console.error("Error activating profile:", activateError);
+      // Non-fatal: the webhook can still activate it as backup
+    }
+
+    // 9. Generate one-time sign-in token for magic link
+    let magicLink: string | null = null;
     try {
-        // Get authorization header
-        const authHeader = req.headers.get('Authorization');
-        if (!authHeader) {
-            return new Response(
-                JSON.stringify({ error: 'Missing authorization header' }),
-                { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-        }
+      const tokenResponse = await fetch("https://api.clerk.com/v1/sign_in_tokens", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${clerkSecretKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_id: clerkResult.id,
+          expires_in_seconds: 604800, // 7 days
+        }),
+      });
 
-        // Initialize Supabase clients
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-        const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-
-        // Client with user's auth token (for verification)
-        const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-            global: { headers: { Authorization: authHeader } },
-        });
-
-        // Admin client with service role (for privileged operations)
-        const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
-        // 1. Verify user is authenticated
-        const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-        if (userError || !user) {
-            console.error('Auth verification failed:', userError);
-            return new Response(
-                JSON.stringify({ error: 'Authentication failed' }),
-                { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-        }
-
-        // 2. Verify user is super_admin
-        const { data: adminProfile, error: profileError } = await supabaseClient
-            .from('user_profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-
-        if (profileError || !adminProfile) {
-            console.error('Profile lookup failed:', profileError);
-            return new Response(
-                JSON.stringify({ error: 'User profile not found' }),
-                { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-        }
-
-        if (adminProfile.role !== 'super_admin') {
-            return new Response(
-                JSON.stringify({ error: 'Only super_admin can invite regulator users' }),
-                { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-        }
-
-        // 3. Parse request body
-        const body: InviteRegulatorRequest = await req.json();
-        const { email, full_name, regulator_ids } = body;
-
-        // Validate input
-        if (!email || !full_name || !regulator_ids || regulator_ids.length === 0) {
-            return new Response(
-                JSON.stringify({
-                    error: 'Missing required fields: email, full_name, and regulator_ids',
-                }),
-                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-        }
-
-        // 4. Check if email already exists
-        const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-        const emailExists = existingUsers?.users?.some((u: { email?: string }) => u.email === email);
-        if (emailExists) {
-            return new Response(
-                JSON.stringify({ error: `User with email already exists: ${email}` }),
-                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-        }
-
-        // 5. Validate regulator IDs exist
-        const { data: regulators, error: regulatorError } = await supabaseAdmin
-            .from('regulators')
-            .select('id, name')
-            .in('id', regulator_ids);
-
-        if (regulatorError || !regulators || regulators.length !== regulator_ids.length) {
-            console.error('Regulator validation failed:', regulatorError);
-            return new Response(
-                JSON.stringify({ error: 'One or more regulator IDs are invalid' }),
-                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-        }
-
-        // 6. Invite user via email
-        // The trigger `on_auth_user_created` will auto-create user_profiles row
-        // using the metadata below. We pass role as 'regulator'.
-        // PREREQUISITE: 'regulator' must exist in the user_role enum and CHECK constraint.
-        const appUrl = Deno.env.get('APP_URL') || supabaseUrl;
-        const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-            data: {
-                full_name,
-                role: 'regulator',
-                invited_by: user.id,
-            },
-            redirectTo: `${appUrl}/auth/callback`,
-        });
-
-        if (inviteError || !inviteData.user) {
-            console.error('Error inviting user:', inviteError);
-            return new Response(
-                JSON.stringify({
-                    error: inviteError?.message || 'Failed to invite user',
-                }),
-                { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-        }
-
-        const newUserId = inviteData.user.id;
-
-        // NOTE: No auto-approval. User profile stays as 'pending' (created by trigger).
-        // Super Admin must manually approve via Admin Panel > Pending Approvals.
-
-        // 7. Grant access to specified regulators
-        const accessRecords = regulator_ids.map((regulator_id) => ({
-            user_id: newUserId,
-            regulator_id,
-            granted_by: user.id,
-        }));
-
-        const { error: accessError } = await supabaseAdmin
-            .from('regulator_access')
-            .insert(accessRecords);
-
-        if (accessError) {
-            console.error('Error granting regulator access:', accessError);
-            return new Response(
-                JSON.stringify({
-                    error: 'User invited but failed to grant regulator access: ' + accessError.message,
-                }),
-                { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-        }
-
-        // 8. Success
-        console.log(`Regulator user invited (pending approval): ${email}, assigned to: ${regulators.map(r => r.name).join(', ')}`);
-
-        return new Response(
-            JSON.stringify({
-                data: {
-                    user_id: newUserId,
-                    email,
-                    full_name,
-                    role: 'regulator',
-                    regulators: regulators.map(r => r.name),
-                    status: 'pending',
-                    invite_sent: true,
-                },
-                error: null,
-            }),
-            {
-                status: 200,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            }
-        );
-    } catch (error: unknown) {
-        console.error('Unexpected error:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        return new Response(
-            JSON.stringify({ error: errorMessage }),
-            {
-                status: 500,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            }
-        );
+      if (tokenResponse.ok) {
+        const tokenResult = await tokenResponse.json();
+        const appUrl = Deno.env.get("APP_URL") || "";
+        magicLink = `${appUrl}?signin_token=${tokenResult.token}`;
+      } else {
+        console.warn("Failed to create sign-in token:", await tokenResponse.text());
+      }
+    } catch (tokenError) {
+      console.warn("Sign-in token creation failed (non-fatal):", tokenError);
     }
+
+    console.log(`Regulator created and activated: ${email}, assigned to: ${regulators.map(r => r.name).join(", ")}, clerk_user_id=${clerkResult.id}`);
+
+    return new Response(
+      JSON.stringify({
+        data: {
+          email,
+          full_name,
+          role: "regulator",
+          regulators: regulators.map(r => r.name),
+          status: "approved",
+          clerk_user_id: clerkResult.id,
+          magic_link: magicLink,
+        },
+        error: null,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (error: unknown) {
+    console.error("Unexpected error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
 });

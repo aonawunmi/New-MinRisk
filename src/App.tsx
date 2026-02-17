@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { SignIn, SignUp, useClerk } from '@clerk/clerk-react';
+import { SignIn, SignUp, useClerk, useSignIn } from '@clerk/clerk-react';
 import { useAuth } from '@/lib/auth';
 import { useOrgBranding } from '@/hooks/useOrgBranding';
 import { useOrgFeatures } from '@/hooks/useOrgFeatures';
@@ -36,6 +36,7 @@ import ReportHub from '@/components/reports/ReportHub';
 export default function App() {
   const { user, profile, loading } = useAuth();
   const { signOut } = useClerk();
+  const { signIn, setActive, isLoaded: signInLoaded } = useSignIn();
   const { logoUrl } = useOrgBranding();
   const { features } = useOrgFeatures();
 
@@ -45,6 +46,35 @@ export default function App() {
   const [pciWorkflowEnabled, setPciWorkflowEnabled] = useState(false);
   const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>('sign-in');
   const [adminLoaded, setAdminLoaded] = useState(false);
+
+  // Magic link auto-sign-in: detect ?signin_token= in URL
+  const [autoSigningIn, setAutoSigningIn] = useState(() => {
+    return !!new URLSearchParams(window.location.search).get('signin_token');
+  });
+  const [signInError, setSignInError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('signin_token');
+
+    if (!token || !signIn || !signInLoaded || !setActive) return;
+
+    setAutoSigningIn(true);
+    signIn.create({ strategy: 'ticket', ticket: token })
+      .then(async (result) => {
+        if (result.status === 'complete' && result.createdSessionId) {
+          await setActive({ session: result.createdSessionId });
+          // Clean up URL
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      })
+      .catch((err) => {
+        console.error('Magic link sign-in failed:', err);
+        setSignInError('This sign-in link has expired or has already been used. Please ask your administrator for a new link.');
+        setAutoSigningIn(false);
+        window.history.replaceState({}, '', window.location.pathname);
+      });
+  }, [signIn, signInLoaded, setActive]);
 
   // Load admin status and PCI config when profile is available
   useEffect(() => {
@@ -102,11 +132,29 @@ export default function App() {
     );
   }
 
-  // Not signed in — show Clerk Sign In or Sign Up
+  // Not signed in — show magic link processing, Clerk Sign In, or Sign Up
   if (!user || !profile) {
+    // Magic link is being processed — show welcome screen
+    if (autoSigningIn) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome to MinRisk</h1>
+            <p className="text-gray-600 mb-4">Setting up your account...</p>
+            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div>
+          {signInError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 max-w-sm">
+              {signInError}
+            </div>
+          )}
           {authMode === 'sign-up' ? (
             <>
               <SignUp routing="hash" signInUrl="/#/sign-in" />
