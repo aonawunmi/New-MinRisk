@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { SignIn, useClerk } from '@clerk/clerk-react';
+import { SignIn, SignUp, useClerk } from '@clerk/clerk-react';
 import { useAuth } from '@/lib/auth';
 import { useOrgBranding } from '@/hooks/useOrgBranding';
 import { useOrgFeatures } from '@/hooks/useOrgFeatures';
@@ -43,6 +43,7 @@ export default function App() {
   const [isSuperAdminUser, setIsSuperAdminUser] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [pciWorkflowEnabled, setPciWorkflowEnabled] = useState(false);
+  const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>('sign-in');
   const [adminLoaded, setAdminLoaded] = useState(false);
 
   // Load admin status and PCI config when profile is available
@@ -101,11 +102,33 @@ export default function App() {
     );
   }
 
-  // Not signed in — show Clerk Sign In
+  // Not signed in — show Clerk Sign In or Sign Up
   if (!user || !profile) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <SignIn routing="hash" />
+        <div>
+          {authMode === 'sign-up' ? (
+            <>
+              <SignUp routing="hash" signInUrl="/#/sign-in" />
+              <p className="text-center mt-4 text-sm text-gray-600">
+                Already have an account?{' '}
+                <button onClick={() => setAuthMode('sign-in')} className="text-blue-600 hover:underline">
+                  Sign in
+                </button>
+              </p>
+            </>
+          ) : (
+            <>
+              <SignIn routing="hash" signUpUrl="/#/sign-up" />
+              <p className="text-center mt-4 text-sm text-gray-600">
+                Don't have an account?{' '}
+                <button onClick={() => setAuthMode('sign-up')} className="text-blue-600 hover:underline">
+                  Sign up
+                </button>
+              </p>
+            </>
+          )}
+        </div>
       </div>
     );
   }
