@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
 import { supabase } from './supabase';
 import { useSupabaseReady } from './clerk-supabase';
@@ -86,6 +86,7 @@ export function useAuth() {
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileStatus, setProfileStatus] = useState<'loading' | 'found' | 'no_profile' | 'pending'>('loading');
+  const claimRetryCount = useRef(0);
 
   const loadProfile = useCallback(async () => {
     // Check auth state first — unauthenticated users should see the sign-in screen
@@ -125,12 +126,28 @@ export function useAuth() {
           const { data: claimResult, error: claimError } = await supabase
             .rpc('claim_profile_by_email', { p_email: email });
 
+          console.log('claim_profile_by_email result:', JSON.stringify({ claimResult, claimError }));
+
           if (claimError) {
             console.error('claim_profile_by_email RPC error:', JSON.stringify(claimError));
           }
 
+          // Check for function-level auth error (auth.jwt() was null)
+          // This can happen right after sign-up when the token isn't propagated yet
+          if (!claimError && claimResult?.error === 'Not authenticated') {
+            console.warn('Claim returned "Not authenticated" — JWT may not be ready yet');
+            if (claimRetryCount.current < 3) {
+              claimRetryCount.current += 1;
+              console.log(`Retrying claim in 1.5s (attempt ${claimRetryCount.current}/3)...`);
+              setTimeout(() => loadProfile(), 1500);
+              return; // Don't set loading=false — keep showing Loading...
+            }
+            console.error('Claim failed after 3 retries — JWT not available');
+          }
+
           if (!claimError && claimResult?.claimed) {
             console.log('Successfully claimed invitation, reloading profile...');
+            claimRetryCount.current = 0;
             // Re-query the profile now that clerk_id is linked
             const { data: claimedProfile } = await supabase
               .from('user_profiles')
@@ -144,10 +161,8 @@ export function useAuth() {
               setLoading(false);
               return;
             }
-          } else if (claimResult && !claimResult.claimed) {
+          } else if (!claimError && claimResult && !claimResult.claimed && claimResult.reason) {
             console.log('Claim not successful:', claimResult.reason);
-          } else if (claimResult?.error) {
-            console.error('Claim function returned error:', claimResult.error);
           }
         }
 
@@ -178,6 +193,7 @@ export function useAuth() {
   }, [clerkUser, isSignedIn, supabaseReady]);
 
   useEffect(() => {
+    claimRetryCount.current = 0;
     loadProfile();
   }, [loadProfile]);
 
