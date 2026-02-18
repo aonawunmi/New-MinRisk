@@ -2,15 +2,17 @@ import { useEffect, useState, useContext, createContext } from 'react';
 import { useSession } from '@clerk/clerk-react';
 import { setClerkTokenGetter } from './supabase';
 
-/**
- * Context that signals whether the Clerk→Supabase token bridge is ready.
- * Child components should wait for `tokenReady` before making Supabase queries,
- * otherwise they'll run as anonymous (no JWT) due to React effect ordering.
- */
-const ClerkSupabaseContext = createContext({ tokenReady: false });
+interface ClerkSupabaseContextType {
+  supabaseReady: boolean;
+}
 
-export function useClerkSupabaseReady() {
-  return useContext(ClerkSupabaseContext);
+const ClerkSupabaseContext = createContext<ClerkSupabaseContextType>({
+  supabaseReady: false,
+});
+
+export function useSupabaseReady() {
+  const ctx = useContext(ClerkSupabaseContext);
+  return ctx.supabaseReady;
 }
 
 /**
@@ -20,32 +22,30 @@ export function useClerkSupabaseReady() {
  * When the Clerk session changes, updates the token getter so the
  * Supabase client automatically includes the Clerk JWT in all requests.
  *
- * Exposes `tokenReady` via context so child hooks (useAuth) can wait
+ * Exposes `supabaseReady` via context so child hooks (useAuth) can wait
  * until the JWT is wired before making authenticated Supabase queries.
  */
 export function ClerkSupabaseProvider({ children }: { children: React.ReactNode }) {
-  const { session, isLoaded: sessionLoaded } = useSession();
-  const [tokenReady, setTokenReady] = useState(false);
+  const { session } = useSession();
+  const [supabaseReady, setSupabaseReady] = useState(false);
 
   useEffect(() => {
-    if (!sessionLoaded) return; // Wait for Clerk to finish loading
-
     if (session) {
       setClerkTokenGetter(() => session.getToken());
+      setSupabaseReady(true);
     } else {
-      // No session (user not signed in) — no token needed
       setClerkTokenGetter(null);
+      setSupabaseReady(false);
     }
-    // Either way, once Clerk has loaded we're ready
-    setTokenReady(true);
 
     return () => {
       setClerkTokenGetter(null);
+      setSupabaseReady(false);
     };
-  }, [session, sessionLoaded]);
+  }, [session]);
 
   return (
-    <ClerkSupabaseContext.Provider value={{ tokenReady }}>
+    <ClerkSupabaseContext.Provider value={{ supabaseReady }}>
       {children}
     </ClerkSupabaseContext.Provider>
   );
