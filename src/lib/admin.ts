@@ -11,6 +11,7 @@ import type { UserProfile, UserRole, UserStatus } from './profiles';
  */
 
 const EDGE_FUNCTION_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, '') + '/functions/v1';
+const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
 
 export interface AdminResult<T = any> {
   data: T | null;
@@ -35,6 +36,7 @@ async function callEdgeFunction<T = any>(
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
+        'apikey': SUPABASE_ANON_KEY,
       },
       body: JSON.stringify(body),
     });

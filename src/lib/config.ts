@@ -201,6 +201,11 @@ export async function getOrganizationConfig(): Promise<ApiResponse<OrganizationC
       .single();
 
     if (error) {
+      // PGRST116 = no rows found — auto-create default config for this org
+      if (error.code === 'PGRST116') {
+        console.log('No config found for org, creating defaults...');
+        return createOrganizationConfig(5);
+      }
       console.error('Error fetching organization config:', error);
       return { data: null, error };
     }
