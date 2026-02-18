@@ -44,7 +44,10 @@ export default function App() {
   const [isSuperAdminUser, setIsSuperAdminUser] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [pciWorkflowEnabled, setPciWorkflowEnabled] = useState(false);
-  const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>('sign-in');
+  // Auto-detect invitation ticket — switch to sign-up mode so <SignUp /> handles it
+  const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>(() => {
+    return new URLSearchParams(window.location.search).has('__clerk_ticket') ? 'sign-up' : 'sign-in';
+  });
   const [adminLoaded, setAdminLoaded] = useState(false);
 
   // Magic link auto-sign-in: detect ?signin_token= in URL

@@ -95,10 +95,6 @@ export function OrganizationManagement() {
     const [loading, setLoading] = useState(true);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-    const [magicLinkDialogOpen, setMagicLinkDialogOpen] = useState(false);
-    const [magicLink, setMagicLink] = useState('');
-    const [magicLinkEmail, setMagicLinkEmail] = useState('');
-    const [copied, setCopied] = useState(false);
     const [managePlanDialogOpen, setManagePlanDialogOpen] = useState(false);
     const [selectedOrgForPlan, setSelectedOrgForPlan] = useState<Organization | null>(null);
     const [submitting, setSubmitting] = useState(false);
@@ -229,16 +225,7 @@ export function OrganizationManagement() {
             }
 
             setInviteDialogOpen(false);
-
-            // Show magic link dialog if available
-            if (result.data?.magic_link) {
-                setMagicLink(result.data.magic_link);
-                setMagicLinkEmail(inviteForm.email);
-                setCopied(false);
-                setMagicLinkDialogOpen(true);
-            } else {
-                alert(`User account created for ${inviteForm.email}. They can sign in using their email.`);
-            }
+            alert(`Invitation email sent to ${inviteForm.email}. They'll receive a link to create their account and set a password.`);
 
             setInviteForm({ organizationId: '', organizationName: '', email: '', fullName: '' });
             loadOrganizations();
@@ -614,8 +601,8 @@ export function OrganizationManagement() {
                     <DialogHeader>
                         <DialogTitle>Invite Primary Admin</DialogTitle>
                         <DialogDescription>
-                            Create a Primary Admin account for <strong>{inviteForm.organizationName}</strong>.
-                            You'll receive a one-time sign-in link to share with them.
+                            Invite a Primary Admin for <strong>{inviteForm.organizationName}</strong>.
+                            They'll receive an email with a link to create their account.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
@@ -644,60 +631,7 @@ export function OrganizationManagement() {
                             Cancel
                         </Button>
                         <Button onClick={handleInvitePrimaryAdmin} disabled={submitting}>
-                            {submitting ? 'Creating Account...' : 'Create Account'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            {/* Magic Link Success Dialog */}
-            <Dialog open={magicLinkDialogOpen} onOpenChange={setMagicLinkDialogOpen}>
-                <DialogContent className="sm:max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <CheckCircle className="h-5 w-5 text-green-600" />
-                            Account Created Successfully
-                        </DialogTitle>
-                        <DialogDescription>
-                            Share this one-time sign-in link with <strong>{magicLinkEmail}</strong>.
-                            They'll be signed in instantly when they click it.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label>One-Time Sign-In Link</Label>
-                            <div className="flex gap-2">
-                                <Input
-                                    readOnly
-                                    value={magicLink}
-                                    className="font-mono text-xs"
-                                />
-                                <Button
-                                    variant={copied ? 'default' : 'outline'}
-                                    className="shrink-0"
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(magicLink);
-                                        setCopied(true);
-                                        setTimeout(() => setCopied(false), 3000);
-                                    }}
-                                >
-                                    {copied ? 'Copied!' : 'Copy'}
-                                </Button>
-                            </div>
-                        </div>
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
-                            <p className="font-medium mb-1">How it works:</p>
-                            <ul className="list-disc list-inside space-y-1 text-xs">
-                                <li>Share this link with the user via email or message</li>
-                                <li>When they click it, they'll be signed in automatically</li>
-                                <li>The link is valid for 7 days and can only be used once</li>
-                                <li>After signing in, they can set a password in their profile</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button onClick={() => setMagicLinkDialogOpen(false)}>
-                            Done
+                            {submitting ? 'Sending Invitation...' : 'Send Invitation'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
