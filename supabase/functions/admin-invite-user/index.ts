@@ -150,7 +150,9 @@ serve(async (req) => {
     }
 
     // 7. Track invitation
-    await supabaseAdmin.from("user_invitations").insert({
+    const inviteCode = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+    const { error: trackError } = await supabaseAdmin.from("user_invitations").insert({
+      invite_code: inviteCode,
       email,
       organization_id: organizationId,
       role,
@@ -158,9 +160,10 @@ serve(async (req) => {
       created_by: profile.id,
       expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       notes: `Invited by admin as ${role}. Clerk invitation ID: ${clerkResult.id}`,
-    }).then(({ error }) => {
-      if (error) console.warn("Invitation tracking insert failed (non-fatal):", error.message);
     });
+    if (trackError) {
+      console.error("❌ user_invitations insert failed:", trackError.message, trackError);
+    }
 
     console.log(`Invitation email sent: ${fullName} (${email}) as ${role} to org ${organizationId}, clerk_invitation_id=${clerkResult.id}`);
 
