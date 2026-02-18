@@ -102,6 +102,7 @@ export function useAuth() {
     // so the UI shows "Loading..." during this wait — NOT "Account Not Found".
     if (!supabaseReady) return;
 
+    setLoading(true);
     try {
       console.log('[useAuth] Loading profile for:', clerkUser.primaryEmailAddress?.emailAddress);
 
