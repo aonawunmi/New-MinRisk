@@ -29,13 +29,18 @@ export function ClerkSupabaseProvider({ children }: { children: React.ReactNode 
   const { session } = useSession();
   const [supabaseReady, setSupabaseReady] = useState(false);
 
+  console.log('[ClerkSupabase] render — session:', session ? 'exists' : 'null');
+
   useEffect(() => {
+    console.log('[ClerkSupabase] effect — session:', session ? 'exists' : 'null');
     if (session) {
       setClerkTokenGetter(() => session.getToken());
       setSupabaseReady(true);
+      console.log('[ClerkSupabase] supabaseReady = true');
     } else {
       setClerkTokenGetter(null);
       setSupabaseReady(false);
+      console.log('[ClerkSupabase] supabaseReady = false (no session)');
     }
 
     return () => {

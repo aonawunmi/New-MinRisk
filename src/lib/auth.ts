@@ -89,6 +89,8 @@ export function useAuth() {
   const claimRetryCount = useRef(0);
 
   const loadProfile = useCallback(async () => {
+    console.log('[useAuth] loadProfile — isSignedIn:', isSignedIn, 'clerkUser:', !!clerkUser, 'supabaseReady:', supabaseReady);
+
     // Unauthenticated users — show sign-in screen
     if (!isSignedIn || !clerkUser) {
       setProfile(null);
