@@ -1,17 +1,20 @@
 /**
- * Invitation Management Component — CLERK VERSION
+ * Invitation Management Component
  *
- * Uses Clerk Organization API to manage invitations:
- * - Send email invitations via Clerk
- * - View pending / accepted / revoked invitations
- * - Revoke pending invitations
+ * Uses Edge Function (admin-invite-user) to send invitations via Clerk API.
+ * Displays invitation history from the user_invitations table.
  *
- * With Clerk Restricted mode, the invitation IS the approval.
- * No more "pending approvals" limbo.
+ * Flow:
+ *   1. Admin fills out invite form (email, name, role)
+ *   2. Edge Function creates a pending user_profiles entry
+ *   3. Edge Function sends a Clerk invitation email
+ *   4. When user accepts, claim_profile_by_email links their Clerk ID
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useOrganization } from '@clerk/clerk-react';
+import { inviteUser } from '@/lib/admin';
+import { getCurrentUserProfile } from '@/lib/profiles';
+import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -56,25 +59,24 @@ import {
   Send,
   Clock,
   XCircle,
-  Ban,
 } from 'lucide-react';
+import type { UserRole } from '@/lib/profiles';
 
-interface ClerkInvitation {
+interface Invitation {
   id: string;
-  emailAddress: string;
+  email: string;
   role: string;
   status: string;
-  createdAt: Date;
-  updatedAt: Date;
-  revoke: () => Promise<void>;
+  notes: string | null;
+  created_at: string;
+  expires_at: string;
 }
 
-type ClerkOrgRole = 'org:admin' | 'org:member';
+type InviteRole = 'secondary_admin' | 'user';
 
 export default function InvitationManagement() {
-  const { organization, isLoaded: orgLoaded } = useOrganization();
-
-  const [invitations, setInvitations] = useState<ClerkInvitation[]>([]);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -83,41 +85,59 @@ export default function InvitationManagement() {
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [newInvite, setNewInvite] = useState({
     email: '',
-    role: 'org:member' as ClerkOrgRole,
+    fullName: '',
+    role: 'user' as InviteRole,
   });
   const [sending, setSending] = useState(false);
 
-  // Revoke dialog state
-  const [revokeTarget, setRevokeTarget] = useState<ClerkInvitation | null>(null);
-  const [revoking, setRevoking] = useState(false);
+  // Load current user's org
+  useEffect(() => {
+    async function loadOrg() {
+      const { data: profile } = await getCurrentUserProfile();
+      if (profile?.organization_id) {
+        setOrganizationId(profile.organization_id);
+      } else {
+        setLoading(false);
+      }
+    }
+    loadOrg();
+  }, []);
 
   const loadInvitations = useCallback(async () => {
-    if (!organization) return;
+    if (!organizationId) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      const { totalCount, data } = await organization.getInvitations();
-      setInvitations((data as ClerkInvitation[]) || []);
+      const { data, error: queryError } = await supabase
+        .from('user_invitations')
+        .select('id, email, role, status, notes, created_at, expires_at')
+        .eq('organization_id', organizationId)
+        .order('created_at', { ascending: false });
+
+      if (queryError) {
+        console.error('Load invitations error:', queryError);
+        setError(queryError.message);
+      } else {
+        setInvitations(data || []);
+      }
     } catch (err: any) {
       console.error('Load invitations error:', err);
       setError(err.message || 'Failed to load invitations');
     } finally {
       setLoading(false);
     }
-  }, [organization]);
+  }, [organizationId]);
 
   useEffect(() => {
-    if (orgLoaded && organization) {
+    if (organizationId) {
       loadInvitations();
-    } else if (orgLoaded && !organization) {
-      setLoading(false);
     }
-  }, [orgLoaded, organization, loadInvitations]);
+  }, [organizationId, loadInvitations]);
 
   async function handleSendInvite() {
-    if (!organization) {
+    if (!organizationId) {
       setError('No organization context available');
       return;
     }
@@ -127,51 +147,43 @@ export default function InvitationManagement() {
       return;
     }
 
+    if (!newInvite.fullName.trim()) {
+      setError('Full name is required');
+      return;
+    }
+
     setSending(true);
     setError(null);
     setSuccess(null);
 
     try {
-      await organization.inviteMember({
-        emailAddress: newInvite.email.trim(),
-        role: newInvite.role,
+      const { data, error: inviteError } = await inviteUser({
+        email: newInvite.email.trim(),
+        fullName: newInvite.fullName.trim(),
+        organizationId,
+        role: newInvite.role as UserRole,
       });
 
+      if (inviteError) {
+        setError(inviteError.message);
+        return;
+      }
+
       setSuccess(
-        `Invitation sent to ${newInvite.email}. They will receive an email with a link to join.`
+        `Invitation sent to ${newInvite.email}. They will receive an email with a link to create their account.`
       );
 
       // Reset form and close dialog
-      setNewInvite({ email: '', role: 'org:member' });
+      setNewInvite({ email: '', fullName: '', role: 'user' });
       setShowInviteDialog(false);
 
       // Reload invitation list
       await loadInvitations();
     } catch (err: any) {
       console.error('Send invite error:', err);
-      setError(err.errors?.[0]?.longMessage || err.message || 'Failed to send invitation');
+      setError(err.message || 'Failed to send invitation');
     } finally {
       setSending(false);
-    }
-  }
-
-  async function handleRevoke() {
-    if (!revokeTarget) return;
-
-    setRevoking(true);
-    setError(null);
-
-    try {
-      await revokeTarget.revoke();
-
-      setSuccess(`Invitation for ${revokeTarget.emailAddress} has been revoked.`);
-      setRevokeTarget(null);
-      await loadInvitations();
-    } catch (err: any) {
-      console.error('Revoke error:', err);
-      setError(err.message || 'Failed to revoke invitation');
-    } finally {
-      setRevoking(false);
     }
   }
 
@@ -184,7 +196,7 @@ export default function InvitationManagement() {
             Pending
           </Badge>
         );
-      case 'accepted':
+      case 'used':
         return (
           <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
             <CheckCircle className="h-3 w-3 mr-1" />
@@ -198,6 +210,13 @@ export default function InvitationManagement() {
             Revoked
           </Badge>
         );
+      case 'expired':
+        return (
+          <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
+            <Clock className="h-3 w-3 mr-1" />
+            Expired
+          </Badge>
+        );
       default:
         return (
           <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
@@ -209,13 +228,15 @@ export default function InvitationManagement() {
 
   function getRoleBadge(role: string) {
     const colors: Record<string, string> = {
-      'org:admin': 'bg-purple-50 text-purple-700 border-purple-200',
-      'org:member': 'bg-blue-50 text-blue-700 border-blue-200',
+      secondary_admin: 'bg-purple-50 text-purple-700 border-purple-200',
+      user: 'bg-blue-50 text-blue-700 border-blue-200',
+      primary_admin: 'bg-orange-50 text-orange-700 border-orange-200',
     };
 
     const labels: Record<string, string> = {
-      'org:admin': 'Admin',
-      'org:member': 'Member',
+      secondary_admin: 'Secondary Admin',
+      user: 'User',
+      primary_admin: 'Primary Admin',
     };
 
     return (
@@ -227,11 +248,11 @@ export default function InvitationManagement() {
 
   // Summary counts
   const pendingCount = invitations.filter((i) => i.status === 'pending').length;
-  const acceptedCount = invitations.filter((i) => i.status === 'accepted').length;
+  const acceptedCount = invitations.filter((i) => i.status === 'used').length;
   const revokedCount = invitations.filter((i) => i.status === 'revoked').length;
 
-  // No organization context — show setup message
-  if (orgLoaded && !organization) {
+  // No organization context
+  if (!loading && !organizationId) {
     return (
       <Card>
         <CardHeader>
@@ -244,8 +265,7 @@ export default function InvitationManagement() {
           <Alert className="bg-amber-50 border-amber-200">
             <AlertCircle className="h-4 w-4 text-amber-600" />
             <AlertDescription className="text-amber-900">
-              Organization context not available. Please ensure your Clerk organization
-              is configured and you have selected an active organization.
+              No organization context found. Please contact your administrator.
             </AlertDescription>
           </Alert>
         </CardContent>
@@ -273,7 +293,7 @@ export default function InvitationManagement() {
                 User Invitations
               </CardTitle>
               <CardDescription>
-                Invite new users via email. Invited users are automatically approved when they accept.
+                Invite new users via email. Invited users receive a link to create their account.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -347,34 +367,24 @@ export default function InvitationManagement() {
                     <TableHead>Role</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Sent</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>Expires</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {invitations.map((invitation) => (
                     <TableRow key={invitation.id}>
                       <TableCell className="font-medium text-sm">
-                        {invitation.emailAddress}
+                        {invitation.email}
                       </TableCell>
                       <TableCell>{getRoleBadge(invitation.role)}</TableCell>
                       <TableCell>
                         {getInviteStatusBadge(invitation.status)}
                       </TableCell>
                       <TableCell className="text-sm text-gray-600">
-                        {new Date(invitation.createdAt).toLocaleDateString()}
+                        {new Date(invitation.created_at).toLocaleDateString()}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {invitation.status === 'pending' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => setRevokeTarget(invitation)}
-                          >
-                            <Ban className="h-3.5 w-3.5 mr-1" />
-                            Revoke
-                          </Button>
-                        )}
+                      <TableCell className="text-sm text-gray-600">
+                        {new Date(invitation.expires_at).toLocaleDateString()}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -392,11 +402,25 @@ export default function InvitationManagement() {
             <DialogTitle>Invite New User</DialogTitle>
             <DialogDescription>
               Send an email invitation. The user will receive a link to create their account
-              and join your organization. They are automatically approved upon accepting.
+              and join your organization.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Full Name *</Label>
+              <Input
+                id="fullName"
+                type="text"
+                placeholder="John Doe"
+                value={newInvite.fullName}
+                onChange={(e) =>
+                  setNewInvite({ ...newInvite, fullName: e.target.value })
+                }
+                disabled={sending}
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">Email Address *</Label>
               <Input
@@ -412,10 +436,10 @@ export default function InvitationManagement() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="role">Organization Role *</Label>
+              <Label htmlFor="role">Role *</Label>
               <Select
                 value={newInvite.role}
-                onValueChange={(value: ClerkOrgRole) =>
+                onValueChange={(value: InviteRole) =>
                   setNewInvite({ ...newInvite, role: value })
                 }
                 disabled={sending}
@@ -424,20 +448,17 @@ export default function InvitationManagement() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="org:member">Member</SelectItem>
-                  <SelectItem value="org:admin">Admin</SelectItem>
+                  <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="secondary_admin">Secondary Admin</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-gray-500">
-                You can adjust the user's specific app role after they join via User Management.
-              </p>
             </div>
 
             <Alert className="bg-blue-50 border-blue-200">
               <Send className="h-4 w-4 text-blue-600" />
               <AlertDescription className="text-blue-900 text-sm">
                 The invited user will receive an email with a link to create their account.
-                Once they accept, they'll be automatically approved and can start using the platform.
+                Once they sign up, they'll be automatically linked to your organization.
               </AlertDescription>
             </Alert>
           </div>
@@ -460,47 +481,6 @@ export default function InvitationManagement() {
                 <>
                   <Send className="h-4 w-4 mr-2" />
                   Send Invitation
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Revoke Confirmation Dialog */}
-      <Dialog open={!!revokeTarget} onOpenChange={(open) => !open && setRevokeTarget(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Revoke Invitation</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to revoke the invitation for{' '}
-              <strong>{revokeTarget?.emailAddress}</strong>? They will no longer be able to use
-              this invitation link.
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setRevokeTarget(null)}
-              disabled={revoking}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleRevoke}
-              disabled={revoking}
-            >
-              {revoking ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Revoking...
-                </>
-              ) : (
-                <>
-                  <Ban className="h-4 w-4 mr-2" />
-                  Revoke Invitation
                 </>
               )}
             </Button>
