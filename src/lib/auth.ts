@@ -89,7 +89,7 @@ export function useAuth() {
   const claimRetryCount = useRef(0);
 
   const loadProfile = useCallback(async () => {
-    // Check auth state first — unauthenticated users should see the sign-in screen
+    // Unauthenticated users — show sign-in screen
     if (!isSignedIn || !clerkUser) {
       setProfile(null);
       setProfileStatus('no_profile');
@@ -97,12 +97,15 @@ export function useAuth() {
       return;
     }
 
-    // For authenticated users, wait until the Clerk JWT is wired into Supabase
+    // Wait for Clerk JWT to be wired into Supabase.
+    // The return value's loading check includes (isSignedIn && !supabaseReady),
+    // so the UI shows "Loading..." during this wait — NOT "Account Not Found".
     if (!supabaseReady) return;
 
     try {
+      console.log('[useAuth] Loading profile for:', clerkUser.primaryEmailAddress?.emailAddress);
+
       // RLS on user_profiles: clerk_id = auth.jwt()->>'sub'
-      // This returns only the current user's profile
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
@@ -110,86 +113,100 @@ export function useAuth() {
         .maybeSingle();
 
       if (error) {
-        console.error('Load profile error:', error.message);
-        setProfile(null);
-        setProfileStatus('no_profile');
+        console.error('[useAuth] Profile query error:', error.message);
+        // Don't return — still try the claim below
+      }
+
+      // Profile found by RLS (clerk_id already linked)
+      if (data) {
+        if (data.status !== 'approved') {
+          console.warn(`[useAuth] User status is '${data.status}' — access restricted`);
+          setProfile(null);
+          setProfileStatus('pending');
+          setLoading(false);
+          return;
+        }
+        setProfile(data);
+        setProfileStatus('found');
         setLoading(false);
         return;
       }
 
       // No profile found — try auto-claiming a pending invitation by email
-      if (!data) {
-        const email = clerkUser.primaryEmailAddress?.emailAddress;
-        if (email) {
-          console.log('No profile found for clerk_id, attempting to claim invitation for:', email);
-
-          const { data: claimResult, error: claimError } = await supabase
-            .rpc('claim_profile_by_email', { p_email: email });
-
-          console.log('claim_profile_by_email result:', JSON.stringify({ claimResult, claimError }));
-
-          if (claimError) {
-            console.error('claim_profile_by_email RPC error:', JSON.stringify(claimError));
-          }
-
-          // Check for function-level auth error (auth.jwt() was null)
-          // This can happen right after sign-up when the token isn't propagated yet
-          if (!claimError && claimResult?.error === 'Not authenticated') {
-            console.warn('Claim returned "Not authenticated" — JWT may not be ready yet');
-            if (claimRetryCount.current < 3) {
-              claimRetryCount.current += 1;
-              console.log(`Retrying claim in 1.5s (attempt ${claimRetryCount.current}/3)...`);
-              setTimeout(() => loadProfile(), 1500);
-              return; // Don't set loading=false — keep showing Loading...
-            }
-            console.error('Claim failed after 3 retries — JWT not available');
-          }
-
-          if (!claimError && claimResult?.claimed) {
-            console.log('Successfully claimed invitation, reloading profile...');
-            claimRetryCount.current = 0;
-            // Re-query the profile now that clerk_id is linked
-            const { data: claimedProfile } = await supabase
-              .from('user_profiles')
-              .select('*')
-              .limit(1)
-              .maybeSingle();
-
-            if (claimedProfile && claimedProfile.status === 'approved') {
-              setProfile(claimedProfile);
-              setProfileStatus('found');
-              setLoading(false);
-              return;
-            }
-          } else if (!claimError && claimResult && !claimResult.claimed && claimResult.reason) {
-            console.log('Claim not successful:', claimResult.reason);
-          }
-        }
-
+      const email = clerkUser.primaryEmailAddress?.emailAddress;
+      if (!email) {
+        console.error('[useAuth] No email on Clerk user — cannot claim');
         setProfile(null);
         setProfileStatus('no_profile');
         setLoading(false);
         return;
       }
 
-      // SECURITY: Only approved users get a profile
-      if (data.status !== 'approved') {
-        console.warn(`User status is '${data.status}' — access restricted`);
+      console.log('[useAuth] No profile for clerk_id, claiming invitation for:', email);
+
+      const { data: claimResult, error: claimError } = await supabase
+        .rpc('claim_profile_by_email', { p_email: email });
+
+      console.log('[useAuth] Claim result:', JSON.stringify({ claimResult, claimError }));
+
+      // RPC transport error
+      if (claimError) {
+        console.error('[useAuth] Claim RPC error:', JSON.stringify(claimError));
         setProfile(null);
-        setProfileStatus('pending');
+        setProfileStatus('no_profile');
         setLoading(false);
         return;
       }
 
-      setProfile(data);
-      setProfileStatus('found');
-    } catch (err) {
-      console.error('Unexpected load profile error:', err);
+      // Function returned "Not authenticated" (auth.jwt() was null in DB)
+      // This can happen right after sign-up before the JWT fully propagates
+      if (claimResult?.error === 'Not authenticated') {
+        if (claimRetryCount.current < 3) {
+          claimRetryCount.current += 1;
+          console.log(`[useAuth] JWT not ready, retrying in 1.5s (${claimRetryCount.current}/3)...`);
+          setTimeout(() => loadProfile(), 1500);
+          return; // NO setLoading(false) — keep "Loading..." visible
+        }
+        console.error('[useAuth] Claim failed after 3 retries — JWT not available');
+        setProfile(null);
+        setProfileStatus('no_profile');
+        setLoading(false);
+        return;
+      }
+
+      // Claim succeeded
+      if (claimResult?.claimed) {
+        console.log('[useAuth] Claim successful! Reloading profile...');
+        claimRetryCount.current = 0;
+        // Re-query — clerk_id is now linked, RLS will match
+        const { data: claimedProfile } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .limit(1)
+          .maybeSingle();
+
+        if (claimedProfile && claimedProfile.status === 'approved') {
+          setProfile(claimedProfile);
+          setProfileStatus('found');
+          setLoading(false);
+          return;
+        }
+        console.warn('[useAuth] Claimed but re-query failed or status not approved');
+      } else if (claimResult?.reason) {
+        console.log('[useAuth] Claim declined:', claimResult.reason);
+      }
+
+      // No profile could be found or claimed
       setProfile(null);
       setProfileStatus('no_profile');
-    } finally {
+      setLoading(false);
+    } catch (err) {
+      console.error('[useAuth] Unexpected error:', err);
+      setProfile(null);
+      setProfileStatus('no_profile');
       setLoading(false);
     }
+    // NOTE: No finally{setLoading(false)} — retry paths deliberately skip it
   }, [clerkUser, isSignedIn, supabaseReady]);
 
   useEffect(() => {
@@ -204,6 +221,9 @@ export function useAuth() {
     } : null,
     profile,
     profileStatus,
-    loading: !clerkLoaded || loading,
+    // CRITICAL: When signed in but Supabase JWT not wired yet, stay in loading state.
+    // Without this, a stale loading=false from the initial !isSignedIn render causes
+    // "Account Not Found" to flash before the profile query/claim ever runs.
+    loading: !clerkLoaded || loading || (!!isSignedIn && !supabaseReady),
   };
 }
