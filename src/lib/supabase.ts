@@ -39,8 +39,14 @@ export async function getClerkToken(): Promise<string | null> {
  */
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   accessToken: async () => {
-    if (!getToken) return null;
+    if (!getToken) {
+      console.log('[supabase] accessToken: no token getter set');
+      return null;
+    }
     const token = await getToken();
+    if (!token) {
+      console.warn('[supabase] accessToken: getter returned null');
+    }
     return token ?? null;
   },
   global: {
