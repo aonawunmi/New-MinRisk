@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
+import { useUser } from '@clerk/clerk-react';
 import { supabase } from './supabase';
 import { useSupabaseReady } from './clerk-supabase';
 
@@ -81,7 +81,6 @@ export async function getCurrentProfileId(): Promise<string | null> {
  */
 export function useAuth() {
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
-  const { isSignedIn } = useClerkAuth();
   const supabaseReady = useSupabaseReady();
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
@@ -89,10 +88,7 @@ export function useAuth() {
   const claimRetryCount = useRef(0);
 
   const loadProfile = useCallback(async () => {
-    console.log('[useAuth] loadProfile — isSignedIn:', isSignedIn, 'clerkUser:', !!clerkUser, 'supabaseReady:', supabaseReady);
-
-    // Unauthenticated users — show sign-in screen
-    if (!isSignedIn || !clerkUser) {
+    if (!clerkUser) {
       setProfile(null);
       setProfileStatus('no_profile');
       setLoading(false);
@@ -100,14 +96,11 @@ export function useAuth() {
     }
 
     // Wait for Clerk JWT to be wired into Supabase.
-    // The return value's loading check includes (isSignedIn && !supabaseReady),
-    // so the UI shows "Loading..." during this wait — NOT "Account Not Found".
+    // The loading return includes (clerkUser && !supabaseReady) so UI shows "Loading...".
     if (!supabaseReady) return;
 
     setLoading(true);
     try {
-      console.log('[useAuth] Loading profile for:', clerkUser.primaryEmailAddress?.emailAddress);
-
       // RLS on user_profiles: clerk_id = auth.jwt()->>'sub'
       const { data, error } = await supabase
         .from('user_profiles')
@@ -116,14 +109,12 @@ export function useAuth() {
         .maybeSingle();
 
       if (error) {
-        console.error('[useAuth] Profile query error:', error.message);
-        // Don't return — still try the claim below
+        console.error('Profile query error:', error.message);
       }
 
       // Profile found by RLS (clerk_id already linked)
       if (data) {
         if (data.status !== 'approved') {
-          console.warn(`[useAuth] User status is '${data.status}' — access restricted`);
           setProfile(null);
           setProfileStatus('pending');
           setLoading(false);
@@ -138,23 +129,17 @@ export function useAuth() {
       // No profile found — try auto-claiming a pending invitation by email
       const email = clerkUser.primaryEmailAddress?.emailAddress;
       if (!email) {
-        console.error('[useAuth] No email on Clerk user — cannot claim');
         setProfile(null);
         setProfileStatus('no_profile');
         setLoading(false);
         return;
       }
 
-      console.log('[useAuth] No profile for clerk_id, claiming invitation for:', email);
-
       const { data: claimResult, error: claimError } = await supabase
         .rpc('claim_profile_by_email', { p_email: email });
 
-      console.log('[useAuth] Claim result:', JSON.stringify({ claimResult, claimError }));
-
-      // RPC transport error
       if (claimError) {
-        console.error('[useAuth] Claim RPC error:', JSON.stringify(claimError));
+        console.error('claim_profile_by_email error:', claimError.message);
         setProfile(null);
         setProfileStatus('no_profile');
         setLoading(false);
@@ -166,11 +151,9 @@ export function useAuth() {
       if (claimResult?.error === 'Not authenticated') {
         if (claimRetryCount.current < 3) {
           claimRetryCount.current += 1;
-          console.log(`[useAuth] JWT not ready, retrying in 1.5s (${claimRetryCount.current}/3)...`);
           setTimeout(() => loadProfile(), 1500);
-          return; // NO setLoading(false) — keep "Loading..." visible
+          return;
         }
-        console.error('[useAuth] Claim failed after 3 retries — JWT not available');
         setProfile(null);
         setProfileStatus('no_profile');
         setLoading(false);
@@ -179,7 +162,6 @@ export function useAuth() {
 
       // Claim succeeded
       if (claimResult?.claimed) {
-        console.log('[useAuth] Claim successful! Reloading profile...');
         claimRetryCount.current = 0;
         // Re-query — clerk_id is now linked, RLS will match
         const { data: claimedProfile } = await supabase
@@ -194,9 +176,8 @@ export function useAuth() {
           setLoading(false);
           return;
         }
-        console.warn('[useAuth] Claimed but re-query failed or status not approved');
       } else if (claimResult?.reason) {
-        console.log('[useAuth] Claim declined:', claimResult.reason);
+        console.log('Claim declined:', claimResult.reason);
       }
 
       // No profile could be found or claimed
@@ -204,13 +185,13 @@ export function useAuth() {
       setProfileStatus('no_profile');
       setLoading(false);
     } catch (err) {
-      console.error('[useAuth] Unexpected error:', err);
+      console.error('Unexpected profile load error:', err);
       setProfile(null);
       setProfileStatus('no_profile');
       setLoading(false);
     }
     // NOTE: No finally{setLoading(false)} — retry paths deliberately skip it
-  }, [clerkUser, isSignedIn, supabaseReady]);
+  }, [clerkUser, supabaseReady]);
 
   useEffect(() => {
     claimRetryCount.current = 0;
@@ -224,9 +205,9 @@ export function useAuth() {
     } : null,
     profile,
     profileStatus,
-    // CRITICAL: When signed in but Supabase JWT not wired yet, stay in loading state.
-    // Without this, a stale loading=false from the initial !isSignedIn render causes
-    // "Account Not Found" to flash before the profile query/claim ever runs.
-    loading: !clerkLoaded || loading || (!!isSignedIn && !supabaseReady),
+    // CRITICAL: When user exists but Supabase JWT not wired yet, stay in loading state.
+    // Without this, a stale loading=false causes "Account Not Found" to flash
+    // before the profile query/claim ever runs.
+    loading: !clerkLoaded || loading || (!!clerkUser && !supabaseReady),
   };
 }

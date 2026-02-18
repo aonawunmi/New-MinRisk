@@ -1,5 +1,5 @@
 import { useEffect, useState, useContext, createContext } from 'react';
-import { useSession } from '@clerk/clerk-react';
+import { useAuth } from '@clerk/clerk-react';
 import { setClerkTokenGetter } from './supabase';
 
 interface ClerkSupabaseContextType {
@@ -16,38 +16,33 @@ export function useSupabaseReady() {
 }
 
 /**
- * Bridge component: Wires Clerk session tokens into the Supabase client.
+ * Bridge component: Wires Clerk auth tokens into the Supabase client.
  *
  * Must be rendered inside <ClerkProvider>.
- * When the Clerk session changes, updates the token getter so the
- * Supabase client automatically includes the Clerk JWT in all requests.
+ * Uses useAuth() to get the getToken function — more reliable than
+ * useSession() which can return null even when the user is signed in.
  *
  * Exposes `supabaseReady` via context so child hooks (useAuth) can wait
  * until the JWT is wired before making authenticated Supabase queries.
  */
 export function ClerkSupabaseProvider({ children }: { children: React.ReactNode }) {
-  const { session } = useSession();
+  const { getToken, userId } = useAuth();
   const [supabaseReady, setSupabaseReady] = useState(false);
 
-  console.log('[ClerkSupabase] render — session:', session ? 'exists' : 'null');
-
   useEffect(() => {
-    console.log('[ClerkSupabase] effect — session:', session ? 'exists' : 'null');
-    if (session) {
-      setClerkTokenGetter(() => session.getToken());
+    if (userId) {
+      setClerkTokenGetter(() => getToken());
       setSupabaseReady(true);
-      console.log('[ClerkSupabase] supabaseReady = true');
     } else {
       setClerkTokenGetter(null);
       setSupabaseReady(false);
-      console.log('[ClerkSupabase] supabaseReady = false (no session)');
     }
 
     return () => {
       setClerkTokenGetter(null);
       setSupabaseReady(false);
     };
-  }, [session]);
+  }, [userId, getToken]);
 
   return (
     <ClerkSupabaseContext.Provider value={{ supabaseReady }}>
