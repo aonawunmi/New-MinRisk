@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
-import { supabase } from './supabase';
+import { supabase, getClerkToken } from './supabase';
+import { useClerkSupabaseReady } from './clerk-supabase';
 
 /**
  * Authentication Service Layer — CLERK VERSION
@@ -81,6 +82,7 @@ export async function getCurrentProfileId(): Promise<string | null> {
 export function useAuth() {
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
   const { isSignedIn } = useClerkAuth();
+  const { tokenReady } = useClerkSupabaseReady();
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileStatus, setProfileStatus] = useState<'loading' | 'found' | 'no_profile' | 'pending'>('loading');
@@ -92,6 +94,16 @@ export function useAuth() {
       setLoading(false);
       return;
     }
+
+    // Verify we actually have a Clerk token before querying Supabase.
+    // Without this, queries run as anonymous and silently return no results.
+    const token = await getClerkToken();
+    if (!token) {
+      console.warn('useAuth: Clerk token not available, skipping profile load');
+      return; // Don't set loading=false — we'll retry when tokenReady changes
+    }
+
+    console.log('useAuth: Loading profile for Clerk user:', clerkUser.id);
 
     try {
       // RLS on user_profiles: clerk_id = auth.jwt()->>'sub'
@@ -114,9 +126,20 @@ export function useAuth() {
       if (!data) {
         const email = clerkUser.primaryEmailAddress?.emailAddress;
         if (email) {
-          console.log('No profile found, attempting to claim invitation for:', email);
+          console.log('No profile found for clerk_id, attempting to claim invitation for:', email);
+          console.log('Clerk user ID:', clerkUser.id);
+
           const { data: claimResult, error: claimError } = await supabase
             .rpc('claim_profile_by_email', { p_email: email });
+
+          if (claimError) {
+            console.error('claim_profile_by_email RPC error:', {
+              message: claimError.message,
+              code: claimError.code,
+              details: claimError.details,
+              hint: claimError.hint,
+            });
+          }
 
           if (!claimError && claimResult?.claimed) {
             console.log('Successfully claimed invitation, reloading profile...');
@@ -134,7 +157,9 @@ export function useAuth() {
               return;
             }
           } else if (claimResult && !claimResult.claimed) {
-            console.log('Claim result:', claimResult.reason);
+            console.log('Claim not successful:', claimResult.reason);
+          } else if (claimResult?.error) {
+            console.error('Claim function returned error:', claimResult.error);
           }
         }
 
@@ -164,10 +189,13 @@ export function useAuth() {
     }
   }, [clerkUser, isSignedIn]);
 
+  // Only load profile when Clerk is loaded AND token bridge is ready.
+  // This prevents the race condition where queries run before the
+  // Clerk JWT is wired into the Supabase client.
   useEffect(() => {
-    if (!clerkLoaded) return;
+    if (!clerkLoaded || !tokenReady) return;
     loadProfile();
-  }, [clerkLoaded, loadProfile]);
+  }, [clerkLoaded, tokenReady, loadProfile]);
 
   return {
     user: clerkUser ? {
@@ -176,6 +204,6 @@ export function useAuth() {
     } : null,
     profile,
     profileStatus,
-    loading: !clerkLoaded || loading,
+    loading: !clerkLoaded || !tokenReady || loading,
   };
 }
