@@ -24,22 +24,25 @@ export function useClerkSupabaseReady() {
  * until the JWT is wired before making authenticated Supabase queries.
  */
 export function ClerkSupabaseProvider({ children }: { children: React.ReactNode }) {
-  const { session } = useSession();
+  const { session, isLoaded: sessionLoaded } = useSession();
   const [tokenReady, setTokenReady] = useState(false);
 
   useEffect(() => {
+    if (!sessionLoaded) return; // Wait for Clerk to finish loading
+
     if (session) {
       setClerkTokenGetter(() => session.getToken());
-      setTokenReady(true);
     } else {
+      // No session (user not signed in) — no token needed
       setClerkTokenGetter(null);
-      setTokenReady(false);
     }
+    // Either way, once Clerk has loaded we're ready
+    setTokenReady(true);
 
     return () => {
       setClerkTokenGetter(null);
     };
-  }, [session]);
+  }, [session, sessionLoaded]);
 
   return (
     <ClerkSupabaseContext.Provider value={{ tokenReady }}>
