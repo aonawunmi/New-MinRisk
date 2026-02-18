@@ -88,14 +88,16 @@ export function useAuth() {
   const [profileStatus, setProfileStatus] = useState<'loading' | 'found' | 'no_profile' | 'pending'>('loading');
 
   const loadProfile = useCallback(async () => {
-    if (!supabaseReady) return;
-
+    // Check auth state first — unauthenticated users should see the sign-in screen
     if (!isSignedIn || !clerkUser) {
       setProfile(null);
       setProfileStatus('no_profile');
       setLoading(false);
       return;
     }
+
+    // For authenticated users, wait until the Clerk JWT is wired into Supabase
+    if (!supabaseReady) return;
 
     try {
       // RLS on user_profiles: clerk_id = auth.jwt()->>'sub'
