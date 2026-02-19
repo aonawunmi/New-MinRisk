@@ -2,7 +2,8 @@
  * Organization Settings Component
  *
  * Displays system information for the organization.
- * 
+ * Allows primary admin to set/change institution type.
+ *
  * Note: Risk matrix, appetite, and tolerance settings are managed in dedicated tabs:
  * - Risk Configuration: Matrix size, likelihood/impact labels
  * - Appetite & Tolerance: Category-level appetite and tolerance settings
@@ -18,8 +19,24 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Settings, Building } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { AlertCircle, Settings, Building, Building2, Shield, CheckCircle } from 'lucide-react';
 import LogoUploader from './LogoUploader';
+import {
+  getInstitutionTypes,
+  getOrganizationInstitutionType,
+  setOrganizationInstitutionType,
+  type InstitutionType,
+  type Regulator,
+} from '@/lib/institutionTypes';
 
 interface OrgConfig {
   id: string;
@@ -32,7 +49,16 @@ export default function OrganizationSettings() {
   const [config, setConfig] = useState<OrgConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [orgId, setOrgId] = useState<string | null>(null);
+
+  // Institution type state
+  const [currentInstitutionType, setCurrentInstitutionType] = useState<InstitutionType | null>(null);
+  const [mappedRegulators, setMappedRegulators] = useState<Regulator[]>([]);
+  const [allInstitutionTypes, setAllInstitutionTypes] = useState<InstitutionType[]>([]);
+  const [selectedTypeId, setSelectedTypeId] = useState<string>('');
+  const [savingType, setSavingType] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -49,28 +75,42 @@ export default function OrganizationSettings() {
         return;
       }
 
-      const { data, error: configError } = await supabase
-        .from('risk_configs')
-        .select('id, organization_id, created_at, updated_at')
-        .eq('organization_id', profile.organization_id)
-        .single();
+      setOrgId(profile.organization_id);
 
-      if (configError) {
-        console.error('Load config error:', configError);
-        // Don't error out completely if config missing (might be new org)
-      } else {
-        setConfig(data);
+      // Load config, logo, institution types in parallel
+      const [configResult, orgResult, typesResult, orgTypeResult] = await Promise.all([
+        supabase
+          .from('risk_configs')
+          .select('id, organization_id, created_at, updated_at')
+          .eq('organization_id', profile.organization_id)
+          .single(),
+        supabase
+          .from('organizations')
+          .select('logo_url')
+          .eq('id', profile.organization_id)
+          .single(),
+        getInstitutionTypes(true),
+        getOrganizationInstitutionType(profile.organization_id),
+      ]);
+
+      if (!configResult.error) {
+        setConfig(configResult.data);
       }
 
-      // Load Org Details (Logo)
-      const { data: orgData, error: orgError } = await supabase
-        .from('organizations')
-        .select('logo_url')
-        .eq('id', profile.organization_id)
-        .single();
+      if (orgResult.data) {
+        setLogoUrl(orgResult.data.logo_url);
+      }
 
-      if (orgData) {
-        setLogoUrl(orgData.logo_url);
+      if (typesResult.data) {
+        setAllInstitutionTypes(typesResult.data);
+      }
+
+      if (orgTypeResult.data) {
+        setCurrentInstitutionType(orgTypeResult.data.institutionType);
+        setMappedRegulators(orgTypeResult.data.regulators);
+        if (orgTypeResult.data.institutionType) {
+          setSelectedTypeId(orgTypeResult.data.institutionType.id);
+        }
       }
     } catch (err: any) {
       console.error('Unexpected error loading config:', err);
@@ -80,13 +120,35 @@ export default function OrganizationSettings() {
     }
   }
 
+  async function handleSaveInstitutionType() {
+    if (!orgId || !selectedTypeId) return;
+
+    setSavingType(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const { error: saveError } = await setOrganizationInstitutionType(orgId, selectedTypeId);
+      if (saveError) throw saveError;
+
+      setSuccess('Institution type updated successfully');
+
+      // Reload to get updated regulators
+      const { data: orgTypeData } = await getOrganizationInstitutionType(orgId);
+      if (orgTypeData) {
+        setCurrentInstitutionType(orgTypeData.institutionType);
+        setMappedRegulators(orgTypeData.regulators);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSavingType(false);
+    }
+  }
+
   if (loading) {
     return <div className="text-center py-8">Loading settings...</div>;
   }
-
-  // Allow render if at least we loaded something or error
-  // But strictly config might be missing?
-  // We'll show partial UI if config missing but loading done
 
   if (!config && !logoUrl && !loading && error) {
     return (
@@ -107,6 +169,96 @@ export default function OrganizationSettings() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      {success && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded text-sm flex items-center gap-2">
+          <CheckCircle className="h-4 w-4" />
+          {success}
+        </div>
+      )}
+
+      {/* Institution Type Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-600 rounded-lg">
+              <Building2 className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <CardTitle>Institution Type</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Select your institution type to receive tailored risk intelligence and regulatory context.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Current type display */}
+            {currentInstitutionType && (
+              <div className="p-4 bg-gray-50 rounded-lg border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{currentInstitutionType.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Category: {currentInstitutionType.category}
+                    </p>
+                    {currentInstitutionType.description && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {currentInstitutionType.description}
+                      </p>
+                    )}
+                  </div>
+                  <Badge variant="secondary" className="bg-green-100 text-green-700">
+                    Current
+                  </Badge>
+                </div>
+              </div>
+            )}
+
+            {/* Mapped regulators */}
+            {mappedRegulators.length > 0 && (
+              <div>
+                <p className="text-sm font-medium mb-2 flex items-center gap-1">
+                  <Shield className="h-4 w-4" />
+                  Applicable Regulators
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {mappedRegulators.map((reg) => (
+                    <Badge key={reg.id} variant="outline">
+                      {reg.code} - {reg.name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Selector */}
+            <div className="flex gap-3 items-end">
+              <div className="flex-1">
+                <Select value={selectedTypeId} onValueChange={setSelectedTypeId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select institution type..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allInstitutionTypes.map((type) => (
+                      <SelectItem key={type.id} value={type.id}>
+                        {type.name} ({type.category})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                onClick={handleSaveInstitutionType}
+                disabled={savingType || !selectedTypeId || selectedTypeId === currentInstitutionType?.id}
+              >
+                {savingType ? 'Saving...' : 'Update Type'}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Branding Settings */}
       <Card>
@@ -140,11 +292,11 @@ export default function OrganizationSettings() {
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <p className="text-gray-600">Configuration ID:</p>
-              <p className="font-mono text-xs">{config.id}</p>
+              <p className="font-mono text-xs">{config?.id || '-'}</p>
             </div>
             <div>
               <p className="text-gray-600">Organization ID:</p>
-              <p className="font-mono text-xs">{config?.organization_id || 'Loading...'}</p>
+              <p className="font-mono text-xs">{config?.organization_id || orgId || 'Loading...'}</p>
             </div>
             <div>
               <p className="text-gray-600">Created:</p>

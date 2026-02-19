@@ -20,6 +20,8 @@ import PlanBuilder from './PlanBuilder';
 import PlatformAuditTrail from './PlatformAuditTrail';
 import RegulatorManagement from './RegulatorManagement';
 import PlatformUserManagement from './PlatformUserManagement';
+import InstitutionTypeManagement from './InstitutionTypeManagement';
+import RegulatorEntityManagement from './RegulatorEntityManagement';
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
@@ -81,6 +83,8 @@ export default function AdminPanel() {
     if (profile?.role === 'super_admin') {
       return [
         { id: 'organizations', label: 'Organizations' },
+        { id: 'institution-types', label: 'Institution Types' },
+        { id: 'regulatory-bodies', label: 'Regulatory Bodies' },
         { id: 'regulators', label: 'Regulators' },
         { id: 'platform-users', label: 'Platform Users' },
         { id: 'plans', label: 'Plans & Pricing' },
@@ -169,6 +173,8 @@ export default function AdminPanel() {
       {isSuperAdmin && (
         <div>
           {activeTab === 'organizations' && <OrganizationManagement />}
+          {activeTab === 'institution-types' && <InstitutionTypeManagement />}
+          {activeTab === 'regulatory-bodies' && <RegulatorEntityManagement />}
           {activeTab === 'regulators' && <RegulatorManagement />}
           {activeTab === 'platform-users' && <PlatformUserManagement />}
           {activeTab === 'plans' && <PlanBuilder />}

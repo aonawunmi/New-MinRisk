@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Building2, Plus, Users, UserPlus, RefreshCw, Ban, CheckCircle, ClipboardList } from 'lucide-react';
+import { getInstitutionTypes, type InstitutionType } from '@/lib/institutionTypes';
 
 interface Organization {
     id: string;
@@ -58,7 +59,9 @@ interface Organization {
     institution_type: string | null;
 }
 
-const INSTITUTION_TYPES = [
+// Institution types are now loaded from the database (institution_types table)
+// Fallback list for when DB query fails
+const FALLBACK_INSTITUTION_TYPES = [
     'Bank',
     'Securities Exchange',
     'Capital Market Operator',
@@ -92,6 +95,7 @@ interface InviteAdminForm {
 export function OrganizationManagement() {
     const [organizations, setOrganizations] = useState<Organization[]>([]);
     const [plans, setPlans] = useState<any[]>([]);
+    const [institutionTypesList, setInstitutionTypesList] = useState<InstitutionType[]>([]);
     const [loading, setLoading] = useState(true);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
@@ -126,8 +130,15 @@ export function OrganizationManagement() {
 
     async function loadData() {
         setLoading(true);
-        await Promise.all([loadOrganizations(), loadPlans()]);
+        await Promise.all([loadOrganizations(), loadPlans(), loadInstitutionTypes()]);
         setLoading(false);
+    }
+
+    async function loadInstitutionTypes() {
+        const { data } = await getInstitutionTypes(true);
+        if (data && data.length > 0) {
+            setInstitutionTypesList(data);
+        }
     }
 
     async function loadPlans() {
@@ -403,11 +414,21 @@ export function OrganizationManagement() {
                                             <SelectValue placeholder="Select institution type" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {INSTITUTION_TYPES.map((type) => (
-                                                <SelectItem key={type} value={type}>
-                                                    {type}
-                                                </SelectItem>
-                                            ))}
+                                            {institutionTypesList.length > 0
+                                                ? institutionTypesList.map((type) => (
+                                                    <SelectItem key={type.id} value={type.name}>
+                                                        {type.name}
+                                                        <span className="text-xs text-muted-foreground ml-1">
+                                                            ({type.category})
+                                                        </span>
+                                                    </SelectItem>
+                                                ))
+                                                : FALLBACK_INSTITUTION_TYPES.map((type) => (
+                                                    <SelectItem key={type} value={type}>
+                                                        {type}
+                                                    </SelectItem>
+                                                ))
+                                            }
                                         </SelectContent>
                                     </Select>
                                     <p className="text-xs text-muted-foreground">

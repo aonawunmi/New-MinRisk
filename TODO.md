@@ -1,7 +1,7 @@
 # MinRisk NEW - TODO & Known Issues
 
-**Last Updated:** December 3, 2025
-**Project Status:** Active Development - 60% Complete
+**Last Updated:** February 19, 2026
+**Project Status:** Active Development - 65% Complete
 
 ---
 
@@ -84,6 +84,41 @@ npx supabase functions deploy analyze-incident-for-risk-mapping --project-ref qr
 - [ ] Improve keyword matching
 - [ ] Add better error handling
 - [ ] Enhance user feedback
+
+---
+
+### 2B. User Invitation System (Clerk + Edge Functions)
+**Status:** ⏸️ **CODE COMPLETE — Blocked by Clerk Dev Mode**
+**Updated:** February 19, 2026
+**Phase:** Admin Features - Clerk Migration
+
+**What Was Done (Feb 18-19, 2026):**
+- ✅ Edge Functions redeployed with `--no-verify-jwt` (Clerk JWTs aren't signed by Supabase)
+- ✅ Added `apikey` header to all Edge Function calls in `src/lib/admin.ts`
+- ✅ Rewrote `InvitationManagement.tsx` — removed Clerk Organizations dependency, now uses Supabase-based org context + `admin-invite-user` Edge Function + `user_invitations` table
+- ✅ Fixed `admin-invite-user` Edge Function — added explicit `invite_code` generation and error-level logging
+- ✅ Added DB default for `user_invitations.invite_code` (migration: `20260218160000_invite_code_default.sql`)
+- ✅ Fixed Risk Configuration auto-create on missing `app_configs` row (PGRST116 handling in `src/lib/config.ts`)
+- ✅ Added missing `owners` column to `app_configs` on staging
+- ✅ Confirmed `claim_profile_by_email` successfully links Clerk accounts to profiles
+
+**Blocker — Clerk Development Mode:**
+- Clerk in Development mode does **not reliably deliver emails** (invitation emails, verification codes)
+- This means invited users cannot receive their invitation link or sign-in verification codes
+- This is a **Clerk infrastructure limitation**, not a code bug
+- Workaround used for testing: create users directly in Clerk Dashboard + sign-in tokens + `bypass_client_trust`
+
+**To Unblock:**
+- Switch Clerk to **Production mode**, OR
+- Configure a **custom email provider** (e.g. SendGrid, Resend) in Clerk Dashboard
+- Once emails deliver reliably, re-test the full invitation flow end-to-end (should take ~5 minutes)
+
+**Files Modified:**
+- `src/lib/admin.ts` — apikey header added
+- `src/lib/config.ts` — auto-create config on PGRST116
+- `src/components/admin/InvitationManagement.tsx` — complete rewrite
+- `supabase/functions/admin-invite-user/index.ts` — invite_code + error logging
+- `supabase/migrations/20260218160000_invite_code_default.sql` — new migration
 
 ---
 
@@ -262,6 +297,13 @@ console.log('Commit result:', result);
 - ✅ Continuous risk identity design
 - ✅ Structured period representation
 
+### ⏸️ Clerk Migration & Admin Invite System (Feb 2026)
+- ✅ Auth migrated from Supabase Auth to Clerk Third-Party Auth
+- ✅ Edge Functions updated for Clerk JWT auth (`--no-verify-jwt`)
+- ✅ `InvitationManagement` rewritten for Supabase-based orgs
+- ✅ `claim_profile_by_email` confirmed working
+- ⏸️ End-to-end invite flow blocked by Clerk Dev mode email delivery
+
 ---
 
 ## 🐛 **KNOWN BUGS** (Low Priority)
@@ -344,19 +386,21 @@ npx supabase functions deploy analyze-intelligence --project-ref qrxwgjjgaekalva
 
 ## 🎯 **NEXT SESSION PRIORITIES**
 
-### Immediate (This Week):
+### Immediate:
 1. ✅ Fix duplicate key error in incident mapping (DONE)
-2. 🔴 Investigate and fix Risk Intelligence issues
-3. 🔴 Deploy updated Edge Function
-4. 🔴 Test end-to-end incident mapping workflow
+2. ✅ Clerk migration & Edge Function auth fixes (DONE — Feb 2026)
+3. ✅ Admin invite system code complete (DONE — blocked by Clerk dev mode)
+4. 🔴 Investigate and fix Risk Intelligence issues (Phase 6)
+5. 🔴 Review and upgrade other features
 
-### Short-term (Next 2 Weeks):
+### Short-term:
 1. Complete Phase 8 UI components
 2. Run database migration on dev
 3. Test period commit workflow
-4. User acceptance testing
+4. Configure Clerk email delivery (Production mode or custom provider)
+5. Re-test invitation flow once emails work
 
-### Long-term (Next Month):
+### Long-term:
 1. Port ERM Reports from old MinRisk
 2. Deploy to production
 3. User training
@@ -364,7 +408,7 @@ npx supabase functions deploy analyze-intelligence --project-ref qrxwgjjgaekalva
 
 ---
 
-**Last Review:** December 3, 2025
-**Next Review:** December 10, 2025
+**Last Review:** February 19, 2026
+**Next Review:** February 26, 2026
 
-**Status Summary:** Project is in good shape with solid architecture. Main blockers are Risk Intelligence fixes (Phase 6) and completing UI for Continuous Evolution (Phase 8). Once these are complete, system will be production-ready.
+**Status Summary:** Clerk migration complete, admin invite system code is done but blocked by Clerk Development mode email delivery. Main remaining work: Risk Intelligence fixes (Phase 6), Phase 8 UI components, and feature review/upgrades. Once Clerk email delivery is configured, the invite flow needs a quick re-test.

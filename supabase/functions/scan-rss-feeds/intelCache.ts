@@ -1,11 +1,11 @@
 /**
- * Intelligence Analysis Cache Module
- * 
- * Layer 4: Cross-Organization Cache
- * Caches AI analysis at event level to share across organizations
+ * Two-Layer Intelligence Cache Module
+ *
+ * Layer 1 (SHARED): industry_event_cache — event detection + categorization, shared by institution type
+ * Layer 2 (PRIVATE): org_analysis_cache — risk-specific analysis, private per organization
+ *
+ * Updated: 2026-02-19 (Intelligence Redesign)
  */
-
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export interface CachedAnalysis {
     generalAnalysis: {
@@ -13,14 +13,13 @@ export interface CachedAnalysis {
         keyThemes: string[];
         riskDomains: string[];
     };
-    categoryMappings: Record<string, number>;  // category -> relevance score (0-100)
+    categoryMappings: Record<string, number>;
     suggestedImpactLevel: 'low' | 'medium' | 'high' | 'critical';
     confidenceScore: number;
 }
 
-/**
- * Create a hash key for an event
- */
+// ─── Hashing ───────────────────────────────────────────────────────
+
 export function createEventHash(title: string, sourceUrl?: string): string {
     const normalizedTitle = title
         .toLowerCase()
@@ -28,7 +27,6 @@ export function createEventHash(title: string, sourceUrl?: string): string {
         .replace(/\s+/g, ' ')
         .trim();
 
-    // Simple hash - combine title with source for uniqueness
     const input = `${normalizedTitle}|${sourceUrl || ''}`;
     let hash = 0;
     for (let i = 0; i < input.length; i++) {
@@ -39,27 +37,33 @@ export function createEventHash(title: string, sourceUrl?: string): string {
     return Math.abs(hash).toString(16).padStart(8, '0');
 }
 
+// ─── Layer 1: Industry Event Cache (SHARED by institution type) ────
+
 /**
- * Check if we have a cached analysis for this event
+ * Check industry-level event cache scoped by institution type
  */
-export async function getCachedAnalysis(
+export async function checkIndustryCache(
     supabase: any,
-    eventHash: string
+    eventHash: string,
+    institutionTypeId?: string
 ): Promise<CachedAnalysis | null> {
-    const { data, error } = await supabase
-        .from('intelligence_analysis_cache')
+    let query = supabase
+        .from('industry_event_cache')
         .select('*')
         .eq('event_hash', eventHash)
-        .gt('expires_at', new Date().toISOString())
-        .single();
+        .gt('expires_at', new Date().toISOString());
 
-    if (error || !data) {
-        return null;
+    if (institutionTypeId) {
+        query = query.eq('institution_type_id', institutionTypeId);
     }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error || !data) return null;
 
     // Update hit count
     await supabase
-        .from('intelligence_analysis_cache')
+        .from('industry_event_cache')
         .update({
             hit_count: (data.hit_count || 0) + 1,
             orgs_using: (data.orgs_using || 0) + 1
@@ -75,21 +79,22 @@ export async function getCachedAnalysis(
 }
 
 /**
- * Store analysis in cache for future use
+ * Store event categorization in industry-level cache
  */
-export async function cacheAnalysis(
+export async function storeIndustryCache(
     supabase: any,
     eventHash: string,
     eventTitle: string,
     eventSource: string | undefined,
     analysis: CachedAnalysis,
+    institutionTypeId?: string,
     tokensUsed?: number,
     modelVersion?: string,
     originalEventId?: string
 ): Promise<void> {
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    await supabase.from('intelligence_analysis_cache').upsert({
+    await supabase.from('industry_event_cache').upsert({
         event_hash: eventHash,
         event_title: eventTitle,
         event_source: eventSource,
@@ -97,6 +102,7 @@ export async function cacheAnalysis(
         risk_category_mappings: analysis.categoryMappings,
         suggested_impact_level: analysis.suggestedImpactLevel,
         confidence_score: analysis.confidenceScore,
+        institution_type_id: institutionTypeId || null,
         tokens_used: tokensUsed,
         model_version: modelVersion,
         original_event_id: originalEventId,
@@ -104,23 +110,72 @@ export async function cacheAnalysis(
         hit_count: 0,
         orgs_using: 1
     }, {
-        onConflict: 'event_hash'
+        // Use the new composite unique index
+        ignoreDuplicates: true
     });
 }
 
+// ─── Layer 2: Org Analysis Cache (PRIVATE per org) ─────────────────
+
+/**
+ * Check org-specific analysis cache for a particular event + risk
+ */
+export async function checkOrgAnalysisCache(
+    supabase: any,
+    eventId: string,
+    organizationId: string,
+    riskCode: string
+): Promise<any | null> {
+    const { data } = await supabase
+        .from('org_analysis_cache')
+        .select('*')
+        .eq('event_id', eventId)
+        .eq('organization_id', organizationId)
+        .eq('risk_code', riskCode)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+
+    return data;
+}
+
+/**
+ * Store org-specific analysis in private cache
+ */
+export async function storeOrgAnalysisCache(
+    supabase: any,
+    eventId: string,
+    organizationId: string,
+    riskCode: string,
+    analysis: any,
+    modelUsed?: string,
+    tokensUsed?: number
+): Promise<void> {
+    await supabase
+        .from('org_analysis_cache')
+        .upsert({
+            event_id: eventId,
+            organization_id: organizationId,
+            risk_code: riskCode,
+            analysis_result: analysis,
+            likelihood_change: analysis.likelihood_change || 0,
+            impact_change: analysis.impact_change || 0,
+            confidence: (analysis.confidence || 70) / 100,
+            suggested_controls: analysis.suggested_controls || [],
+            reasoning: analysis.reasoning || '',
+            model_used: modelUsed,
+            tokens_used: tokensUsed,
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        }, { onConflict: 'event_id,organization_id,risk_code' });
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────
+
 /**
  * Map cached category analysis to organization's specific risks
- * 
- * Takes the generic category mappings from cache and matches
- * them to the organization's actual risk register
  */
 export function mapCacheToOrgRisks(
     cachedAnalysis: CachedAnalysis,
-    orgRisks: Array<{
-        risk_code: string;
-        category: string;
-        risk_title: string;
-    }>
+    orgRisks: Array<{ risk_code: string; category: string; risk_title: string }>
 ): {
     relevant: boolean;
     confidence: number;
@@ -131,19 +186,16 @@ export function mapCacheToOrgRisks(
     const matchedRisks: string[] = [];
     let highestRelevance = 0;
 
-    // Map cached category scores to org's risks
     for (const risk of orgRisks) {
         const categoryLower = risk.category?.toLowerCase() || '';
 
-        // Check if any cached category mapping matches this risk's category
         for (const [cachedCategory, relevanceScore] of Object.entries(cachedAnalysis.categoryMappings)) {
             const cachedCategoryLower = cachedCategory.toLowerCase();
 
-            // Fuzzy match categories
             if (categoryLower.includes(cachedCategoryLower) ||
                 cachedCategoryLower.includes(categoryLower) ||
                 categoriesAreSimilar(categoryLower, cachedCategoryLower)) {
-                if (relevanceScore >= 50) {  // Only match if relevance is significant
+                if (relevanceScore >= 50) {
                     matchedRisks.push(risk.risk_code);
                     highestRelevance = Math.max(highestRelevance, relevanceScore);
                 }
@@ -151,26 +203,19 @@ export function mapCacheToOrgRisks(
         }
     }
 
-    // Determine likelihood change based on impact level
     const impactToChange: Record<string, number> = {
-        'critical': 2,
-        'high': 1,
-        'medium': 0,
-        'low': 0
+        'critical': 2, 'high': 1, 'medium': 0, 'low': 0
     };
 
     return {
         relevant: matchedRisks.length > 0,
         confidence: highestRelevance / 100,
-        risk_codes: [...new Set(matchedRisks)],  // Remove duplicates
+        risk_codes: [...new Set(matchedRisks)],
         reasoning: `Matched via cached analysis: ${cachedAnalysis.generalAnalysis.summary}`,
         likelihood_change: impactToChange[cachedAnalysis.suggestedImpactLevel] || 0
     };
 }
 
-/**
- * Check if two category names are semantically similar
- */
 function categoriesAreSimilar(cat1: string, cat2: string): boolean {
     const synonyms: Record<string, string[]> = {
         'cyber': ['it', 'technology', 'digital', 'information security', 'infosec'],
@@ -209,10 +254,8 @@ export function parseAnalysisForCache(
     },
     eventTitle: string
 ): CachedAnalysis {
-    // Extract or infer category mappings
     const categoryMappings: Record<string, number> = aiResponse.categories || {};
 
-    // If no explicit categories, try to infer from risk_codes reasoning
     if (Object.keys(categoryMappings).length === 0 && aiResponse.reasoning) {
         const domains = ['cyber', 'operational', 'financial', 'regulatory', 'strategic'];
         for (const domain of domains) {
