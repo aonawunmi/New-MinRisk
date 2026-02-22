@@ -365,10 +365,12 @@ export async function getRisksGroupedBySECCategory(organizationId: string): Prom
   try {
     // Fetch SEC categories
     const { data: secCategories, error: secError } = await getSecStandardCategories();
+    console.log('[SEC] Standard categories loaded:', secCategories?.length || 0, secError?.message || 'OK');
     if (secError || !secCategories) return { data: null, error: secError };
 
     // Fetch org's mappings
     const { data: mappings, error: mapError } = await getOrgSecMappings(organizationId);
+    console.log('[SEC] Org mappings loaded:', mappings?.length || 0, mapError?.message || 'OK');
     if (mapError) return { data: null, error: mapError };
 
     // Build mapping lookup: internal_category_name -> sec_category_id
@@ -376,8 +378,10 @@ export async function getRisksGroupedBySECCategory(organizationId: string): Prom
     (mappings || []).forEach(m => {
       categoryMap.set(m.internal_category_name, m.sec_category_id);
     });
+    console.log('[SEC] Category map entries:', Array.from(categoryMap.keys()));
 
     // Fetch all open risks
+    console.log('[SEC] Fetching risks for org:', organizationId);
     const { data: risks, error: riskError } = await supabase
       .from('risks')
       .select('id, risk_code, risk_title, category, likelihood_inherent, impact_inherent, residual_score, severity')
@@ -385,6 +389,7 @@ export async function getRisksGroupedBySECCategory(organizationId: string): Prom
       .eq('status', 'Open')
       .order('risk_code');
 
+    console.log('[SEC] Risks query result:', risks?.length || 0, 'risks', riskError?.message || 'OK');
     if (riskError) return { data: null, error: riskError };
 
     // Find default OPERATIONAL category for unmapped risks
