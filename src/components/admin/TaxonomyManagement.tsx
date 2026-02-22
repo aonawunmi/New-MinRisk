@@ -63,6 +63,8 @@ import {
   AlertCircle,
   CheckCircle,
   FileSpreadsheet,
+  Lock,
+  Shield,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -384,16 +386,16 @@ export default function TaxonomyManagement() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Risk Taxonomy Management</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-blue-600" />
+                Risk Taxonomy Management
+              </CardTitle>
               <CardDescription>
-                Manage risk categories and sub-categories for AI classification
+                SEC-aligned risk taxonomy. The 5 standard categories are pre-defined and consistent across all organizations.
+                You can add your own subcategories under each parent category.
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              <Button onClick={() => openCategoryDialog()} size="sm">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Category
-              </Button>
               <Button
                 onClick={handleExport}
                 variant="outline"
@@ -406,7 +408,7 @@ export default function TaxonomyManagement() {
                 <Button variant="outline" size="sm" asChild>
                   <label className="cursor-pointer">
                     <Upload className="h-4 w-4 mr-2" />
-                    Import
+                    Import Subcategories
                     <input
                       type="file"
                       accept=".xlsx,.xls"
@@ -450,11 +452,11 @@ export default function TaxonomyManagement() {
           <div className="space-y-2">
             {taxonomy.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
-                No taxonomy defined. Add categories to get started.
+                No risk categories found. Please contact your administrator to initialize the SEC-aligned taxonomy.
               </div>
             ) : (
               taxonomy.map((category) => (
-                <div key={category.id} className="border rounded-lg">
+                <div key={category.id} className={`border rounded-lg ${category.is_system ? 'border-blue-200 bg-blue-50/30' : ''}`}>
                   <div className="flex items-center justify-between p-4 hover:bg-gray-50">
                     <div className="flex items-center gap-2 flex-1">
                       <button
@@ -468,7 +470,15 @@ export default function TaxonomyManagement() {
                         )}
                       </button>
                       <div className="flex-1">
-                        <div className="font-semibold">{category.name}</div>
+                        <div className="font-semibold flex items-center gap-2">
+                          {category.name}
+                          {category.is_system && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                              <Lock className="h-3 w-3" />
+                              SEC Standard
+                            </span>
+                          )}
+                        </div>
                         <div className="text-sm text-gray-600">
                           {category.description}
                         </div>
@@ -488,21 +498,25 @@ export default function TaxonomyManagement() {
                         <Plus className="h-4 w-4 mr-1" />
                         Add Sub
                       </Button>
-                      <Button
-                        onClick={() => openCategoryDialog(category)}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        onClick={() => handleDeleteCategory(category)}
-                        size="sm"
-                        variant="ghost"
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {!category.is_system && (
+                        <>
+                          <Button
+                            onClick={() => openCategoryDialog(category)}
+                            size="sm"
+                            variant="ghost"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            onClick={() => handleDeleteCategory(category)}
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
 

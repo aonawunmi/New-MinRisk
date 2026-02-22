@@ -9,6 +9,7 @@ export interface RiskCategory {
   organization_id: string;
   name: string;
   description: string;
+  is_system: boolean;
   created_at: string;
   updated_at: string;
   created_by: string | null;
