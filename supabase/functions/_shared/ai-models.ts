@@ -16,7 +16,7 @@ export const AI_MODELS = {
    * - RSS pre-filtering, structured JSON generation
    * - Appetite/tolerance generation
    */
-  HAIKU: 'claude-3-5-haiku-20241022',
+  HAIKU: 'claude-haiku-4-5-20250514',
 
   /**
    * Sonnet 4.5 - Use for complex reasoning tasks
