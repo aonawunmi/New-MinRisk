@@ -456,7 +456,8 @@ export async function generateAINarrative(
         headers: {
           'Content-Type': 'application/json',
           apikey: supabaseAnonKey,
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+          'x-clerk-token': token,
         },
         body: JSON.stringify({
           organization_id: organizationId,

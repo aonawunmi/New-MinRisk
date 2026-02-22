@@ -1,12 +1,16 @@
 /**
  * Shared Clerk Auth Helper for Edge Functions
  *
- * Verifies the Clerk JWT from the Authorization header and looks up
- * the user's profile in user_profiles by clerk_id.
+ * Verifies the Clerk JWT and looks up the user's profile in user_profiles
+ * by clerk_id.
  *
- * With Supabase Third-Party Auth, the Clerk JWT is validated by Supabase
- * when we create a client with the token in the Authorization header.
- * We then look up the user's profile by their Clerk ID (JWT sub claim).
+ * IMPORTANT: With Clerk Third-Party Auth, the Supabase Edge Function gateway
+ * does NOT accept Clerk JWTs in the Authorization header — it only accepts
+ * Supabase-issued JWTs or the anon key. So the frontend must:
+ *   1. Pass the anon key in Authorization (to get past the gateway)
+ *   2. Pass the Clerk JWT in a custom 'x-clerk-token' header
+ *
+ * This helper checks x-clerk-token first, then falls back to Authorization.
  */
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
@@ -35,9 +39,14 @@ export interface AuthResult {
  * @throws Error if auth fails
  */
 export async function verifyClerkAuth(req: Request): Promise<AuthResult> {
+  // Check for Clerk token in custom header first, then fall back to Authorization
+  const clerkToken = req.headers.get("x-clerk-token");
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
-    throw new Error("Missing authorization header");
+
+  const token = clerkToken || (authHeader ? authHeader.replace("Bearer ", "") : null);
+
+  if (!token) {
+    throw new Error("Missing authentication token (x-clerk-token or Authorization)");
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -47,11 +56,10 @@ export async function verifyClerkAuth(req: Request): Promise<AuthResult> {
   // Create an authenticated Supabase client with the Clerk JWT.
   // Supabase Third-Party Auth validates the JWT via Clerk's JWKS endpoint.
   const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } },
+    global: { headers: { Authorization: `Bearer ${token}` } },
   });
 
   // Decode the JWT to get the Clerk user ID (sub claim)
-  const token = authHeader.replace("Bearer ", "");
   const clerkUserId = getSubFromJwt(token);
 
   if (!clerkUserId) {
