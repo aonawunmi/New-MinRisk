@@ -447,6 +447,7 @@ export async function generateAINarrative(
     if (!token) return { data: null, error: new Error('Not authenticated') };
 
     const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim();
+    const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
 
     const response = await fetch(
       `${supabaseUrl}/functions/v1/generate-sec-narrative`,
@@ -454,6 +455,7 @@ export async function generateAINarrative(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          apikey: supabaseAnonKey,
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
