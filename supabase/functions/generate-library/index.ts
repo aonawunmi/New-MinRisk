@@ -3,6 +3,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { verifyClerkAuth } from '../_shared/clerk-auth.ts'
+import { USE_CASE_MODELS } from '../_shared/ai-models.ts'
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -50,7 +51,7 @@ Only return the JSON object, no explanations.`;
                 'anthropic-version': '2023-06-01'
             },
             body: JSON.stringify({
-                model: 'claude-3-5-haiku-20241022',
+                model: USE_CASE_MODELS.LIBRARY_GENERATION,
                 max_tokens: 500,
                 messages: [{
                     role: 'user',
@@ -120,7 +121,7 @@ Requirements:
                 'anthropic-version': '2023-06-01'
             },
             body: JSON.stringify({
-                model: 'claude-3-5-haiku-20241022',
+                model: USE_CASE_MODELS.LIBRARY_GENERATION,
                 max_tokens: 1500,
                 messages: [{
                     role: 'user',

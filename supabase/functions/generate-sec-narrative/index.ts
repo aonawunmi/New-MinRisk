@@ -13,7 +13,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
-import { AI_MODELS } from '../_shared/ai-models.ts';
+import { USE_CASE_MODELS } from '../_shared/ai-models.ts';
 import { verifyClerkAuth } from '../_shared/clerk-auth.ts';
 
 interface SecNarrativeRequest {
@@ -241,7 +241,7 @@ Please generate the narrative commentary.`;
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: AI_MODELS.HAIKU,
+        model: USE_CASE_MODELS.SEC_NARRATIVE,
         max_tokens: 1500,
         system: systemPrompt,
         messages: [

@@ -1,55 +1,55 @@
 /**
- * CENTRALIZED AI MODEL CONFIGURATION
+ * CENTRALIZED AI MODEL CONFIGURATION (CLIENT-SIDE)
  *
- * Single source of truth for all Claude AI model selection across the application.
+ * ⚠️  SINGLE SOURCE OF TRUTH for all Claude AI model IDs in browser/client code.
  *
- * IMPORTANT: When models deprecate, update ONLY this file.
+ * IMPORTANT: When models deprecate, update ONLY this file (for client-side).
  *
- * Cost Reference (per 1M tokens, as of Jan 2025):
- * - Haiku 3.5:   Input $0.80  | Output $4.00   (fastest, cheapest)
- * - Sonnet 3.5:  Input $3.00  | Output $15.00  (balanced)
- * - Sonnet 4.5:  Input $8.00  | Output $24.00  (most capable, expensive)
+ * TWIN FILE: supabase/functions/_shared/ai-models.ts (Edge Functions / Deno server)
+ * Both files MUST use identical model IDs. Update both when changing models.
+ *
+ * Current Model IDs (verified from https://docs.anthropic.com/en/docs/about-claude/models):
+ * - Haiku 4.5:   claude-haiku-4-5-20251001   | $1/MTok in, $5/MTok out  (fastest)
+ * - Sonnet 4.5:  claude-sonnet-4-5-20250929   | $3/MTok in, $15/MTok out (balanced, legacy)
+ * - Sonnet 4.6:  claude-sonnet-4-6             | $3/MTok in, $15/MTok out (latest balanced)
+ * - Opus 4.6:    claude-opus-4-6               | $5/MTok in, $25/MTok out (most capable)
  */
 
 export const AI_MODELS = {
   /**
-   * Haiku 3.5 - Use for structured JSON generation
-   * - Appetite & Tolerance generation
-   * - Simple analysis tasks
-   * - Cost: ~10x cheaper than Sonnet 4.5
+   * Haiku 4.5 - Use for high-volume, low-complexity tasks
+   * - RSS pre-filtering, structured JSON generation
+   * - Appetite/tolerance generation, SEC narratives
+   * - Fastest, cheapest option
    */
-  HAIKU: 'claude-3-5-haiku-20241022',
+  HAIKU: 'claude-haiku-4-5-20251001',
 
   /**
-   * Sonnet 3.5 - Use for balanced tasks
-   * - General purpose analysis
-   * - Moderate complexity
+   * Sonnet 4.5 - Use for complex reasoning tasks
+   * - Risk intelligence deep analysis
+   * - Incident analysis, risk mapping
+   * - Any task requiring nuanced judgment
    */
-  SONNET_35: 'claude-3-5-sonnet-20250122',
-
-  /**
-   * Sonnet 4.5 - Use ONLY for complex reasoning
-   * - Risk Intelligence deep analysis
-   * - Multi-step reasoning
-   * - Cost: 10x more expensive than Haiku
-   */
-  SONNET_45: 'claude-sonnet-4-5-20250929',
+  SONNET: 'claude-sonnet-4-5-20250929',
 } as const;
 
 /**
  * Use case to model mapping
  *
- * Change models here to adjust cost/performance tradeoff globally
+ * Change models here to adjust cost/performance tradeoff globally.
+ *
+ * Haiku:  high-volume pre-filtering (cheap, fast)
+ * Sonnet: deep analysis where quality matters (capable, more expensive)
  */
 export const USE_CASE_MODELS = {
+  /** Risk Intelligence deep analysis — quality matters */
+  RISK_INTELLIGENCE: AI_MODELS.SONNET,
+
+  /** RSS Feed pre-filtering — high volume, use cheap model */
+  RSS_FILTERING: AI_MODELS.HAIKU,
+
   /** Appetite & Tolerance generation (structured JSON) - Use cheapest */
   APPETITE_GENERATION: AI_MODELS.HAIKU,
-
-  /** Risk Intelligence analysis (complex reasoning) - Use most capable */
-  RISK_INTELLIGENCE: AI_MODELS.SONNET_45,
-
-  /** RSS Feed filtering - Use cheapest */
-  RSS_FILTERING: AI_MODELS.HAIKU,
 
   /** Default fallback */
   DEFAULT: AI_MODELS.HAIKU,
