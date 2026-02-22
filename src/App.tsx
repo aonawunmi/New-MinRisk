@@ -32,6 +32,7 @@ import AIAssistant from '@/components/ai/AIAssistant';
 import AdminPanel from '@/components/admin/AdminPanel';
 import RegulatorDashboard from '@/components/regulator/RegulatorDashboard';
 import ReportHub from '@/components/reports/ReportHub';
+import SubmissionManager from '@/components/submissions/SubmissionManager';
 
 export default function App() {
   const { user, profile, profileStatus, loading } = useAuth();
@@ -346,6 +347,9 @@ export default function App() {
                         <TabsTrigger value="reports" className="text-xs sm:text-sm whitespace-nowrap">
                           <span className="hidden sm:inline">📄 </span>Reports
                         </TabsTrigger>
+                        <TabsTrigger value="sec-submissions" className="text-xs sm:text-sm whitespace-nowrap">
+                          <span className="hidden sm:inline">📋 </span>SEC
+                        </TabsTrigger>
                       </>
                     )}
                     <TabsTrigger value="admin" className="text-xs sm:text-sm whitespace-nowrap">
@@ -456,6 +460,12 @@ export default function App() {
             {isAdmin && !isSuperAdminUser && (
               <TabsContent value="reports">
                 <ReportHub />
+              </TabsContent>
+            )}
+
+            {isAdmin && !isSuperAdminUser && (
+              <TabsContent value="sec-submissions">
+                <SubmissionManager />
               </TabsContent>
             )}
 

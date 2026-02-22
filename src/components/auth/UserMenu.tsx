@@ -30,7 +30,8 @@ export default function UserMenu({ user, profile, isAdmin }: UserMenuProps) {
       await signOut();
     } catch (err) {
       console.error('Logout error:', err);
-      setIsLoading(false);
+      // If Clerk signOut fails (e.g. rate limited), force redirect to clear state
+      window.location.href = '/';
     }
   };
 

@@ -58,6 +58,9 @@ export const USE_CASE_MODELS = {
   /** PCI Template suggestions (control selection) — moderate complexity */
   PCI_SUGGESTIONS: AI_MODELS.HAIKU,
 
+  /** SEC quarterly narrative generation — moderate complexity, cost-efficient */
+  SEC_NARRATIVE: AI_MODELS.HAIKU,
+
   /** Default fallback */
   DEFAULT: AI_MODELS.HAIKU,
 } as const;
