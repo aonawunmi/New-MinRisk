@@ -112,7 +112,7 @@ export async function listRegulatorUsers(): Promise<{
     const regulatorUsers: RegulatorUser[] = regulatorProfiles.map((profile: any) => {
       const userAccess = accessData?.filter(a => a.user_id === profile.id) || [];
       const regulators = userAccess
-        .map(a => a.regulator)
+        .map((a: any) => a.regulator)
         .filter(Boolean) as Regulator[];
 
       return {

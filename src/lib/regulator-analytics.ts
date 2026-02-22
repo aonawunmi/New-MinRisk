@@ -67,7 +67,8 @@ export async function getRegulatorDashboardMetrics(
       return { data: null, error: orgError };
     }
 
-    const organizationIds = orgData?.map(o => o.organization?.id).filter(Boolean) || [];
+    const orgs = (orgData || []).map((o: any) => o.organization).filter(Boolean);
+    const organizationIds = orgs.map((o: any) => o.id).filter(Boolean);
 
     if (organizationIds.length === 0) {
       return {
@@ -112,8 +113,8 @@ export async function getRegulatorDashboardMetrics(
 
     // Count organizations by type
     const organizations_by_type: Record<string, number> = {};
-    orgData?.forEach(o => {
-      const type = o.organization?.institution_type || 'Unknown';
+    orgs.forEach((o: any) => {
+      const type = o.institution_type || 'Unknown';
       organizations_by_type[type] = (organizations_by_type[type] || 0) + 1;
     });
 
@@ -154,7 +155,8 @@ export async function getOrganizationRiskSummaries(
       return { data: null, error: orgError };
     }
 
-    const organizations = orgData?.map(o => o.organization).filter(Boolean) || [];
+    const organizations: Array<{ id: string; name: string; institution_type: string | null }> =
+      (orgData || []).map((o: any) => o.organization).filter(Boolean);
 
     if (organizations.length === 0) {
       return { data: [], error: null };
@@ -266,7 +268,7 @@ export async function getCategoryRiskBreakdown(
       risks: any[];
     }>();
 
-    risks?.forEach(risk => {
+    risks?.forEach((risk: any) => {
       const masterCat = risk.category?.master_category;
       if (masterCat) {
         const key = masterCat.code;
@@ -332,15 +334,16 @@ export async function getRegulatorHeatmapData(
       return { data: null, error: orgError };
     }
 
-    const organizations = orgData?.map(o => o.organization).filter(Boolean) || [];
+    const heatmapOrgs: Array<{ id: string; name: string; institution_type: string | null }> =
+      (orgData || []).map((o: any) => o.organization).filter(Boolean);
 
-    if (organizations.length === 0) {
+    if (heatmapOrgs.length === 0) {
       return { data: [], error: null };
     }
 
     const heatmapData: RegulatorHeatmapData[] = [];
 
-    for (const org of organizations) {
+    for (const org of heatmapOrgs) {
       // Get risks grouped by master category
       const { data: risks, error: riskError } = await supabase
         .from('risks')
@@ -368,7 +371,7 @@ export async function getRegulatorHeatmapData(
 
       const categoryMap = new Map<string, { scores: number[]; severities: string[] }>();
 
-      risks?.forEach(risk => {
+      risks?.forEach((risk: any) => {
         const code = risk.category?.master_category?.code;
         if (code) {
           if (!categoryMap.has(code)) {

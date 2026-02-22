@@ -175,7 +175,7 @@ export default function SubmissionManager() {
         const secReg = orgRegs.find((r: any) =>
           r.regulator?.code === 'SEC' || r.regulator?.name?.includes('SEC')
         );
-        secRegulator = (secReg?.regulator || orgRegs[0]?.regulator) as Regulator;
+        secRegulator = (secReg?.regulator || orgRegs[0]?.regulator) as unknown as Regulator;
       }
 
       if (!secRegulator) {
