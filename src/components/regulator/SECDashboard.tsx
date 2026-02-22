@@ -403,7 +403,7 @@ export default function SECDashboard() {
         .from('risks')
         .select('id, category, likelihood_inherent, impact_inherent, severity')
         .eq('organization_id', orgId)
-        .eq('status', 'OPEN');
+        .eq('status', 'Open');
 
       if (!risks || risks.length === 0) {
         return result;

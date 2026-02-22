@@ -223,7 +223,7 @@ export default function SECSectorAnalytics({ regulatorId }: SECSectorAnalyticsPr
         .from('risks')
         .select('id, organization_id, category, likelihood_inherent, impact_inherent, severity')
         .in('organization_id', orgIds)
-        .eq('status', 'OPEN');
+        .eq('status', 'Open');
 
       if (riskError) throw riskError;
 

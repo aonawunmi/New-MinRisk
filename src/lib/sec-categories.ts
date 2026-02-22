@@ -212,7 +212,7 @@ export async function getOrgRiskCategoryNames(organizationId: string): Promise<{
       .from('risks')
       .select('category')
       .eq('organization_id', organizationId)
-      .eq('status', 'OPEN');
+      .eq('status', 'Open');
 
     if (error) return { data: null, error };
 
@@ -382,7 +382,7 @@ export async function getRisksGroupedBySECCategory(organizationId: string): Prom
       .from('risks')
       .select('id, risk_code, risk_title, category, likelihood_inherent, impact_inherent, residual_score, severity')
       .eq('organization_id', organizationId)
-      .eq('status', 'OPEN')
+      .eq('status', 'Open')
       .order('risk_code');
 
     if (riskError) return { data: null, error: riskError };
