@@ -218,10 +218,10 @@ export default function SECSectorAnalytics({ regulatorId }: SECSectorAnalyticsPr
         secCode: catIdToCode.get(d.sec_category_id) || 'OPERATIONAL',
       }));
 
-      // Load all risks for these orgs
+      // Load all risks for these orgs (severity computed client-side)
       const { data: allRisks, error: riskError } = await supabase
         .from('risks')
-        .select('id, organization_id, category, likelihood_inherent, impact_inherent, severity')
+        .select('id, organization_id, category, likelihood_inherent, impact_inherent')
         .in('organization_id', orgIds)
         .eq('status', 'Open');
 
@@ -266,8 +266,9 @@ export default function SECSectorAnalytics({ regulatorId }: SECSectorAnalyticsPr
           const rating = (risk.likelihood_inherent || 0) * (risk.impact_inherent || 0);
           ratingAccumulator[secCode].push(rating);
           catData[secCode].riskCount++;
-          if (risk.severity === 'CRITICAL') catData[secCode].criticalCount++;
-          if (risk.severity === 'HIGH') catData[secCode].highCount++;
+          // Compute severity from inherent score
+          if (rating >= 20) catData[secCode].criticalCount++;
+          else if (rating >= 12) catData[secCode].highCount++;
         }
 
         // Calculate averages

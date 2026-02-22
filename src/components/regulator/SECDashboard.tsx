@@ -398,10 +398,10 @@ export default function SECDashboard() {
         .select('internal_category_name, sec_category_id')
         .eq('organization_id', orgId);
 
-      // Get all open risks for this org
+      // Get all open risks for this org (severity computed client-side)
       const { data: risks } = await supabase
         .from('risks')
-        .select('id, category, likelihood_inherent, impact_inherent, severity')
+        .select('id, category, likelihood_inherent, impact_inherent')
         .eq('organization_id', orgId)
         .eq('status', 'Open');
 
@@ -459,9 +459,9 @@ export default function SECDashboard() {
         group.count++;
         const rating = (risk.likelihood_inherent || 0) * (risk.impact_inherent || 0);
         group.totalRating += rating;
-        if (risk.severity) {
-          group.severities.push(risk.severity);
-        }
+        // Compute severity from inherent score
+        const computedSeverity = rating >= 20 ? 'CRITICAL' : rating >= 12 ? 'HIGH' : rating >= 6 ? 'MEDIUM' : 'LOW';
+        group.severities.push(computedSeverity);
       }
 
       // Build result

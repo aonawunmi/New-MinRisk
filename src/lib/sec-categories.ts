@@ -380,11 +380,11 @@ export async function getRisksGroupedBySECCategory(organizationId: string): Prom
     });
     console.log('[SEC] Category map entries:', Array.from(categoryMap.keys()));
 
-    // Fetch all open risks
+    // Fetch all open risks (severity is computed, not a DB column)
     console.log('[SEC] Fetching risks for org:', organizationId);
     const { data: risks, error: riskError } = await supabase
       .from('risks')
-      .select('id, risk_code, risk_title, category, likelihood_inherent, impact_inherent, residual_score, severity')
+      .select('id, risk_code, risk_title, category, likelihood_inherent, impact_inherent, residual_score')
       .eq('organization_id', organizationId)
       .eq('status', 'Open')
       .order('risk_code');
@@ -435,11 +435,22 @@ export async function getRisksGroupedBySECCategory(organizationId: string): Prom
       };
     }
 
+    // Helper to compute severity from inherent score
+    function computeSeverity(likelihood: number, impact: number): string {
+      const score = likelihood * impact;
+      if (score >= 20) return 'CRITICAL';
+      if (score >= 12) return 'HIGH';
+      if (score >= 6) return 'MEDIUM';
+      return 'LOW';
+    }
+
     // Assign each risk to its SEC category
     for (const risk of (risks || [])) {
       const secCatId = categoryMap.get(risk.category) || defaultSecId;
       const secCat = secCategories.find(c => c.id === secCatId);
       const code = secCat?.code || 'OPERATIONAL';
+      const likelihood = risk.likelihood_inherent || 0;
+      const impact = risk.impact_inherent || 0;
 
       if (grouped[code]) {
         grouped[code].risks.push({
@@ -447,10 +458,10 @@ export async function getRisksGroupedBySECCategory(organizationId: string): Prom
           risk_code: risk.risk_code,
           risk_title: risk.risk_title,
           category: risk.category,
-          likelihood_inherent: risk.likelihood_inherent || 0,
-          impact_inherent: risk.impact_inherent || 0,
+          likelihood_inherent: likelihood,
+          impact_inherent: impact,
           residual_score: risk.residual_score,
-          severity: risk.severity,
+          severity: computeSeverity(likelihood, impact),
         });
       }
     }
