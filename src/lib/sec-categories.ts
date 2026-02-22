@@ -270,6 +270,71 @@ export async function checkMappingCompleteness(organizationId: string): Promise<
 }
 
 /**
+ * Automatically map any unmapped internal risk categories to SEC categories
+ * using keyword-based matching. Does NOT overwrite existing user-configured mappings.
+ * Categories that don't match any keyword default to OPERATIONAL.
+ */
+export async function autoMapUnmappedCategories(organizationId: string): Promise<{
+  data: { autoMappedCount: number } | null;
+  error: Error | null;
+}> {
+  try {
+    // 1. Check what's unmapped
+    const { data: mappingStatus, error: statusError } = await checkMappingCompleteness(organizationId);
+    if (statusError || !mappingStatus) {
+      return { data: null, error: statusError || new Error('Failed to check mapping status') };
+    }
+
+    if (mappingStatus.isComplete) {
+      return { data: { autoMappedCount: 0 }, error: null };
+    }
+
+    const unmapped = mappingStatus.unmappedCategories;
+
+    // 2. Load default keyword patterns
+    const { data: defaults, error: defaultsError } = await getDefaultSecMappings();
+    if (defaultsError || !defaults) {
+      return { data: null, error: defaultsError || new Error('Failed to load default mappings') };
+    }
+
+    // 3. Get the OPERATIONAL category ID as fallback
+    const { data: secCategories, error: secError } = await getSecStandardCategories();
+    if (secError || !secCategories) {
+      return { data: null, error: secError || new Error('Failed to load SEC categories') };
+    }
+    const operationalCat = secCategories.find(c => c.code === 'OPERATIONAL');
+    const defaultSecId = operationalCat?.id;
+    if (!defaultSecId) {
+      return { data: null, error: new Error('OPERATIONAL SEC category not found') };
+    }
+
+    // 4. Build mappings for unmapped categories
+    const newMappings = unmapped.map(categoryName => ({
+      organization_id: organizationId,
+      internal_category_name: categoryName,
+      sec_category_id: suggestSecCategory(categoryName, defaults) || defaultSecId,
+    }));
+
+    if (newMappings.length === 0) {
+      return { data: { autoMappedCount: 0 }, error: null };
+    }
+
+    // 5. Insert only new mappings (ignoreDuplicates protects existing ones)
+    const { error: insertError } = await supabase
+      .from('sec_category_mappings')
+      .upsert(newMappings, { onConflict: 'organization_id,internal_category_name', ignoreDuplicates: true });
+
+    if (insertError) {
+      return { data: null, error: insertError };
+    }
+
+    return { data: { autoMappedCount: newMappings.length }, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err : new Error('Unknown error') };
+  }
+}
+
+/**
  * Get risks grouped by their SEC category mapping for an organization
  * This is the core function used when building SEC submissions
  */

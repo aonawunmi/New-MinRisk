@@ -69,6 +69,7 @@ import {
   type SecStandardCategory,
   getSecStandardCategories,
   checkMappingCompleteness,
+  autoMapUnmappedCategories,
 } from '@/lib/sec-categories';
 import type { Regulator } from '@/lib/regulators';
 import CategoryMappingConfig from './CategoryMappingConfig';
@@ -195,11 +196,29 @@ export default function SubmissionManager() {
       }
       setSecCategories(categories);
 
-      // 4. Check mapping completeness
+      // 4. Check mapping completeness and auto-map if needed
       const { data: mappingStatus } = await checkMappingCompleteness(organizationId);
-      if (mappingStatus) {
-        setMappingComplete(mappingStatus.isComplete);
-        setUnmappedCategories(mappingStatus.unmappedCategories);
+      if (mappingStatus && !mappingStatus.isComplete) {
+        // 4a. Auto-map unmapped categories using keyword matching
+        const { error: autoMapError } = await autoMapUnmappedCategories(organizationId);
+        if (autoMapError) {
+          console.warn('Auto-mapping failed (non-fatal):', autoMapError.message);
+          setMappingComplete(false);
+          setUnmappedCategories(mappingStatus.unmappedCategories);
+        } else {
+          // 4b. Re-check completeness after auto-mapping
+          const { data: updatedStatus } = await checkMappingCompleteness(organizationId);
+          if (updatedStatus) {
+            setMappingComplete(updatedStatus.isComplete);
+            setUnmappedCategories(updatedStatus.unmappedCategories);
+          } else {
+            setMappingComplete(false);
+            setUnmappedCategories(mappingStatus.unmappedCategories);
+          }
+        }
+      } else if (mappingStatus) {
+        setMappingComplete(true);
+        setUnmappedCategories([]);
       }
 
       // 5. Get or create submission for current period
