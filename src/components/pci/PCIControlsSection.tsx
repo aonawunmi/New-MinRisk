@@ -352,6 +352,7 @@ export default function PCIControlsSection({
         riskId={riskId}
         riskResponse={riskResponse}
         aiSuggestions={aiSuggestions.map((s) => s.template_id)}
+        aiSuggestionsWithRationale={aiSuggestions}
         existingTemplateIds={activePCIInstances.map((p) => p.pci_template_id)}
         declinedTemplateIds={declinedTemplateIds}
         onDecline={handleDeclineTemplate}
