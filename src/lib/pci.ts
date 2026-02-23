@@ -33,19 +33,25 @@ import type {
  * Check if PCI workflow is enabled for the current organization
  */
 export async function isPCIWorkflowEnabled(): Promise<boolean> {
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('organization_id')
-    .single();
+  const profile = await getAuthenticatedProfile();
 
-  if (!profile?.organization_id) return false;
+  if (!profile?.organization_id) {
+    console.warn('isPCIWorkflowEnabled: No organization found for user');
+    return false;
+  }
 
-  const { data: org } = await supabase
+  const { data: org, error } = await supabase
     .from('organizations')
     .select('pci_workflow_enabled')
     .eq('id', profile.organization_id)
-    .single();
+    .maybeSingle();
 
+  if (error) {
+    console.error('isPCIWorkflowEnabled: Error querying organizations:', error.message);
+    return false;
+  }
+
+  console.log('isPCIWorkflowEnabled:', org?.pci_workflow_enabled, 'for org:', profile.organization_id);
   return org?.pci_workflow_enabled ?? false;
 }
 
@@ -344,14 +350,11 @@ export async function getPCIInstance(pciInstanceId: string) {
  */
 export async function createPCIInstance(input: CreatePCIInstanceData) {
   const authProfile = await getAuthenticatedProfile();
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('organization_id')
-    .single();
 
-  if (!profile?.organization_id) {
+  if (!authProfile?.organization_id) {
     return { data: null, error: { message: 'Organization not found' } };
   }
+  const profile = authProfile;
 
   // Get template to freeze version
   const { data: template } = await getPCITemplate(input.pci_template_id);
@@ -439,14 +442,11 @@ export async function activatePCIInstance(pciInstanceId: string) {
  */
 export async function declinePCITemplate(riskId: string, templateId: string) {
   const authProfile = await getAuthenticatedProfile();
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('organization_id')
-    .single();
 
-  if (!profile?.organization_id) {
+  if (!authProfile?.organization_id) {
     return { data: null, error: { message: 'Organization not found' } };
   }
+  const profile = authProfile;
 
   // Get template to freeze version
   const { data: template } = await getPCITemplate(templateId);
@@ -731,14 +731,11 @@ export async function getEvidenceRequests(filters?: {
  */
 export async function createEvidenceRequest(input: CreateEvidenceRequestData) {
   const authProfile = await getAuthenticatedProfile();
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('organization_id')
-    .single();
 
-  if (!profile?.organization_id) {
+  if (!authProfile?.organization_id) {
     return { data: null, error: { message: 'Organization not found' } };
   }
+  const profile = authProfile;
 
   const { data, error } = await supabase
     .from('evidence_requests')
