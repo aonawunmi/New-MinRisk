@@ -8,6 +8,10 @@ import { supabase, getClerkToken } from './supabase';
 import type { ControlType, ControlTarget, DIMEScore } from '@/types/control';
 import type { RiskCategory, RiskStatus } from '@/types/risk';
 
+// Environment variables for Edge Function calls
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim();
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
+
 /**
  * AI-suggested control structure
  */
@@ -50,14 +54,10 @@ async function callAI(prompt: string, maxTokens: number = 1024): Promise<string>
       throw new Error('Authentication required. Please log in.');
     }
 
-    // Direct fetch to bypass potential SDK URL construction issues
-    // Use the exact URL that we verified works (at least exists)
-    const projectRef = import.meta.env.VITE_SUPABASE_URL?.match(/https:\/\/([^\.]+)\./)?.[1];
-    if (!projectRef) throw new Error('Invalid Supabase URL');
-
-    // Explicitly construct the URL using the correct project ID (qrxwg...)
-    // This protects against any weird environment variable caching issues
-    const functionUrl = `https://${projectRef}.supabase.co/functions/v1/ai-refine`;
+    // Direct fetch to Edge Function with Clerk auth pattern:
+    // - apikey + Authorization: anon key (to pass Supabase gateway)
+    // - x-clerk-token: Clerk JWT (for Edge Function to verify user)
+    const functionUrl = `${supabaseUrl}/functions/v1/ai-refine`;
 
     console.log('Fetching URL:', functionUrl);
 
@@ -65,7 +65,9 @@ async function callAI(prompt: string, maxTokens: number = 1024): Promise<string>
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'x-clerk-token': token,
       },
       body: JSON.stringify({ prompt, maxTokens }),
     });
@@ -619,19 +621,18 @@ IMPORTANT:
 - If unsure, choose the closest match and set confidence to "medium" or "low"
 - Return ONLY the JSON object, no other text.`;
 
-    // Call Edge Function (secure server-side proxy)
-    // Construct robust URL
-    const projectRef = import.meta.env.VITE_SUPABASE_URL?.match(/https:\/\/([^\.]+)\./)?.[1];
-    const functionUrl = `https://${projectRef}.supabase.co/functions/v1/ai-refine`;
+    // Call Edge Function with Clerk auth pattern
+    const functionUrl = `${supabaseUrl}/functions/v1/ai-refine`;
 
-    // Call Edge Function (secure server-side proxy)
     const response = await fetch(
       functionUrl,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'x-clerk-token': token,
         },
         body: JSON.stringify({
           prompt,

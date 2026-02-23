@@ -6,6 +6,7 @@
  */
 
 import { supabase } from './supabase';
+import { getAuthenticatedProfile } from './auth';
 
 // ============================================================================
 // Types
@@ -103,14 +104,11 @@ export async function getDivisionsWithDepartments(): Promise<{
  */
 export async function createDivision(name: string): Promise<{ data: Division | null; error: Error | null }> {
     try {
-        // Get user's organization
-        const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('organization_id')
-            .single();
+        // Get user's organization via shared auth helper (handles duplicate rows gracefully)
+        const profile = await getAuthenticatedProfile();
 
         if (!profile?.organization_id) {
-            return { data: null, error: new Error('No organization found') };
+            return { data: null, error: new Error('No organization found. Please ensure your account is properly configured.') };
         }
 
         const { data, error } = await supabase
@@ -267,14 +265,11 @@ export async function createDepartment(
     divisionId?: string
 ): Promise<{ data: Department | null; error: Error | null }> {
     try {
-        // Get user's organization
-        const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('organization_id')
-            .single();
+        // Get user's organization via shared auth helper (handles duplicate rows gracefully)
+        const profile = await getAuthenticatedProfile();
 
         if (!profile?.organization_id) {
-            return { data: null, error: new Error('No organization found') };
+            return { data: null, error: new Error('No organization found. Please ensure your account is properly configured.') };
         }
 
         const { data, error } = await supabase

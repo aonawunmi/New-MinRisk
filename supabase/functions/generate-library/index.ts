@@ -7,7 +7,7 @@ import { USE_CASE_MODELS } from '../_shared/ai-models.ts'
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-clerk-token',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
