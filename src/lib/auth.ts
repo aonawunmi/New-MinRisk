@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUser } from '@clerk/clerk-react';
-import { supabase } from './supabase';
+import { supabase, getClerkUserId } from './supabase';
 import { useSupabaseReady } from './clerk-supabase';
 
 /**
@@ -34,11 +34,18 @@ export async function getAuthenticatedProfile(): Promise<{
   full_name: string | null;
 } | null> {
   try {
-    const { data, error } = await supabase
+    const clerkId = getClerkUserId();
+    let query = supabase
       .from('user_profiles')
-      .select('id, organization_id, role, status, email, full_name')
-      .limit(1)
-      .maybeSingle();
+      .select('id, organization_id, role, status, email, full_name');
+
+    // Explicit filter prevents LIMIT 1 from returning wrong profile
+    // when RLS allows visibility to multiple profiles (e.g., super_admin sees all)
+    if (clerkId) {
+      query = query.eq('clerk_id', clerkId);
+    }
+
+    const { data, error } = await query.limit(1).maybeSingle();
 
     if (error) {
       console.error('getAuthenticatedProfile error:', error.message);
@@ -101,10 +108,12 @@ export function useAuth() {
 
     setLoading(true);
     try {
-      // RLS on user_profiles: clerk_id = auth.jwt()->>'sub'
+      // Explicit clerk_id filter ensures we get OUR profile, not another user's.
+      // Without this, super_admin RLS visibility + LIMIT 1 could return wrong row.
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
+        .eq('clerk_id', clerkUser.id)
         .limit(1)
         .maybeSingle();
 
@@ -163,10 +172,11 @@ export function useAuth() {
       // Claim succeeded
       if (claimResult?.claimed) {
         claimRetryCount.current = 0;
-        // Re-query — clerk_id is now linked, RLS will match
+        // Re-query with explicit clerk_id — now linked after claim
         const { data: claimedProfile } = await supabase
           .from('user_profiles')
           .select('*')
+          .eq('clerk_id', clerkUser.id)
           .limit(1)
           .maybeSingle();
 

@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, getClerkUserId } from './supabase';
 
 /**
  * Profile Management Service Layer — CLERK VERSION
@@ -38,11 +38,18 @@ export interface ProfileResult<T = UserProfile> {
  */
 export async function getCurrentUserProfile(): Promise<ProfileResult> {
   try {
-    const { data, error } = await supabase
+    const clerkId = getClerkUserId();
+    let query = supabase
       .from('user_profiles')
-      .select('*')
-      .limit(1)
-      .single();
+      .select('*');
+
+    // Explicit filter prevents LIMIT 1 from returning wrong profile
+    // when RLS allows visibility to multiple profiles (e.g., super_admin sees all)
+    if (clerkId) {
+      query = query.eq('clerk_id', clerkId);
+    }
+
+    const { data, error } = await query.limit(1).single();
 
     if (error) {
       console.error('Get profile error:', error.message);

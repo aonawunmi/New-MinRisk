@@ -1,6 +1,6 @@
 import { useEffect, useState, useContext, createContext } from 'react';
 import { useAuth, useUser } from '@clerk/clerk-react';
-import { setClerkTokenGetter } from './supabase';
+import { setClerkTokenGetter, setClerkUserId } from './supabase';
 
 interface ClerkSupabaseContextType {
   supabaseReady: boolean;
@@ -22,13 +22,16 @@ export function ClerkSupabaseProvider({ children }: { children: React.ReactNode 
   useEffect(() => {
     if (user) {
       setClerkTokenGetter(() => getToken());
+      setClerkUserId(user.id);
       setSupabaseReady(true);
     } else {
       setClerkTokenGetter(null);
+      setClerkUserId(null);
       setSupabaseReady(false);
     }
     return () => {
       setClerkTokenGetter(null);
+      setClerkUserId(null);
       setSupabaseReady(false);
     };
   }, [user, getToken]);

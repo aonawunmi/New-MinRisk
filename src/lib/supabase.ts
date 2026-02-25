@@ -28,6 +28,21 @@ export async function getClerkToken(): Promise<string | null> {
 }
 
 /**
+ * Clerk user ID — set by ClerkSupabaseProvider when Clerk session is available.
+ * Used for explicit profile filtering (prevents LIMIT 1 from returning wrong profile
+ * when RLS allows visibility to multiple profiles, e.g., super_admin sees all).
+ */
+let clerkUserId: string | null = null;
+
+export function setClerkUserId(id: string | null) {
+  clerkUserId = id;
+}
+
+export function getClerkUserId(): string | null {
+  return clerkUserId;
+}
+
+/**
  * Supabase client — Uses Clerk JWT via Third-Party Auth
  *
  * Security Model (Updated Feb 2026 — Clerk Migration):
