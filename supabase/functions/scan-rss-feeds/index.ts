@@ -442,7 +442,7 @@ OR if not relevant:
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: USE_CASE_MODELS.RSS_FILTERING,
+        model: USE_CASE_MODELS.RISK_INTELLIGENCE,
         max_tokens: 2048,
         temperature: 0.3,
         messages: [{ role: 'user', content: prompt }]
