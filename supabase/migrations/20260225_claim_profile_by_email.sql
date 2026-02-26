@@ -11,6 +11,10 @@
 --
 -- SECURITY: SECURITY DEFINER so it can update profiles regardless of RLS.
 -- The function validates auth.jwt() is present before proceeding.
+--
+-- NOTE: Uses set_config('app.allow_status_change', 'true', true) to bypass
+-- the enforce_status_change_audit trigger (from User Audit System).
+-- The third argument (true) makes it transaction-local.
 
 CREATE OR REPLACE FUNCTION claim_profile_by_email(p_email TEXT)
 RETURNS JSONB
@@ -58,10 +62,14 @@ BEGIN
     RETURN jsonb_build_object('claimed', false, 'reason', 'No pending invitation found for this email');
   END IF;
 
+  -- Allow status change (bypass the audit trigger — this IS an authorized change)
+  PERFORM set_config('app.allow_status_change', 'true', true);
+
   -- Link the Clerk ID and approve the profile
   UPDATE user_profiles
   SET clerk_id = v_clerk_id,
       status = 'approved',
+      approved_at = NOW(),
       updated_at = NOW()
   WHERE id = v_profile_id;
 
