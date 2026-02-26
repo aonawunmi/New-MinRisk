@@ -211,6 +211,7 @@ async function upsertRiskAlerts(
     const alert = {
       event_id: event.id,
       risk_code: riskAnalysis.risk_code,
+      organization_id: organizationId,
       confidence_score: (analysis.confidence || 70) / 100,
       suggested_likelihood_change: riskAnalysis.likelihood_change || 0,
       reasoning: riskAnalysis.reasoning || 'No reasoning provided',

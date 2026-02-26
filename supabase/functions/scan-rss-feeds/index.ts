@@ -672,6 +672,7 @@ async function analyzeAndAlertEvents(
           const alert = {
             event_id: event.id,
             risk_code: riskAnalysis.risk_code,
+            organization_id: organizationId,
             confidence_score: confidence,
             suggested_likelihood_change: riskAnalysis.likelihood_change || 0,
             reasoning: riskAnalysis.reasoning || 'No reasoning provided',
