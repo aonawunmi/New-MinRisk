@@ -10,7 +10,7 @@
  * Both files MUST use identical model IDs. Update both when changing models.
  *
  * Current Model IDs (verified from https://docs.anthropic.com/en/docs/about-claude/models):
- * - Haiku 3.5:   claude-3-5-haiku-20241022     | $0.80/MTok in, $4/MTok out  (fastest, pre-filtering)
+ * - Haiku 4.5:   claude-haiku-4-5-20251001      | $1/MTok in, $5/MTok out  (fastest, pre-filtering)
  * - Sonnet 4.5:  claude-sonnet-4-5-20250514    | $3/MTok in, $15/MTok out (balanced, deep analysis)
  * - Sonnet 4.6:  claude-sonnet-4-6             | $3/MTok in, $15/MTok out (latest balanced)
  * - Opus 4.6:    claude-opus-4-6               | $5/MTok in, $25/MTok out (most capable)
@@ -18,12 +18,12 @@
 
 export const AI_MODELS = {
   /**
-   * Haiku 3.5 - Use for high-volume, low-complexity tasks
+   * Haiku 4.5 - Use for high-volume, low-complexity tasks
    * - RSS pre-filtering, structured JSON generation
    * - Appetite/tolerance generation, SEC narratives
    * - Fastest, cheapest option
    */
-  HAIKU: 'claude-3-5-haiku-20241022',
+  HAIKU: 'claude-haiku-4-5-20251001',
 
   /**
    * Sonnet 4.5 - Use for complex reasoning tasks
