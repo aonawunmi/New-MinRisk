@@ -11,8 +11,7 @@
  *
  * Current Model IDs (verified from https://docs.anthropic.com/en/docs/about-claude/models):
  * - Haiku 4.5:   claude-haiku-4-5-20251001      | $1/MTok in, $5/MTok out  (fastest, pre-filtering)
- * - Sonnet 4.5:  claude-sonnet-4-5-20250514    | $3/MTok in, $15/MTok out (balanced, deep analysis)
- * - Sonnet 4.6:  claude-sonnet-4-6             | $3/MTok in, $15/MTok out (latest balanced)
+ * - Sonnet 4:    claude-sonnet-4-20250514       | $3/MTok in, $15/MTok out (balanced, deep analysis)
  * - Opus 4.6:    claude-opus-4-6               | $5/MTok in, $25/MTok out (most capable)
  */
 
@@ -31,7 +30,7 @@ export const AI_MODELS = {
    * - Incident analysis, risk mapping
    * - Any task requiring nuanced judgment
    */
-  SONNET: 'claude-sonnet-4-5-20250514',
+  SONNET: 'claude-sonnet-4-20250514',
 } as const;
 
 /**
