@@ -305,19 +305,27 @@ export async function updateKRI(
 
 /**
  * Delete a KRI definition permanently
+ * Uses .select() to verify the row was actually deleted (RLS can silently block deletes)
  */
 export async function deleteKRI(
   kriId: string
 ): Promise<{ error: Error | null }> {
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('kri_definitions')
       .delete()
-      .eq('id', kriId);
+      .eq('id', kriId)
+      .select('id');
 
     if (error) {
       console.error('Delete KRI error:', error.message);
       return { error: new Error(error.message) };
+    }
+
+    // Supabase returns success with empty array when RLS blocks the delete
+    if (!data || data.length === 0) {
+      console.error('Delete KRI: no rows affected (possibly blocked by RLS)', kriId);
+      return { error: new Error('Failed to delete KRI — permission denied or KRI not found') };
     }
 
     console.log('KRI deleted successfully:', kriId);
@@ -798,19 +806,26 @@ export async function getKRIsForRisk(
 
 /**
  * Unlink a KRI from a risk
+ * Uses .select() to verify the row was actually deleted (RLS can silently block deletes)
  */
 export async function unlinkKRIFromRisk(
   linkId: string
 ): Promise<{ error: Error | null }> {
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('kri_risk_links')
       .delete()
-      .eq('id', linkId);
+      .eq('id', linkId)
+      .select('id');
 
     if (error) {
       console.error('Unlink KRI from risk error:', error.message);
       return { error: new Error(error.message) };
+    }
+
+    if (!data || data.length === 0) {
+      console.error('Unlink KRI: no rows affected (possibly blocked by RLS)', linkId);
+      return { error: new Error('Failed to unlink KRI — permission denied or link not found') };
     }
 
     console.log('KRI unlinked from risk:', linkId);
