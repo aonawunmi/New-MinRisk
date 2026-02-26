@@ -144,10 +144,10 @@ export default function KRIDefinitions() {
     if (!kri) return;
 
     try {
-      // Check if KRI is linked to any risks (now using risk_id)
+      // Check if KRI is linked to any risks
       const { data: links, error: linksError } = await supabase
         .from('kri_risk_links')
-        .select('risk_id, risks:risk_id(risk_code)')
+        .select('risk_code')
         .eq('kri_id', id);
 
       if (linksError) {
@@ -158,7 +158,7 @@ export default function KRIDefinitions() {
       let confirmMessage = 'Are you sure you want to delete this KRI?';
 
       if (links && links.length > 0) {
-        const riskCodes = links.map((link: any) => link.risks?.risk_code).filter(Boolean).join(', ');
+        const riskCodes = links.map((link: any) => link.risk_code).filter(Boolean).join(', ');
         confirmMessage = `⚠️ WARNING: This KRI is currently monitoring ${links.length} risk(s): ${riskCodes}\n\nDeleting this KRI will remove all risk associations and historical data.\n\nAre you sure you want to permanently delete "${kri.kri_name}"?`;
       }
 
@@ -214,16 +214,12 @@ export default function KRIDefinitions() {
 
     setLinkingInProgress(true);
     try {
-      // Find the link by getting the risk_id from risk_code
-      const risk = risks.find(r => r.risk_code === riskCode);
-      if (!risk) throw new Error('Risk not found');
-
-      // Get the link record
+      // Get the link record by matching risk_code directly
       const { data: links, error: linkError } = await supabase
         .from('kri_risk_links')
         .select('id')
         .eq('kri_id', managingLinksFor.id)
-        .eq('risk_id', risk.id)
+        .eq('risk_code', riskCode)
         .single();
 
       if (linkError || !links) throw new Error('Link not found');

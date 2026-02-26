@@ -545,74 +545,8 @@ export async function unlinkControlFromRisk(
   }
 }
 
-/**
- * Link an existing KRI to a risk
- */
-export async function linkKRIToRisk(
-  kriId: string,
-  riskId: string,
-  aiConfidence?: number
-): Promise<{ error: Error | null }> {
-  try {
-    const profile = await getAuthenticatedProfile();
-    if (!profile) {
-      return { error: new Error('User not authenticated') };
-    }
-
-    const { error } = await supabase
-      .from('kri_risk_links')
-      .insert([
-        {
-          kri_id: kriId,
-          risk_id: riskId,
-          ai_link_confidence: aiConfidence,
-          linked_by: profile.id,
-        },
-      ]);
-
-    if (error) {
-      console.error('Link KRI to risk error:', error.message);
-      return { error: new Error(error.message) };
-    }
-
-    console.log('KRI linked to risk successfully:', kriId, '->', riskId);
-    return { error: null };
-  } catch (err) {
-    console.error('Unexpected link KRI error:', err);
-    return {
-      error: err instanceof Error ? err : new Error('Unknown link KRI error'),
-    };
-  }
-}
-
-/**
- * Unlink a KRI from a risk (keeps the KRI, just removes the link)
- */
-export async function unlinkKRIFromRisk(
-  kriId: string,
-  riskId: string
-): Promise<{ error: Error | null }> {
-  try {
-    const { error } = await supabase
-      .from('kri_risk_links')
-      .delete()
-      .eq('kri_id', kriId)
-      .eq('risk_id', riskId);
-
-    if (error) {
-      console.error('Unlink KRI from risk error:', error.message);
-      return { error: new Error(error.message) };
-    }
-
-    console.log('KRI unlinked from risk successfully:', kriId, '<-X->', riskId);
-    return { error: null };
-  } catch (err) {
-    console.error('Unexpected unlink KRI error:', err);
-    return {
-      error: err instanceof Error ? err : new Error('Unknown unlink KRI error'),
-    };
-  }
-}
+// NOTE: linkKRIToRisk and unlinkKRIFromRisk live in src/lib/kri.ts (not here)
+// They were removed from this file to eliminate the duplicate/broken versions
 
 /**
  * Get all controls linked to a specific risk
