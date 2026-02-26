@@ -59,7 +59,22 @@ serve(async (req: Request) => {
       );
     }
 
-    // 4. Check if email already exists in user_profiles
+    // 4a. Check if organization already has a primary admin
+    const { count: existingAdminCount } = await supabaseAdmin
+      .from("user_profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .eq("role", "primary_admin")
+      .in("status", ["approved", "pending", "pending_invite"]);
+
+    if (existingAdminCount && existingAdminCount > 0) {
+      return new Response(
+        JSON.stringify({ error: "This organization already has a Primary Admin. Revoke or remove the existing admin first." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // 4b. Check if email already exists in user_profiles
     const { data: existingProfile } = await supabaseAdmin
       .from("user_profiles")
       .select("id, status, clerk_id")

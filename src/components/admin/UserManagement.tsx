@@ -333,6 +333,8 @@ export default function UserManagement() {
               <TableBody>
                 {users
                   .filter((user) => {
+                    // Hide pending_invite placeholder profiles — they belong in Invitations tab
+                    if (user.status === 'pending_invite') return false;
                     if (user.id === currentUserId) return true;
                     return canManageUser(user.role);
                   })

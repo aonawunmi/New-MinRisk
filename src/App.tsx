@@ -35,7 +35,7 @@ import ReportHub from '@/components/reports/ReportHub';
 import SubmissionManager from '@/components/submissions/SubmissionManager';
 
 export default function App() {
-  const { user, profile, profileStatus, loading } = useAuth();
+  const { user, profile, profileStatus, loading, retryProfile } = useAuth();
   const { signOut } = useClerk();
   const { signIn, setActive, isLoaded: signInLoaded } = useSignIn();
   const { logoUrl } = useOrgBranding();
@@ -45,9 +45,11 @@ export default function App() {
   const [isSuperAdminUser, setIsSuperAdminUser] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [pciWorkflowEnabled, setPciWorkflowEnabled] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   // Auto-detect invitation ticket — switch to sign-up mode so <SignUp /> handles it
+  const hasInvitationTicket = new URLSearchParams(window.location.search).has('__clerk_ticket');
   const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>(() => {
-    return new URLSearchParams(window.location.search).has('__clerk_ticket') ? 'sign-up' : 'sign-in';
+    return hasInvitationTicket ? 'sign-up' : 'sign-in';
   });
   const [adminLoaded, setAdminLoaded] = useState(false);
 
@@ -185,6 +187,42 @@ export default function App() {
     );
   }
 
+  // Already signed in but opened an invitation link — prompt to sign out first
+  if (user && hasInvitationTicket && profile) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8 text-center">
+          <div className="text-5xl mb-4">✉️</div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Invitation Detected</h1>
+          <p className="text-gray-600 mb-2">
+            You're currently signed in as <strong>{user.email}</strong>.
+          </p>
+          <p className="text-gray-500 text-sm mb-6">
+            To accept this invitation and create a new account, you need to sign out first.
+          </p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => signOut()}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Sign Out &amp; Accept Invitation
+            </button>
+            <button
+              onClick={() => {
+                // Clear ticket from URL and continue as current user
+                window.history.replaceState({}, '', window.location.pathname);
+                window.location.reload();
+              }}
+              className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+            >
+              Continue as {user.email}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Signed in via Clerk but no approved profile — show appropriate message
   if (!profile) {
     return (
@@ -204,11 +242,27 @@ export default function App() {
               ? 'Your account is awaiting administrator approval. You will be able to access MinRisk once approved.'
               : 'No MinRisk account was found for your email. If you were invited, please use the sign-in link from your invitation email. Otherwise, contact your administrator.'}
           </p>
-          <SignOutButton>
-            <button className="px-6 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors">
-              Sign Out
-            </button>
-          </SignOutButton>
+          <div className="flex flex-col gap-3">
+            {profileStatus !== 'pending' && (
+              <button
+                onClick={async () => {
+                  setRetrying(true);
+                  retryProfile();
+                  // Give it a few seconds then stop spinner
+                  setTimeout(() => setRetrying(false), 3000);
+                }}
+                disabled={retrying}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {retrying ? 'Retrying...' : 'Retry'}
+              </button>
+            )}
+            <SignOutButton>
+              <button className="px-6 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors">
+                Sign Out
+              </button>
+            </SignOutButton>
+          </div>
         </div>
       </div>
     );

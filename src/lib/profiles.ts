@@ -11,7 +11,7 @@ import { supabase, getClerkUserId } from './supabase';
  */
 
 export type UserRole = 'super_admin' | 'primary_admin' | 'secondary_admin' | 'user' | 'viewer';
-export type UserStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
+export type UserStatus = 'pending' | 'pending_invite' | 'approved' | 'rejected' | 'suspended';
 
 export interface UserProfile {
   id: string;

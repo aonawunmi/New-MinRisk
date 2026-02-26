@@ -208,6 +208,12 @@ export function useAuth() {
     loadProfile();
   }, [loadProfile]);
 
+  // Allow App.tsx to manually retry profile loading (e.g., after transient JWT failures)
+  const retryProfile = useCallback(() => {
+    claimRetryCount.current = 0;
+    loadProfile();
+  }, [loadProfile]);
+
   return {
     user: clerkUser ? {
       id: clerkUser.id,
@@ -219,5 +225,6 @@ export function useAuth() {
     // Without this, a stale loading=false causes "Account Not Found" to flash
     // before the profile query/claim ever runs.
     loading: !clerkLoaded || loading || (!!clerkUser && !supabaseReady),
+    retryProfile,
   };
 }

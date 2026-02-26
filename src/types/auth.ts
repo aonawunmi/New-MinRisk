@@ -15,7 +15,7 @@ export type UserRole =
   | 'ORG_VIEWER'
   | 'GUEST';
 
-export type UserStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
+export type UserStatus = 'pending' | 'pending_invite' | 'approved' | 'rejected' | 'suspended';
 
 export interface UserProfile {
   id: string;
