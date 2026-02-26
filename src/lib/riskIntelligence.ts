@@ -261,6 +261,7 @@ export async function createExternalEventWithAutoScan(
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
         },
         body: JSON.stringify({
           eventId: event.id, // Analyze only this event
@@ -576,6 +577,7 @@ export async function analyzeEventRelevance(
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
         },
         body: JSON.stringify({
           eventId: event.id,
@@ -1593,6 +1595,7 @@ export async function triggerRssScan(): Promise<RssScanResult> {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
       },
       body: JSON.stringify({ trigger: 'manual-scan' }),
     });
