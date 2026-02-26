@@ -96,7 +96,7 @@ export interface KRIAlert {
 export interface KRIRiskLink {
   id: string;
   kri_id: string;
-  risk_id: string;  // Changed from risk_code to risk_id (UUID)
+  risk_code: string;
   ai_link_confidence: number | null;
   linked_by: string | null;
   created_at: string;
@@ -158,10 +158,7 @@ export async function getKRIDefinitions(): Promise<{
       .select(`
         *,
         kri_risk_links (
-          risk_id,
-          risks:risk_id (
-            risk_code
-          )
+          risk_code
         )
       `)
       .order('kri_code', { ascending: true });
@@ -174,7 +171,7 @@ export async function getKRIDefinitions(): Promise<{
     // Flatten the nested kri_risk_links data into linked_risk_codes array
     const krisWithLinks = data?.map((kri: any) => ({
       ...kri,
-      linked_risk_codes: kri.kri_risk_links?.map((link: any) => link.risks?.risk_code).filter(Boolean) || [],
+      linked_risk_codes: kri.kri_risk_links?.map((link: any) => link.risk_code).filter(Boolean) || [],
       kri_risk_links: undefined, // Remove nested data
     }));
 
@@ -694,7 +691,7 @@ export async function resolveKRIAlert(
  */
 export async function linkKRIToRisk(
   kriId: string,
-  riskCodeOrId: string,  // Can accept either risk_code or risk_id
+  riskCodeOrId: string,  // Can accept either risk_code or risk_id (UUID)
   aiConfidence?: number
 ): Promise<{ data: KRIRiskLink | null; error: Error | null }> {
   try {
@@ -704,22 +701,21 @@ export async function linkKRIToRisk(
       return { data: null, error: new Error('User not authenticated') };
     }
 
-    // Check if input is UUID (risk_id) or code (risk_code)
-    let riskId = riskCodeOrId;
+    // DB column is risk_code (TEXT). If caller passed a UUID, look up the risk_code.
+    let riskCode = riskCodeOrId;
 
-    // If it looks like a risk_code (not UUID format), look up the risk_id
-    if (!riskCodeOrId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+    if (riskCodeOrId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
       const { data: risk, error: riskError } = await supabase
         .from('risks')
-        .select('id')
-        .eq('risk_code', riskCodeOrId)
+        .select('risk_code')
+        .eq('id', riskCodeOrId)
         .single();
 
       if (riskError || !risk) {
         return { data: null, error: new Error('Risk not found') };
       }
 
-      riskId = risk.id;
+      riskCode = risk.risk_code;
     }
 
     const { data, error } = await supabase
@@ -727,7 +723,7 @@ export async function linkKRIToRisk(
       .insert([
         {
           kri_id: kriId,
-          risk_id: riskId,  // Now using risk_id (UUID)
+          risk_code: riskCode,
           ai_link_confidence: aiConfidence || null,
           linked_by: profile.id,
         },
@@ -755,25 +751,24 @@ export async function linkKRIToRisk(
  * Get all KRIs linked to a risk
  */
 export async function getKRIsForRisk(
-  riskCodeOrId: string  // Can accept either risk_code or risk_id
+  riskCodeOrId: string  // Can accept either risk_code or risk_id (UUID)
 ): Promise<{ data: any[] | null; error: Error | null }> {
   try {
-    // Check if input is UUID (risk_id) or code (risk_code)
-    let riskId = riskCodeOrId;
+    // DB column is risk_code (TEXT). If caller passed a UUID, look up the risk_code.
+    let riskCode = riskCodeOrId;
 
-    // If it looks like a risk_code (not UUID format), look up the risk_id
-    if (!riskCodeOrId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+    if (riskCodeOrId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
       const { data: risk, error: riskError } = await supabase
         .from('risks')
-        .select('id')
-        .eq('risk_code', riskCodeOrId)
+        .select('risk_code')
+        .eq('id', riskCodeOrId)
         .single();
 
       if (riskError || !risk) {
         return { data: null, error: new Error('Risk not found') };
       }
 
-      riskId = risk.id;
+      riskCode = risk.risk_code;
     }
 
     const { data, error } = await supabase
@@ -784,7 +779,7 @@ export async function getKRIsForRisk(
         kri_definitions (*)
       `
       )
-      .eq('risk_id', riskId);  // Now using risk_id (UUID)
+      .eq('risk_code', riskCode);
 
     if (error) {
       console.error('Get KRIs for risk error:', error.message);
@@ -849,19 +844,19 @@ export async function getRisksWithoutKRICoverage(): Promise<{
       return { data: null, error: new Error(risksError.message) };
     }
 
-    // Get all KRI-risk links (now using risk_id)
+    // Get all KRI-risk links
     const { data: links, error: linksError } = await supabase
       .from('kri_risk_links')
-      .select('risk_id');
+      .select('risk_code');
 
     if (linksError) {
       return { data: null, error: new Error(linksError.message) };
     }
 
-    // Find risks without links (compare by ID now)
-    const linkedRiskIds = new Set(links?.map((l) => l.risk_id) || []);
+    // Find risks without links (compare by risk_code)
+    const linkedRiskCodes = new Set(links?.map((l) => l.risk_code) || []);
     const uncoveredRisks = risks?.filter(
-      (r) => !linkedRiskIds.has(r.id)
+      (r) => !linkedRiskCodes.has(r.risk_code)
     );
 
     return { data: uncoveredRisks || [], error: null };
@@ -898,16 +893,16 @@ export async function getKRICoverageStats(): Promise<{
       return { data: null, error: new Error(risksError.message) };
     }
 
-    // Get unique covered risks (now using risk_id)
+    // Get unique covered risks
     const { data: links, error: linksError } = await supabase
       .from('kri_risk_links')
-      .select('risk_id');
+      .select('risk_code');
 
     if (linksError) {
       return { data: null, error: new Error(linksError.message) };
     }
 
-    const coveredRisks = new Set(links?.map((l) => l.risk_id) || []).size;
+    const coveredRisks = new Set(links?.map((l) => l.risk_code) || []).size;
 
     // Get total KRIs
     const { count: totalKRIs, error: krisTotalError } = await supabase
