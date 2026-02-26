@@ -25,7 +25,7 @@ import {
   type ExternalEvent,
   type RiskIntelligenceAlert,
 } from '@/lib/riskIntelligence';
-import { supabase } from '@/lib/supabase';
+import { supabase, getClerkToken } from '@/lib/supabase';
 import { getAuthenticatedProfile } from '@/lib/auth';
 import { isUserAdmin } from '@/lib/profiles';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -874,18 +874,34 @@ function IntelligenceAlerts() {
       for (let batchNum = 1; batchNum <= totalBatches; batchNum++) {
         setScanMessage(`🔍 Analyzing batch ${batchNum}/${totalBatches} (${count} total events)...`);
 
-        // Call Edge Function for this batch
-        const { data: result, error } = await supabase.functions.invoke('analyze-intelligence', {
-          body: {
+        // Call Edge Function for this batch (use fetch with x-clerk-token for Clerk auth)
+        const clerkToken = await getClerkToken();
+        if (!clerkToken) {
+          allErrors.push('Not authenticated — Clerk token unavailable');
+          break;
+        }
+
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const response = await fetch(`${supabaseUrl}/functions/v1/analyze-intelligence`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''}`,
+            'Content-Type': 'application/json',
+            'x-clerk-token': clerkToken,
+          },
+          body: JSON.stringify({
             minConfidence: 70,
             limit: batchSize,
-          },
+          }),
         });
 
-        if (error) {
-          allErrors.push(`Batch ${batchNum} error: ${error.message}`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          allErrors.push(`Batch ${batchNum} error: HTTP ${response.status} - ${errorText}`);
           continue;
         }
+
+        const result = await response.json();
 
         if (result) {
           totalScanned += result.scanned || 0;
