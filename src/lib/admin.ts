@@ -35,8 +35,8 @@ async function callEdgeFunction<T = any>(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'x-clerk-token': token,
       },
       body: JSON.stringify(body),
     });

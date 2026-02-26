@@ -487,8 +487,9 @@ export async function analyzeIncidentForRiskMapping(incidentId: string) {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''}`,
           'Content-Type': 'application/json',
+          'x-clerk-token': token,
         },
         body: JSON.stringify({ incident_id: incidentId })
       }

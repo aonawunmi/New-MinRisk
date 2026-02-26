@@ -156,8 +156,8 @@ export async function inviteRegulatorUser(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''}`,
+          'x-clerk-token': token,
         },
         body: JSON.stringify({
           email,

@@ -259,9 +259,9 @@ export async function createExternalEventWithAutoScan(
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''}`,
           'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
+          'x-clerk-token': token,
         },
         body: JSON.stringify({
           eventId: event.id, // Analyze only this event
@@ -575,9 +575,9 @@ export async function analyzeEventRelevance(
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''}`,
           'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
+          'x-clerk-token': token,
         },
         body: JSON.stringify({
           eventId: event.id,
@@ -1594,8 +1594,8 @@ export async function triggerRssScan(): Promise<RssScanResult> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''}`,
+        'x-clerk-token': token,
       },
       body: JSON.stringify({ trigger: 'manual-scan' }),
     });
