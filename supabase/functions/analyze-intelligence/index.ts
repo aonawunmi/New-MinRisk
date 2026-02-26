@@ -307,7 +307,7 @@ serve(async (req) => {
       .from('risks')
       .select('risk_code, risk_title, risk_description, category')
       .eq('organization_id', organizationId)
-      .in('status', ['OPEN', 'MONITORING'])
+      .in('status', ['OPEN', 'MONITORING', 'Open', 'Monitoring', 'open', 'monitoring'])
 
     if (risksError) throw risksError
 

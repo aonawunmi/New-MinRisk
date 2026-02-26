@@ -356,7 +356,7 @@ async function loadRisks(supabase: any, organizationId: string): Promise<any[]> 
     .from('risks')
     .select('risk_code, risk_title, risk_description, category, likelihood_inherent, impact_inherent')
     .eq('organization_id', organizationId)
-    .in('status', ['OPEN', 'MONITORING'])
+    .in('status', ['OPEN', 'MONITORING', 'Open', 'Monitoring', 'open', 'monitoring'])
     .order('risk_code');
 
   if (error) {
