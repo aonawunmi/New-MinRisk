@@ -1,5 +1,6 @@
 import { supabase, getClerkToken } from './supabase';
 import { getAuthenticatedProfile } from './auth';
+import { getUserOrganizationId } from './profiles';
 
 /**
  * Risk Intelligence Service Layer
@@ -1570,12 +1571,14 @@ export interface RssScanResult {
  */
 export async function triggerRssScan(): Promise<RssScanResult> {
   try {
-    const token = await getClerkToken();
-    if (!token) {
+    // Get organization_id to pass in body (avoids expensive Clerk auth in Edge Function
+    // which causes WORKER_LIMIT on Supabase free tier)
+    const orgId = await getUserOrganizationId();
+    if (!orgId) {
       return {
         success: false,
         message: 'Not authenticated',
-        error: 'You must be logged in to trigger RSS scanning'
+        error: 'Could not determine your organization'
       };
     }
 
@@ -1589,15 +1592,15 @@ export async function triggerRssScan(): Promise<RssScanResult> {
       };
     }
 
-    // Call the Edge Function
+    // Call the Edge Function — pass org_id in body instead of Clerk token
+    // to avoid the heavy verifyClerkAuth() overhead that causes WORKER_LIMIT
     const response = await fetch(`${supabaseUrl}/functions/v1/scan-rss-feeds`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''}`,
-        'x-clerk-token': token,
       },
-      body: JSON.stringify({ trigger: 'manual-scan' }),
+      body: JSON.stringify({ trigger: 'manual-scan', organization_id: orgId }),
     });
 
     if (!response.ok) {

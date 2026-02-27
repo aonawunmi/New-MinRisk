@@ -809,24 +809,36 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get organization ID from request or use first organization (for cron)
-    let organizationId: string = '';
-    let authenticatedUser = false;
+    // Parse request body once (can only be read once in Deno)
+    const body = await req.json().catch(() => ({}));
 
-    if (req.headers.get('authorization')) {
+    // Get organization ID — 3 priority levels:
+    // 1. From request body (lightweight, avoids expensive Clerk auth)
+    // 2. From Clerk auth (expensive — creates extra clients + DB query)
+    // 3. Fallback to first organization (cron/test mode)
+    let organizationId: string = '';
+
+    // Priority 1: organization_id in request body (no Clerk overhead)
+    if (body.organization_id) {
+      organizationId = body.organization_id;
+      console.log('Using organization_id from request body (lightweight path)');
+    }
+
+    // Priority 2: Clerk auth (only if org_id not provided — expensive on free tier)
+    if (!organizationId && req.headers.get('x-clerk-token')) {
       try {
         const { profile } = await verifyClerkAuth(req);
         if (profile && profile.organization_id) {
           organizationId = profile.organization_id;
-          authenticatedUser = true;
           console.log('Authenticated user request (Clerk)');
         }
       } catch {
-        console.log('Authentication failed, falling back to first organization');
+        console.log('Clerk auth failed, falling back to first organization');
       }
     }
 
-    if (!authenticatedUser) {
+    // Priority 3: First organization (cron/test mode)
+    if (!organizationId) {
       console.log('Using first organization (cron/test mode)');
       const { data: orgs } = await supabase
         .from('organizations')
