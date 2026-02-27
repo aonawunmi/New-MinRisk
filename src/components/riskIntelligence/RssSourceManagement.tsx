@@ -269,6 +269,31 @@ export default function RssSourceManagement() {
 
 
 
+  // Multi-select state for recommended source import
+  const [selectedRecommended, setSelectedRecommended] = useState<Set<string>>(new Set());
+  const [bulkImporting, setBulkImporting] = useState(false);
+
+  function toggleRecommendedSource(url: string) {
+    setSelectedRecommended(prev => {
+      const next = new Set(prev);
+      if (next.has(url)) {
+        next.delete(url);
+      } else {
+        next.add(url);
+      }
+      return next;
+    });
+  }
+
+  function selectAllRecommended() {
+    const notYetAdded = RECOMMENDED_SOURCES.filter(s => !sources.some(existing => existing.url === s.url));
+    setSelectedRecommended(new Set(notYetAdded.map(s => s.url)));
+  }
+
+  function deselectAllRecommended() {
+    setSelectedRecommended(new Set());
+  }
+
   async function handleImport(source: RecommendedSource) {
     setSubmitting(true);
     const input: CreateRssSourceInput = {
@@ -295,6 +320,45 @@ export default function RssSourceManagement() {
       alert('Imported ' + source.name);
       loadData();
     }
+  }
+
+  async function handleBulkImport() {
+    if (selectedRecommended.size === 0) return;
+
+    setBulkImporting(true);
+    const toImport = RECOMMENDED_SOURCES.filter(s => selectedRecommended.has(s.url));
+    let imported = 0;
+    let failed = 0;
+
+    for (const source of toImport) {
+      // Skip if already exists
+      if (sources.some(s => s.url === source.url)) continue;
+
+      const input: CreateRssSourceInput = {
+        name: source.name,
+        url: source.url,
+        description: source.description,
+        category: [source.category]
+      };
+
+      const { error } = await createRssSource(input);
+      if (error) {
+        console.error(`Failed to import ${source.name}:`, error);
+        failed++;
+      } else {
+        imported++;
+      }
+    }
+
+    setBulkImporting(false);
+    setSelectedRecommended(new Set());
+
+    if (failed > 0) {
+      alert(`Imported ${imported} sources. ${failed} failed.`);
+    } else {
+      alert(`Successfully imported ${imported} sources!`);
+    }
+    loadData();
   }
 
   function getCategoryBadgeColor(category: string) {
@@ -584,7 +648,7 @@ export default function RssSourceManagement() {
       </Dialog>
 
       {/* Import Recommended Sources Dialog */}
-      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+      <Dialog open={showImportDialog} onOpenChange={(open) => { setShowImportDialog(open); if (!open) setSelectedRecommended(new Set()); }}>
         <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -592,9 +656,47 @@ export default function RssSourceManagement() {
               Import Recommended Sources
             </DialogTitle>
             <DialogDescription>
-              Add curated RSS feeds from trusted security and risk news sources. Click "Import" to add a source to your organization.
+              Select sources and click "Import Selected" to add them all at once, or click individual "Import" buttons.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Bulk action bar */}
+          {(() => {
+            const availableCount = RECOMMENDED_SOURCES.filter(s => !sources.some(existing => existing.url === s.url)).length;
+            return availableCount > 0 ? (
+              <div className="flex items-center justify-between px-1 py-2 border-b">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={selectedRecommended.size > 0 ? deselectAllRecommended : selectAllRecommended}
+                  >
+                    {selectedRecommended.size > 0 ? 'Deselect All' : `Select All (${availableCount})`}
+                  </Button>
+                  {selectedRecommended.size > 0 && (
+                    <span className="text-sm text-muted-foreground">
+                      {selectedRecommended.size} selected
+                    </span>
+                  )}
+                </div>
+                {selectedRecommended.size > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={handleBulkImport}
+                    disabled={bulkImporting}
+                  >
+                    {bulkImporting ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-1" />
+                    )}
+                    Import Selected ({selectedRecommended.size})
+                  </Button>
+                )}
+              </div>
+            ) : null;
+          })()}
+
           <div className="space-y-4 py-4">
             {Object.entries(
               RECOMMENDED_SOURCES.reduce((acc, source) => {
@@ -611,25 +713,42 @@ export default function RssSourceManagement() {
                 <div className="space-y-2">
                   {categorySources.map((source) => {
                     const alreadyExists = sources.some(s => s.url === source.url);
+                    const isSelected = selectedRecommended.has(source.url);
                     return (
                       <div
                         key={source.url}
-                        className="flex items-center justify-between p-3 border rounded-md bg-gray-50 hover:bg-gray-100"
+                        className={`flex items-center gap-3 p-3 border rounded-md cursor-pointer transition-colors ${
+                          alreadyExists
+                            ? 'bg-green-50 border-green-200'
+                            : isSelected
+                              ? 'bg-blue-50 border-blue-300'
+                              : 'bg-gray-50 hover:bg-gray-100'
+                        }`}
+                        onClick={() => { if (!alreadyExists) toggleRecommendedSource(source.url); }}
                       >
-                        <div className="flex-1">
+                        {!alreadyExists && (
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleRecommendedSource(source.url)}
+                            className="shrink-0"
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm">{source.name}</p>
-                          <p className="text-xs text-gray-500 truncate max-w-md">{source.description}</p>
+                          <p className="text-xs text-gray-500 truncate">{source.description}</p>
                         </div>
                         {alreadyExists ? (
-                          <Badge variant="outline" className="text-green-600 border-green-300">
+                          <Badge variant="outline" className="text-green-600 border-green-300 shrink-0">
                             <CheckCircle2 className="h-3 w-3 mr-1" />
                             Added
                           </Badge>
                         ) : (
                           <Button
                             size="sm"
-                            onClick={() => handleImport(source)}
-                            disabled={submitting}
+                            variant="ghost"
+                            onClick={(e) => { e.stopPropagation(); handleImport(source); }}
+                            disabled={submitting || bulkImporting}
+                            className="shrink-0"
                           >
                             {submitting ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -649,7 +768,7 @@ export default function RssSourceManagement() {
             ))}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowImportDialog(false)}>
+            <Button variant="outline" onClick={() => { setShowImportDialog(false); setSelectedRecommended(new Set()); }}>
               Close
             </Button>
           </DialogFooter>
