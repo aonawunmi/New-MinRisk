@@ -49,7 +49,7 @@ const MAX_AGE_DAYS = 3650; // Allow articles up to 10 years old (debugging date 
 const MIN_CONFIDENCE = 0.6; // Minimum confidence to create alert
 const ITEMS_PER_FEED = 5; // Take first 5 items per feed
 const MAX_FEEDS = 8; // Maximum feeds to process per invocation (increased for Nigerian + global coverage)
-const AI_RATE_LIMIT_MS = 1000; // 1 second between AI calls
+const AI_RATE_LIMIT_MS = 2000; // 2 seconds between AI calls (prevents DB connection pool exhaustion)
 const MAX_RETRIES = 3; // Max retry attempts for failed event analysis
 
 interface RSSItem {
@@ -550,7 +550,7 @@ async function analyzeAndAlertEvents(
   };
 
   let alertsCreated = 0;
-  const BATCH_SIZE = 3;
+  const BATCH_SIZE = 1; // Process events one at a time to prevent WORKER_LIMIT (was 3)
 
   for (let i = 0; i < storedEvents.length; i += BATCH_SIZE) {
     const batch = storedEvents.slice(i, i + BATCH_SIZE);
@@ -855,30 +855,29 @@ serve(async (req) => {
 
     const limitedSources = sources.slice(0, MAX_FEEDS);
 
-    // Step 2: Parse feeds in PARALLEL using Promise.allSettled
-    const feedPromises = limitedSources.map(async (source) => {
-      const result = await parseSingleFeed(source);
-
-      // Update scan statistics
-      if (source.id) {
-        if (result.error) {
-          await updateScanStats(supabase, source.id, 'failed', 0, result.error);
-        } else {
-          await updateScanStats(supabase, source.id, 'success', result.items.length, null);
-        }
-      }
-
-      return { source, items: result.items, error: result.error };
-    });
-
-    const feedResults = await Promise.allSettled(feedPromises);
-
+    // Step 2: Parse feeds SEQUENTIALLY to prevent WORKER_LIMIT resource exhaustion
+    // (Was parallel with Promise.allSettled, but 8 concurrent HTTP fetches + XML parsing
+    // exceeds Supabase Edge Function memory limits)
     const parsedFeeds: ParsedFeed[] = [];
-    for (const result of feedResults) {
-      if (result.status === 'fulfilled' && result.value.items.length > 0) {
-        parsedFeeds.push({ source: result.value.source, items: result.value.items });
-      } else if (result.status === 'rejected') {
-        console.error(`  Feed failed:`, result.reason);
+    for (const source of limitedSources) {
+      try {
+        console.log(`  Fetching: ${source.name}...`);
+        const result = await parseSingleFeed(source);
+
+        // Update scan statistics
+        if (source.id) {
+          if (result.error) {
+            await updateScanStats(supabase, source.id, 'failed', 0, result.error);
+          } else {
+            await updateScanStats(supabase, source.id, 'success', result.items.length, null);
+          }
+        }
+
+        if (result.items.length > 0) {
+          parsedFeeds.push({ source, items: result.items });
+        }
+      } catch (err) {
+        console.error(`  Feed failed (${source.name}):`, err);
       }
     }
 
