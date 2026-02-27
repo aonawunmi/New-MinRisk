@@ -41,9 +41,10 @@ export const KEYWORD_CATEGORIES: KeywordsMap = {
     'regulatory', 'regulation', 'compliance', 'mandate', 'directive', 'policy',
     'law', 'legislation', 'statute', 'ordinance', 'ruling', 'decree',
 
-    // Regulators & Bodies
+    // Regulators & Bodies (Global + Nigerian)
     'sec', 'finra', 'cbn', 'central bank', 'securities commission', 'financial regulator',
     'fed', 'federal reserve', 'fca', 'fsb', 'basel', 'mifid', 'gdpr', 'ccpa',
+    'pencom', 'naicom', 'ndic', 'ngx', 'frc nigeria', 'fmdq', 'naira', 'nse',
 
     // Compliance Actions
     'fine', 'penalty', 'sanction', 'enforcement action', 'consent order',

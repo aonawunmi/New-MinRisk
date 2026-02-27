@@ -48,7 +48,7 @@ const corsHeaders = {
 const MAX_AGE_DAYS = 3650; // Allow articles up to 10 years old (debugging date mismatch)
 const MIN_CONFIDENCE = 0.6; // Minimum confidence to create alert
 const ITEMS_PER_FEED = 5; // Take first 5 items per feed
-const MAX_FEEDS = 5; // Maximum feeds to process per invocation
+const MAX_FEEDS = 8; // Maximum feeds to process per invocation (increased for Nigerian + global coverage)
 const AI_RATE_LIMIT_MS = 1000; // 1 second between AI calls
 const MAX_RETRIES = 3; // Max retry attempts for failed event analysis
 
@@ -201,7 +201,7 @@ function categorizeEvent(title: string, description: string): string {
   const text = (title + ' ' + description).toLowerCase();
 
   if (text.match(/cyber|hack|breach|malware|ransomware|phishing/i)) return 'cybersecurity';
-  if (text.match(/regulat|compliance|SEC|CBN|penalty|fine/i)) return 'regulatory';
+  if (text.match(/regulat|compliance|SEC|CBN|PENCOM|NAICOM|NDIC|NGX|FMDQ|penalty|fine/i)) return 'regulatory';
   if (text.match(/market|trading|stock|bond|forex|financial/i)) return 'market';
   if (text.match(/environment|climate|ESG|sustainab|carbon/i)) return 'environmental';
   if (text.match(/operation|system|outage|failure|disruption/i)) return 'operational';

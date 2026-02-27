@@ -34,16 +34,10 @@ export const RECOMMENDED_SOURCES: RecommendedSource[] = [
 
     // --- Regulatory & Compliance ---
     {
-        name: "SEC News",
+        name: "SEC News (US)",
         url: "https://www.sec.gov/news/press-release.xml",
         category: "regulatory",
         description: "Press releases from the US Securities and Exchange Commission."
-    },
-    {
-        name: "Central Bank of Nigeria",
-        url: "https://www.cbn.gov.ng/rss/news.xml",
-        category: "regulatory",
-        description: "News and updates from the Central Bank of Nigeria."
     },
     {
         name: "FINRA News",
@@ -52,7 +46,71 @@ export const RECOMMENDED_SOURCES: RecommendedSource[] = [
         description: "News releases from the Financial Industry Regulatory Authority."
     },
 
-    // --- Financial Market ---
+    // --- Nigerian Regulators ---
+    {
+        name: "Central Bank of Nigeria (CBN)",
+        url: "https://www.cbn.gov.ng/rss/news.xml",
+        category: "regulatory",
+        description: "Monetary policy, banking regulations, and directives from the CBN."
+    },
+    {
+        name: "SEC Nigeria",
+        url: "https://sec.gov.ng/feed/",
+        category: "regulatory",
+        description: "Capital markets regulation and investor protection from the Nigerian SEC."
+    },
+    {
+        name: "NGX Group",
+        url: "https://ngxgroup.com/feed/",
+        category: "market",
+        description: "Nigerian Exchange Group — stock exchange news, listings, and market updates."
+    },
+    {
+        name: "NDIC",
+        url: "https://ndic.gov.ng/feed/",
+        category: "regulatory",
+        description: "Nigeria Deposit Insurance Corporation — banking sector stability and deposit protection."
+    },
+    {
+        name: "PENCOM",
+        url: "https://www.pencom.gov.ng/feed/",
+        category: "regulatory",
+        description: "National Pension Commission — pension industry regulation and compliance."
+    },
+    {
+        name: "FMDQ Group",
+        url: "https://fmdqgroup.com/feed/",
+        category: "market",
+        description: "FMDQ Securities Exchange — fixed income, currency, and derivatives market news."
+    },
+
+    // --- Nigerian Business & Financial News ---
+    {
+        name: "Nairametrics",
+        url: "https://nairametrics.com/feed/",
+        category: "market",
+        description: "Nigeria's leading financial and business analysis platform."
+    },
+    {
+        name: "BusinessDay Nigeria",
+        url: "https://businessday.ng/feed/",
+        category: "market",
+        description: "Nigerian business intelligence, economy, and financial markets coverage."
+    },
+    {
+        name: "Premium Times Nigeria",
+        url: "https://www.premiumtimesng.com/feed",
+        category: "geopolitical",
+        description: "Award-winning Nigerian investigative journalism and national affairs."
+    },
+    {
+        name: "The Guardian Nigeria",
+        url: "https://guardian.ng/feed/",
+        category: "geopolitical",
+        description: "Major Nigerian newspaper covering business, politics, and national news."
+    },
+
+    // --- Global Financial Markets ---
     {
         name: "Bloomberg Markets",
         url: "https://feeds.bloomberg.com/markets/news.rss",
@@ -64,12 +122,6 @@ export const RECOMMENDED_SOURCES: RecommendedSource[] = [
         url: "https://www.ft.com/markets?format=rss",
         category: "market",
         description: "Market news from the Financial Times."
-    },
-    {
-        name: "FMDQ Group",
-        url: "https://fmdqgroup.com/feed/",
-        category: "market",
-        description: "News from FMDQ Securities Exchange."
     },
 
     // --- Operational & Tech ---

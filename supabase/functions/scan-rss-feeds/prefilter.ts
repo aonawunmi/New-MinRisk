@@ -148,7 +148,7 @@ function matchCategories(eventText: string, orgCategories: string[]): string[] {
         'cyber': ['cyber', 'hack', 'breach', 'malware', 'ransomware', 'phishing', 'security'],
         'operational': ['operation', 'system', 'outage', 'failure', 'disruption', 'process'],
         'financial': ['financial', 'market', 'trading', 'credit', 'liquidity', 'investment'],
-        'regulatory': ['regulat', 'compliance', 'SEC', 'CBN', 'PENCOM', 'penalty', 'fine', 'law'],
+        'regulatory': ['regulat', 'compliance', 'SEC', 'CBN', 'PENCOM', 'NAICOM', 'NDIC', 'NGX', 'FMDQ', 'penalty', 'fine', 'law'],
         'strategic': ['strategic', 'competition', 'market share', 'innovation', 'business model'],
         'reputational': ['reputation', 'brand', 'scandal', 'controversy', 'public', 'media'],
         'esg': ['environment', 'climate', 'ESG', 'sustainab', 'carbon', 'social', 'governance']
@@ -217,12 +217,14 @@ function getSourceCredibilityScore(sourceName?: string): number {
     const tier1 = ['reuters', 'bloomberg', 'associated press', 'financial times', 'wall street journal'];
     if (tier1.some(s => sourceNameLower.includes(s))) return 10;
 
-    // Tier 2: Reputable business/tech sources (7 points)
-    const tier2 = ['bbc', 'cnn', 'cnbc', 'techcrunch', 'the economist', 'forbes'];
+    // Tier 2: Reputable business/tech sources + Nigerian regulators (7 points)
+    const tier2 = ['bbc', 'cnn', 'cnbc', 'techcrunch', 'the economist', 'forbes',
+                   'cbn', 'sec nigeria', 'ndic', 'pencom', 'ngx', 'fmdq'];
     if (tier2.some(s => sourceNameLower.includes(s))) return 7;
 
     // Tier 3: Regional/specialized sources (5 points)
-    const tier3 = ['vanguard', 'punch', 'thisday', 'guardian', 'businessday'];
+    const tier3 = ['vanguard', 'punch', 'thisday', 'guardian', 'businessday',
+                   'nairametrics', 'premium times'];
     if (tier3.some(s => sourceNameLower.includes(s))) return 5;
 
     return 3; // Default credibility for unknown sources

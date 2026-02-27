@@ -41,7 +41,21 @@ export const DEFAULT_RSS_SOURCES: RSSSource[] = [
     country: 'Nigeria'
   },
 
-  // ========== NIGERIA NEWS (3 sources) ==========
+  // ========== NIGERIA REGULATORY (continued) ==========
+  {
+    name: 'NGX Group',
+    url: 'https://ngxgroup.com/feed/',
+    category: ['market'],
+    country: 'Nigeria'
+  },
+
+  // ========== NIGERIA NEWS (4 sources) ==========
+  {
+    name: 'Nairametrics',
+    url: 'https://nairametrics.com/feed/',
+    category: ['market', 'business'],
+    country: 'Nigeria'
+  },
   {
     name: 'BusinessDay Nigeria',
     url: 'https://businessday.ng/feed/',
