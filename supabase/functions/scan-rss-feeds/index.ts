@@ -48,7 +48,7 @@ const corsHeaders = {
 const MAX_AGE_DAYS = 3650; // Allow articles up to 10 years old (debugging date mismatch)
 const MIN_CONFIDENCE = 0.6; // Minimum confidence to create alert
 const ITEMS_PER_FEED = 5; // Take first 5 items per feed
-const MAX_FEEDS = 8; // Maximum feeds to process per invocation (increased for Nigerian + global coverage)
+const MAX_FEEDS = 5; // Maximum feeds per invocation (conservative to avoid WORKER_LIMIT on free tier)
 const AI_RATE_LIMIT_MS = 2000; // 2 seconds between AI calls (prevents DB connection pool exhaustion)
 const MAX_RETRIES = 3; // Max retry attempts for failed event analysis
 
