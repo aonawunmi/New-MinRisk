@@ -195,6 +195,30 @@ async function parseSingleFeed(source: RSSSource): Promise<{ items: RSSItem[]; e
 }
 
 /**
+ * Detect if text is likely English.
+ * Uses a simple heuristic: if more than 40% of characters are non-Latin
+ * (CJK, Cyrillic, Arabic, Devanagari, etc.), the text is not English.
+ * Also checks for common English words as a secondary signal.
+ */
+function isLikelyEnglish(text: string): boolean {
+  if (!text || text.trim().length < 20) return true; // Too short to judge — let it through
+
+  // Strip HTML tags first
+  const clean = text.replace(/<[^>]*>/g, ' ').trim();
+  if (clean.length < 20) return true;
+
+  // Count non-Latin characters (CJK, Cyrillic, Arabic, Devanagari, Thai, etc.)
+  // eslint-disable-next-line no-control-regex
+  const nonLatinChars = clean.replace(/[\x00-\x7F\u00C0-\u024F\u1E00-\u1EFF]/g, ''); // Remove ASCII + Latin Extended
+  const nonLatinRatio = nonLatinChars.length / clean.length;
+
+  // If more than 40% non-Latin characters, it's almost certainly not English
+  if (nonLatinRatio > 0.4) return false;
+
+  return true;
+}
+
+/**
  * Categorize event based on content
  */
 function categorizeEvent(title: string, description: string): string {
@@ -241,6 +265,7 @@ async function storeEvents(
   const allKeywords = getAllKeywords(keywordCategories);
   const stats = {
     total: 0,
+    filtered_non_english: 0,
     filtered_no_keywords: 0,
     filtered_too_old: 0,
     duplicates: 0,
@@ -255,6 +280,13 @@ async function storeEvents(
   for (const feedData of parsedFeeds) {
     for (const item of feedData.items) {
       stats.total++;
+
+      // Check language — skip non-English content
+      const titleAndDesc = (item.title || '') + ' ' + (item.description || '');
+      if (!isLikelyEnglish(titleAndDesc)) {
+        stats.filtered_non_english++;
+        continue;
+      }
 
       // Check age
       const publishedDate = new Date(item.pubDate);
