@@ -108,14 +108,6 @@ export function useAuth() {
 
     setLoading(true);
     try {
-      // === DIAGNOSTIC: Log what auth.jwt() returns on production ===
-      const { data: jwtDebug, error: jwtErr } = await supabase.rpc('debug_jwt');
-      console.log('=== JWT DIAGNOSTIC ===');
-      console.log('Clerk user ID (client):', clerkUser.id);
-      console.log('debug_jwt() result:', JSON.stringify(jwtDebug, null, 2));
-      if (jwtErr) console.error('debug_jwt error:', jwtErr.message);
-      console.log('=== END DIAGNOSTIC ===');
-
       // Explicit clerk_id filter ensures we get OUR profile, not another user's.
       // Without this, super_admin RLS visibility + LIMIT 1 could return wrong row.
       const { data, error } = await supabase
