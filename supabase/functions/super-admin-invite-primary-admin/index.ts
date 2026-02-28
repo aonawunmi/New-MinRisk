@@ -106,6 +106,7 @@ serve(async (req: Request) => {
       const { error: insertError } = await supabaseAdmin
         .from("user_profiles")
         .insert({
+          id: crypto.randomUUID(),
           email,
           full_name: fullName,
           role: "primary_admin",
