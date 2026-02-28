@@ -1,4 +1,4 @@
-import { supabase, getClerkToken } from './supabase';
+import { supabase, getClerkToken, invokeEdgeFunction } from './supabase';
 import { getAuthenticatedProfile } from './auth';
 import type { Risk, RiskWithControls, Control } from '@/types/risk';
 
@@ -128,10 +128,7 @@ export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | 
       };
     }
 
-    const { data: ownerData, error: ownerError } = await supabase.functions.invoke('get-risk-owners', {
-      body: { ownerIds },
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const { data: ownerData, error: ownerError } = await invokeEdgeFunction('get-risk-owners', { ownerIds });
 
     console.log('📊 Owner profiles Edge Function result:', {
       data: ownerData,
