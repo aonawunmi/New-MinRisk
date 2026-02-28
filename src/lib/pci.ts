@@ -3,7 +3,7 @@
  * Phase 1: Risk Response + Primary Control Instances + Secondary Controls
  */
 
-import { supabase } from './supabase';
+import { supabase, getClerkToken } from './supabase';
 import { getAuthenticatedProfile } from './auth';
 import type {
   RiskResponse,
@@ -868,6 +868,7 @@ export async function getPCISuggestions(
   responseType: string
 ): Promise<{ data: PCISuggestion[] | null; error: any }> {
   try {
+    const token = await getClerkToken();
     const { data, error } = await supabase.functions.invoke(
       'suggest-pci-templates',
       {
@@ -875,6 +876,7 @@ export async function getPCISuggestions(
           risk_id: riskId,
           response_type: responseType,
         },
+        headers: { Authorization: `Bearer ${token}` },
       }
     );
 

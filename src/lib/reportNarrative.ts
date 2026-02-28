@@ -4,7 +4,7 @@
  * Client-side wrapper for the generate-report-narrative Edge Function
  */
 
-import { supabase } from './supabase';
+import { supabase, getClerkToken } from './supabase';
 
 export interface ReportContext {
     totalRisks: number;
@@ -36,12 +36,14 @@ export async function generateReportNarrative(
     context: ReportContext,
     regulator?: 'cbn' | 'sec' | 'pencom'
 ): Promise<NarrativeResponse> {
+    const token = await getClerkToken();
     const { data, error } = await supabase.functions.invoke('generate-report-narrative', {
         body: {
             reportType,
             context,
             regulator,
         },
+        headers: { Authorization: `Bearer ${token}` },
     });
 
     if (error) {

@@ -128,8 +128,10 @@ export async function getRisks(): Promise<{ data: Risk[] | null; error: Error | 
       };
     }
 
+    const token = await getClerkToken();
     const { data: ownerData, error: ownerError } = await supabase.functions.invoke('get-risk-owners', {
       body: { ownerIds },
+      headers: { Authorization: `Bearer ${token}` },
     });
 
     console.log('📊 Owner profiles Edge Function result:', {

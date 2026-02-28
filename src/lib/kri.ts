@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, getClerkToken } from './supabase';
 import { getAuthenticatedProfile } from './auth';
 
 /**
@@ -1070,8 +1070,10 @@ Return the JSON array now:`;
     console.log('Calling Supabase Edge Function for AI KRI generation...');
     console.log('Sending prompt (first 200 chars):', prompt.substring(0, 200));
 
+    const token = await getClerkToken();
     const { data: functionData, error: functionError } = await supabase.functions.invoke('generate-kri-suggestions', {
       body: { prompt },
+      headers: { Authorization: `Bearer ${token}` },
     });
 
     console.log('Edge function response:', { functionData, functionError });
